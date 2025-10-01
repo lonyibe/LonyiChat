@@ -47,6 +47,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -164,7 +165,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             LonyiChatTheme {
-                LonyiChatApp()
+                // ✨ THIS IS THE FIX 👇: A Surface that fills the entire screen ✨
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    LonyiChatApp()
+                }
             }
         }
     }
@@ -179,7 +186,6 @@ fun LonyiChatApp() {
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        // ✨ THIS IS THE FIX 👇 ✨
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             LonyiChatTopBar(
