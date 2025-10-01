@@ -2,15 +2,12 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    // 🌟 FIX: The plugin MUST be applied here.
-    // We remove `version "4.4.0" apply false` and just use the ID.
+    // FIX: Removed 'version "4.4.0" apply false' and applied the plugin directly:
     id("com.google.gms.google-services")
 }
 
 android {
     namespace = "com.arua.lonyichat"
-    // REMOVED: applicationId = "com.arua.lonyichat" (Moved/confirmed in defaultConfig)
-
     compileSdk = 36
 
     defaultConfig {
@@ -55,6 +52,9 @@ dependencies {
 
     // Firebase Authentication
     implementation("com.google.firebase:firebase-auth-ktx")
+
+    // Firebase Firestore (for reading profiles)
+    implementation("com.google.firebase:firebase-firestore-ktx")
 
     // OkHttp for network calls to Vercel API
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
