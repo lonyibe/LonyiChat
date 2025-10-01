@@ -1,5 +1,6 @@
 package com.arua.lonyichat
 
+import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
@@ -53,6 +54,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -64,9 +66,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowInsetsControllerCompat
 import com.arua.lonyichat.ui.theme.LonyiChatTheme
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.ktx.firestore
@@ -165,6 +169,16 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             LonyiChatTheme {
+                // ✨ ADDED: This block sets the status bar icons to light for better visibility ✨
+                val view = LocalView.current
+                if (!view.isInEditMode) {
+                    SideEffect {
+                        val window = (view.context as Activity).window
+                        // `false` makes the status bar icons light
+                        WindowInsetsControllerCompat(window, view).isAppearanceLightStatusBars = false
+                    }
+                }
+
                 // ✨ THIS IS THE FIX 👇: A Surface that fills the entire screen ✨
                 Surface(
                     modifier = Modifier.fillMaxSize(),
