@@ -100,4 +100,26 @@ object ApiService {
             Result.failure(e)
         }
     }
+
+    // --- MEDIA ---
+    suspend fun getMedia(): Result<List<MediaItem>> {
+        val user = Firebase.auth.currentUser ?: return Result.failure(Exception("User not authenticated."))
+        return try {
+            val token = user.getIdToken(true).await().token
+            val request = Request.Builder()
+                .url("$BASE_URL/media")
+                .addHeader("Authorization", "Bearer $token")
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) throw IOException("API Error: ${response.code}")
+                val body = response.body!!.string()
+                // Assuming the backend key is "media"
+                val mediaResponse = gson.fromJson(body, MediaResponse::class.java)
+                Result.success(mediaResponse.media)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

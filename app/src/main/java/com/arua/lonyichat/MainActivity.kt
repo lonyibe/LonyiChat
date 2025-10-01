@@ -30,11 +30,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsControllerCompat
 import com.arua.lonyichat.data.Church
+import com.arua.lonyichat.data.MediaItem
 import com.arua.lonyichat.ui.theme.LonyiChatTheme
-import com.arua.lonyichat.ui.viewmodel.BibleViewModel
-import com.arua.lonyichat.ui.viewmodel.ChatListViewModel
-import com.arua.lonyichat.ui.viewmodel.ChurchesViewModel
-import com.arua.lonyichat.ui.viewmodel.HomeFeedViewModel
+import com.arua.lonyichat.ui.viewmodel.*
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
@@ -96,6 +94,7 @@ class MainActivity : ComponentActivity() {
     private val churchesViewModel: ChurchesViewModel by viewModels()
     private val chatListViewModel: ChatListViewModel by viewModels()
     private val bibleViewModel: BibleViewModel by viewModels()
+    private val mediaViewModel: MediaViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -115,7 +114,13 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    LonyiChatApp(homeFeedViewModel, churchesViewModel, chatListViewModel, bibleViewModel)
+                    LonyiChatApp(
+                        homeFeedViewModel,
+                        churchesViewModel,
+                        chatListViewModel,
+                        bibleViewModel,
+                        mediaViewModel
+                    )
                 }
             }
         }
@@ -127,7 +132,8 @@ fun LonyiChatApp(
     homeFeedViewModel: HomeFeedViewModel,
     churchesViewModel: ChurchesViewModel,
     chatListViewModel: ChatListViewModel,
-    bibleViewModel: BibleViewModel
+    bibleViewModel: BibleViewModel,
+    mediaViewModel: MediaViewModel
 ) {
     val profileState = rememberProfileState()
     var selectedItem: Screen by remember { mutableStateOf(Screen.Home) }
@@ -165,7 +171,8 @@ fun LonyiChatApp(
                 homeFeedViewModel = homeFeedViewModel,
                 churchesViewModel = churchesViewModel,
                 chatListViewModel = chatListViewModel,
-                bibleViewModel = bibleViewModel
+                bibleViewModel = bibleViewModel,
+                mediaViewModel = mediaViewModel
             )
         }
     }
@@ -221,14 +228,15 @@ fun ScreenContent(
     homeFeedViewModel: HomeFeedViewModel,
     churchesViewModel: ChurchesViewModel,
     chatListViewModel: ChatListViewModel,
-    bibleViewModel: BibleViewModel
+    bibleViewModel: BibleViewModel,
+    mediaViewModel: MediaViewModel
 ) {
     when (screen) {
         Screen.Home -> HomeFeedScreen(profileState, homeFeedViewModel)
         Screen.Groups -> GroupsChurchScreen(churchesViewModel)
         Screen.Bible -> BibleStudyScreen(bibleViewModel)
         Screen.Chat -> ChatScreen(chatListViewModel)
-        Screen.Media -> MediaScreen()
+        Screen.Media -> MediaScreen(mediaViewModel)
         Screen.Profile -> ProfileScreen(profileState)
     }
 }
@@ -717,15 +725,81 @@ fun BibleStudyScreen(viewModel: BibleViewModel) {
 }
 
 // ---------------------------------------------------------------------------------
-//  MEDIA SCREEN PLACEHOLDER
+// 🎬 MEDIA SCREEN 🎬
 // ---------------------------------------------------------------------------------
 
 @Composable
-fun MediaScreen() {
-    Text(
-        text = "Media: Videos, Livestream, Testimonies.",
-        modifier = Modifier.padding(16.dp)
-    )
+fun MediaScreen(viewModel: MediaViewModel) {
+    val uiState by viewModel.uiState.collectAsState()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Text(
+            text = "Media & Testimonies",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        when {
+            uiState.isLoading -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            }
+            uiState.error != null -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Error: ${uiState.error}", color = MaterialTheme.colorScheme.error)
+                }
+            }
+            else -> {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(uiState.mediaItems) { mediaItem ->
+                        MediaItemCard(mediaItem = mediaItem)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MediaItemCard(mediaItem: MediaItem) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { /* TODO: Open video player or testimony text */ },
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val icon = when (mediaItem.mediaType) {
+                "video" -> Icons.Default.Videocam
+                "livestream" -> Icons.Default.LiveTv
+                "testimony" -> Icons.Default.Book
+                else -> Icons.Default.PlayCircle
+            }
+            Icon(
+                imageVector = icon,
+                contentDescription = mediaItem.mediaType,
+                modifier = Modifier.size(40.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column {
+                Text(mediaItem.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(mediaItem.description, style = MaterialTheme.typography.bodyMedium, color = Color.Gray, maxLines = 2)
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------------
@@ -740,6 +814,12 @@ fun Date.toFormattedString(): String {
 @Composable
 fun LonyiChatPreview() {
     LonyiChatTheme {
-        LonyiChatApp(HomeFeedViewModel(), ChurchesViewModel(), ChatListViewModel(), BibleViewModel())
+        LonyiChatApp(
+            HomeFeedViewModel(),
+            ChurchesViewModel(),
+            ChatListViewModel(),
+            BibleViewModel(),
+            MediaViewModel()
+        )
     }
 }
