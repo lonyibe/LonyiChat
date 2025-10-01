@@ -1,4 +1,3 @@
-// lonyibe/lonyichat/LonyiChat-18232ca7fc18e60889ea90d7112b6cc682164b62/app/build.gradle.kts
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -20,6 +19,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -30,7 +30,6 @@ android {
         }
     }
 
-    // FIX 1 & 2: Use '=' assignment for compatibility settings inside compileOptions
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -56,12 +55,14 @@ dependencies {
     // FIX for backend calls: REQUIRED for .await() on Firebase Tasks in coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 
-    // FIX 3, 4, 5: Correct syntax for OkHttp dependency
     // OkHttp for network calls
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // ADDED: Gson for parsing JSON from your backend
+    // ✨ ADDED: Gson for parsing JSON from your backend ✨
     implementation("com.google.code.gson:gson:2.10.1")
+
+    // ADDED: Coil for image loading from URLs
+    implementation("io.coil-kt:coil-compose:2.6.0")
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

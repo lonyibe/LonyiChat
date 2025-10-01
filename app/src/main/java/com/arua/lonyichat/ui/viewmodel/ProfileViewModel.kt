@@ -9,15 +9,17 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import android.app.Activity
+import android.net.Uri
 
 private const val TAG = "ProfileViewModel"
 
 data class ProfileUiState(
     val profile: Profile? = null,
-    // 🌟 Fixes 'isLoading' being unresolved
+    // 検 Fixes 'isLoading' being unresolved
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
-    // 🌟 Fixes 'error' being unresolved
+    // 検 Fixes 'error' being unresolved
     val error: String? = null
 )
 
@@ -31,13 +33,12 @@ class ProfileViewModel : ViewModel() {
 
     /**
      * Fetches the user's full profile data from the backend.
-     * 🌟 This method resolves the typo 'YetchProfile' in MainActivity
      */
     fun fetchProfile() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             ApiService.getProfile().onSuccess { profile ->
-                // 🌟 Profile now resolves
+                // 検 Profile now resolves
                 _uiState.update { it.copy(profile = profile, isLoading = false) }
             }.onFailure { error ->
                 Log.e(TAG, "Error fetching profile: ${error.localizedMessage}")
@@ -49,10 +50,18 @@ class ProfileViewModel : ViewModel() {
     /**
      * Updates the user's profile data via the backend API.
      */
-    fun updateProfile(name: String, phone: String, age: String, country: String) {
+    fun updateProfile(
+        name: String,
+        phone: String,
+        age: String,
+        country: String,
+        // MODIFIED: Added optional photoUrl parameter
+        photoUrl: String? = null
+    ) {
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, error = null) }
-            ApiService.updateProfile(name, phone, age, country)
+            // MODIFIED: Pass photoUrl to ApiService
+            ApiService.updateProfile(name, phone, age, country, photoUrl)
                 .onSuccess {
                     // Update successful, refetch profile to display new data
                     fetchProfile()
@@ -61,6 +70,37 @@ class ProfileViewModel : ViewModel() {
                 .onFailure { error ->
                     Log.e(TAG, "Error updating profile: ${error.localizedMessage}")
                     _uiState.update { it.copy(error = "Update Failed: ${error.localizedMessage}", isSaving = false) }
+                }
+        }
+    }
+
+    // MODIFIED: New function to handle the local URI upload
+    fun updateProfilePhoto(uri: Uri, context: Activity) {
+        val currentProfile = _uiState.value.profile ?: run {
+            _uiState.update { it.copy(error = "Cannot update photo: Profile not loaded.") }
+            return
+        }
+
+        // Set isSaving state while the file upload happens
+        _uiState.update { it.copy(isSaving = true, error = null) }
+
+        viewModelScope.launch {
+            // Step 1: Upload the file to Cloudinary
+            ApiService.uploadProfilePhoto(uri, context)
+                .onSuccess { newPhotoUrl ->
+                    Log.d(TAG, "Cloudinary upload successful. Updating backend.")
+                    // Step 2: Update the backend (Vercel) with the final URL
+                    updateProfile(
+                        name = currentProfile.name,
+                        phone = currentProfile.phone ?: "",
+                        age = currentProfile.age?.toString() ?: "",
+                        country = currentProfile.country ?: "",
+                        photoUrl = newPhotoUrl
+                    )
+                }
+                .onFailure { error ->
+                    Log.e(TAG, "Cloudinary upload failed: ${error.localizedMessage}")
+                    _uiState.update { it.copy(error = "Photo Upload Failed: ${error.localizedMessage}", isSaving = false) }
                 }
         }
     }

@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
+import android.net.Uri // ADDED
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -39,6 +40,11 @@ import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.activity.compose.rememberLauncherForActivityResult // ADDED
+import androidx.activity.result.contract.ActivityResultContracts // ADDED
+import coil.compose.AsyncImage // ADDED for Coil
+import coil.request.ImageRequest // ADDED
+import android.widget.Toast // FIX: Import for Toast
 
 
 private const val TAG = "MainActivity"
@@ -262,7 +268,7 @@ fun ScreenContent(
     chatListViewModel: ChatListViewModel,
     bibleViewModel: BibleViewModel,
     mediaViewModel: MediaViewModel,
-    profileViewModel: ProfileViewModel // Added new ViewModel parameter
+    profileViewModel: ProfileViewModel // Passed new ViewModel parameter
 ) {
     when (screen) {
         Screen.Home -> HomeFeedScreen(profileState, homeFeedViewModel)
@@ -275,15 +281,27 @@ fun ScreenContent(
 }
 
 // ---------------------------------------------------------------------------------
-// 👤 PROFILE SCREEN IMPLEMENTATION (Updated) 👤
+// 👤 PROFILE SCREEN IMPLEMENTATION (Updated for Photo Upload) 👤
 // ---------------------------------------------------------------------------------
 
 @Composable
 fun ProfileScreen(viewModel: ProfileViewModel) {
     val context = LocalContext.current
+    val activity = context as Activity // Get the Activity context
     val uiState by viewModel.uiState.collectAsState()
-    // State for managing the edit dialog visibility
     var showEditDialog by remember { mutableStateOf(false) }
+
+    // MODIFIED: Launcher is updated to call the new ViewModel upload function
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri: Uri? ->
+            if (uri != null) {
+                // Pass the local URI and the Activity context to the ViewModel for Cloudinary upload
+                viewModel.updateProfilePhoto(uri, activity)
+                Toast.makeText(context, "Uploading photo...", Toast.LENGTH_SHORT).show() // FIX: Toast used correctly
+            }
+        }
+    )
 
     Column(
         modifier = Modifier
@@ -319,12 +337,51 @@ fun ProfileScreen(viewModel: ProfileViewModel) {
         // --- Profile Content ---
         val profile = uiState.profile!!
 
-        Icon(
-            imageVector = Icons.Default.AccountCircle,
-            contentDescription = "Profile Photo",
-            modifier = Modifier.size(100.dp),
-            tint = MaterialTheme.colorScheme.primary
-        )
+        // MODIFIED: Clickable profile picture UI
+        Box(
+            modifier = Modifier
+                .size(100.dp)
+                .clip(CircleShape)
+                .clickable(enabled = !uiState.isSaving) { // Disable while saving
+                    imagePickerLauncher.launch("image/*") // Trigger the image picker
+                }
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center
+        ) {
+            // Use Coil's AsyncImage to load the photo URL
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(profile.photoUrl)
+                    .crossfade(true)
+                    .placeholder(R.drawable.ic_person_placeholder) // Use the local placeholder drawable
+                    .error(R.drawable.ic_person_placeholder) // Fallback on error
+                    .build(),
+                contentDescription = "Profile Photo",
+                modifier = Modifier.fillMaxSize().clip(CircleShape),
+            )
+
+            // Overlay an 'Edit' icon to clearly show it's clickable
+            Icon(
+                imageVector = Icons.Default.AddAPhoto,
+                contentDescription = "Change Photo",
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
+                    .padding(4.dp),
+                tint = MaterialTheme.colorScheme.onPrimary
+            )
+
+            // Show loading overlay during upload
+            if (uiState.isSaving) {
+                CircularProgressIndicator(
+                    modifier = Modifier.align(Alignment.Center).size(100.dp),
+                    strokeWidth = 4.dp,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
+        }
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
