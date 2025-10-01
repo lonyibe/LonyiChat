@@ -3,6 +3,7 @@ package com.arua.lonyichat
 import android.content.Intent
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.view.View
 import android.widget.TextView
 import android.widget.Toast
 // ADDED IMPORT for safer coroutine management
@@ -24,14 +25,29 @@ import java.io.IOException
 
 class SignupActivity : AppCompatActivity() {
 
-    // Change to lateinit var initialization using the KTX extension to allow the
-    // Android SDK to initialize Firebase before auth is accessed.
     private val auth by lazy { Firebase.auth }
-
-    // 🌟 UPDATED: Using the provided Vercel domain
     private val VERCEL_API_BASE_URL = "https://lonyichat-backend.vercel.app"
     private val HTTP_CLIENT = OkHttpClient()
     private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+
+    // State variable to manage the current step
+    private var currentStep = 1
+
+    // Declare all views for late initialization
+    private lateinit var stepOneLayout: View
+    private lateinit var stepTwoLayout: View
+    private lateinit var buttonNext: MaterialButton
+    private lateinit var buttonSignup: MaterialButton
+    private lateinit var buttonBack: TextView
+    private lateinit var buttonLoginLink: TextView
+
+    private lateinit var editTextName: TextInputEditText
+    private lateinit var editTextEmail: TextInputEditText
+    private lateinit var editTextPhone: TextInputEditText
+    private lateinit var editTextAge: TextInputEditText
+    private lateinit var editTextCountry: TextInputEditText
+    private lateinit var editTextPassword: TextInputEditText
+    private lateinit var editTextConfirmPassword: TextInputEditText
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -39,25 +55,36 @@ class SignupActivity : AppCompatActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_signup)
 
-        // ⚠️ REMOVED: The manual assignment line "auth = Firebase.auth" was here.
-        // It caused the crash because it was too early. Using `by lazy` above fixes this.
+        // Find and initialize all views
+        stepOneLayout = findViewById(R.id.stepOneLayout)
+        stepTwoLayout = findViewById(R.id.stepTwoLayout)
+        buttonNext = findViewById(R.id.buttonNext)
+        buttonSignup = findViewById(R.id.buttonSignup)
+        buttonBack = findViewById(R.id.buttonBack)
+        buttonLoginLink = findViewById(R.id.buttonLoginLink)
 
-        // Find the views
-        val editTextName: TextInputEditText = findViewById(R.id.editTextName)
-        val editTextEmail: TextInputEditText = findViewById(R.id.editTextEmail)
-        val editTextPhone: TextInputEditText = findViewById(R.id.editTextPhone)
-        val editTextAge: TextInputEditText = findViewById(R.id.editTextAge)
-        val editTextCountry: TextInputEditText = findViewById(R.id.editTextCountry)
-        val editTextPassword: TextInputEditText = findViewById(R.id.editTextPassword)
-        val editTextConfirmPassword: TextInputEditText = findViewById(R.id.editTextConfirmPassword)
-        val buttonSignup: MaterialButton = findViewById(R.id.buttonSignup)
-        val buttonLoginLink: TextView = findViewById(R.id.buttonLoginLink)
+        editTextName = findViewById(R.id.editTextName)
+        editTextEmail = findViewById(R.id.editTextEmail)
+        editTextPhone = findViewById(R.id.editTextPhone)
+        editTextAge = findViewById(R.id.editTextAge)
+        editTextCountry = findViewById(R.id.editTextCountry)
+        editTextPassword = findViewById(R.id.editTextPassword)
+        editTextConfirmPassword = findViewById(R.id.editTextConfirmPassword)
+
+        // Set initial state (Step 1 visible, Step 2 hidden)
+        showStep(1)
+
+        // Set Listeners
+        buttonNext.setOnClickListener {
+            handleNextOrSignup()
+        }
 
         buttonSignup.setOnClickListener {
-            handleSignup(
-                editTextName, editTextEmail, editTextPhone, editTextAge,
-                editTextCountry, editTextPassword, editTextConfirmPassword, buttonSignup
-            )
+            handleNextOrSignup()
+        }
+
+        buttonBack.setOnClickListener {
+            showStep(1)
         }
 
         buttonLoginLink.setOnClickListener {
@@ -65,31 +92,63 @@ class SignupActivity : AppCompatActivity() {
         }
     }
 
-    private fun handleSignup(
-        nameInput: TextInputEditText, emailInput: TextInputEditText, phoneInput: TextInputEditText,
-        ageInput: TextInputEditText, countryInput: TextInputEditText, passwordInput: TextInputEditText,
-        confirmPasswordInput: TextInputEditText, signupButton: MaterialButton
+    private fun showStep(step: Int) {
+        currentStep = step
+        if (step == 1) {
+            stepOneLayout.visibility = View.VISIBLE
+            stepTwoLayout.visibility = View.GONE
+        } else {
+            stepOneLayout.visibility = View.GONE
+            stepTwoLayout.visibility = View.VISIBLE
+        }
+    }
+
+    private fun handleNextOrSignup() {
+        if (currentStep == 1) {
+            // Step 1: Validate Personal Info and move to Step 2
+            val name = editTextName.text.toString().trim()
+            val email = editTextEmail.text.toString().trim()
+            val phone = editTextPhone.text.toString().trim()
+            val age = editTextAge.text.toString().trim()
+
+            if (name.isEmpty() || email.isEmpty() || phone.isEmpty() || age.isEmpty()) {
+                Toast.makeText(this, "Please fill in all personal information fields.", Toast.LENGTH_LONG).show()
+                return
+            }
+            // All good, proceed to step 2
+            showStep(2)
+
+        } else if (currentStep == 2) {
+            // Step 2: Validate Account Details and initiate signup
+            val country = editTextCountry.text.toString().trim()
+            val password = editTextPassword.text.toString()
+            val confirmPassword = editTextConfirmPassword.text.toString()
+
+            if (country.isEmpty() || password.isEmpty() || confirmPassword.isEmpty()) {
+                Toast.makeText(this, "Please fill in all account details fields.", Toast.LENGTH_LONG).show()
+                return
+            }
+
+            if (password != confirmPassword) {
+                Toast.makeText(this, "Passwords do not match.", Toast.LENGTH_LONG).show()
+                return
+            }
+
+            // All good, initiate Firebase Signup
+            val name = editTextName.text.toString().trim()
+            val email = editTextEmail.text.toString().trim()
+            val phone = editTextPhone.text.toString().trim()
+            val age = editTextAge.text.toString().trim()
+
+            initiateFirebaseSignup(name, email, phone, age, country, password)
+        }
+    }
+
+    private fun initiateFirebaseSignup(
+        name: String, email: String, phone: String, age: String, country: String, password: String
     ) {
-        val name = nameInput.text.toString().trim()
-        val email = emailInput.text.toString().trim()
-        val phone = phoneInput.text.toString().trim()
-        val age = ageInput.text.toString().trim()
-        val country = countryInput.text.toString().trim()
-        val password = passwordInput.text.toString()
-        val confirmPassword = confirmPasswordInput.text.toString()
-
-        if (name.isEmpty() || email.isEmpty() || phone.isEmpty() || age.isEmpty() || country.isEmpty() || password.isEmpty() || confirmPassword.isEmpty()) {
-            Toast.makeText(this, "Please fill in all fields.", Toast.LENGTH_LONG).show()
-            return
-        }
-
-        if (password != confirmPassword) {
-            Toast.makeText(this, "Passwords do not match.", Toast.LENGTH_LONG).show()
-            return
-        }
-
-        signupButton.isEnabled = false
-        signupButton.text = "Signing Up..."
+        buttonSignup.isEnabled = false
+        buttonSignup.text = "Signing Up..."
 
         // Step 1: Firebase Authentication (Email/Password)
         auth.createUserWithEmailAndPassword(email, password)
@@ -107,8 +166,12 @@ class SignupActivity : AppCompatActivity() {
                 } else {
                     onSignupFailed("Authentication failed: ${task.exception?.localizedMessage}")
                 }
-                signupButton.isEnabled = true
-                signupButton.text = "Sign Up"
+
+                // Re-enable button in case of instant failure
+                if (!task.isSuccessful) {
+                    buttonSignup.isEnabled = true
+                    buttonSignup.text = "Sign Up"
+                }
             }
     }
 
@@ -148,12 +211,19 @@ class SignupActivity : AppCompatActivity() {
                                 "Server responded with error code: ${response.code}"
                             }
                             onSignupFailed("Profile save failed: $errorMsg")
+
+                            // Re-enable button on failure
+                            buttonSignup.isEnabled = true
+                            buttonSignup.text = "Sign Up"
                         }
                     }
                 }
             } catch (e: IOException) {
                 launch(Dispatchers.Main) {
                     onSignupFailed("Network error: Cannot reach Vercel API.")
+                    // Re-enable button on network error
+                    buttonSignup.isEnabled = true
+                    buttonSignup.text = "Sign Up"
                 }
             }
         }

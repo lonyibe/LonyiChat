@@ -808,6 +808,7 @@ fun PostCreationDialog(
             TextButton(onClick = onDismiss) {
                 Text("Cancel")
             }
+
         },
         containerColor = MaterialTheme.colorScheme.background,
         textContentColor = MaterialTheme.colorScheme.onBackground
@@ -961,7 +962,6 @@ fun ChatScreen(viewModel: ChatListViewModel) {
             }
             else -> {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {

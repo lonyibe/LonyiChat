@@ -12,7 +12,7 @@
         android:id="@+id/logoImageView"
         android:layout_width="50dp"
         android:layout_height="50dp"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="40dp"
         android:src="@drawable/logo"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -32,245 +32,268 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/logoImageView" />
 
-    <androidx.constraintlayout.widget.ConstraintLayout
-        android:id="@+id/profilePhotoContainer"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+    <ScrollView
+        android:id="@+id/scrollView"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
         android:layout_marginTop="16dp"
+        android:fillViewport="true"
+        app:layout_constraintTop_toBottomOf="@id/textViewTitle"
+        app:layout_constraintBottom_toTopOf="@id/buttonLoginLink"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/textViewTitle">
+        app:layout_constraintStart_toStartOf="parent">
 
-        <com.google.android.material.imageview.ShapeableImageView
-            android:id="@+id/profilePhoto"
-            android:layout_width="64dp"
-            android:layout_height="64dp"
-            android:background="#0C2340"
-            android:contentDescription="Profile Photo Placeholder"
-            android:padding="12dp"
-            android:scaleType="centerInside"
-            android:src="@drawable/ic_person_placeholder"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:shapeAppearanceOverlay="@style/ShapeAppearanceOverlay.App.CornerSize50Percent"
-            app:strokeColor="@android:color/white"
-            app:strokeWidth="2dp" />
-
-        <com.google.android.material.floatingactionbutton.FloatingActionButton
-            android:id="@+id/addPhotoFab"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:backgroundTint="#FF6F00"
-            android:contentDescription="Upload Photo"
-            android:minWidth="0dp"
-            android:minHeight="0dp"
-            android:padding="6dp"
-            app:fabSize="mini"
-            app:layout_constraintBottom_toBottomOf="@+id/profilePhoto"
-            app:layout_constraintEnd_toEndOf="@+id/profilePhoto"
-            app:layout_constraintHorizontal_bias="1.0"
-            app:layout_constraintStart_toStartOf="@+id/profilePhoto"
-            app:layout_constraintTop_toTopOf="@+id/profilePhoto"
-            app:layout_constraintVertical_bias="1.0"
-            app:tint="@android:color/white"
-            android:src="@drawable/ic_add_a_photo" />
-
-    </androidx.constraintlayout.widget.ConstraintLayout>
-
-    <com.google.android.material.textfield.TextInputLayout
-        android:id="@+id/nameInputLayout"
-        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:hint="Name"
-        android:textColorHint="@android:color/white"
-        app:boxStrokeColor="@android:color/white"
-        app:hintTextColor="@android:color/white"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/profilePhotoContainer">
-
-        <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/editTextName"
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:inputType="textPersonName|textCapWords"
-            android:textColor="@android:color/white" />
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center_vertical">
 
-    </com.google.android.material.textfield.TextInputLayout>
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/profilePhotoContainer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginBottom="16dp">
 
-    <com.google.android.material.textfield.TextInputLayout
-        android:id="@+id/emailInputLayout"
-        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:hint="Email"
-        android:textColorHint="@android:color/white"
-        app:boxStrokeColor="@android:color/white"
-        app:hintTextColor="@android:color/white"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/nameInputLayout">
+                <com.google.android.material.imageview.ShapeableImageView
+                    android:id="@+id/profilePhoto"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:background="#0C2340"
+                    android:contentDescription="Profile Photo Placeholder"
+                    android:padding="12dp"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/ic_person_placeholder"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:shapeAppearanceOverlay="@style/ShapeAppearanceOverlay.App.CornerSize50Percent"
+                    app:strokeColor="@android:color/white"
+                    app:strokeWidth="2dp" />
 
-        <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/editTextEmail"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:inputType="textEmailAddress"
-            android:textColor="@android:color/white" />
+                <com.google.android.material.floatingactionbutton.FloatingActionButton
+                    android:id="@+id/addPhotoFab"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:backgroundTint="#FF6F00"
+                    android:contentDescription="Upload Photo"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:padding="6dp"
+                    app:fabSize="mini"
+                    app:layout_constraintBottom_toBottomOf="@+id/profilePhoto"
+                    app:layout_constraintEnd_toEndOf="@+id/profilePhoto"
+                    app:layout_constraintHorizontal_bias="1.0"
+                    app:layout_constraintStart_toStartOf="@+id/profilePhoto"
+                    app:layout_constraintTop_toTopOf="@+id/profilePhoto"
+                    app:layout_constraintVertical_bias="1.0"
+                    app:tint="@android:color/white"
+                    android:src="@drawable/ic_add_a_photo" />
 
-    </com.google.android.material.textfield.TextInputLayout>
+            </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <com.google.android.material.textfield.TextInputLayout
-        android:id="@+id/phoneInputLayout"
-        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:hint="Phone Number"
-        android:textColorHint="@android:color/white"
-        app:boxStrokeColor="@android:color/white"
-        app:hintTextColor="@android:color/white"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/emailInputLayout">
+            <LinearLayout
+                android:id="@+id/stepOneLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="visible">
 
-        <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/editTextPhone"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:inputType="phone"
-            android:textColor="@android:color/white" />
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/nameInputLayout"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Name"
+                    android:textColorHint="@android:color/white"
+                    app:boxStrokeColor="@android:color/white"
+                    app:hintTextColor="@android:color/white">
 
-    </com.google.android.material.textfield.TextInputLayout>
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/editTextName"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="textPersonName|textCapWords"
+                        android:textColor="@android:color/white" />
+                </com.google.android.material.textfield.TextInputLayout>
 
-    <com.google.android.material.textfield.TextInputLayout
-        android:id="@+id/ageInputLayout"
-        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:hint="Age"
-        android:textColorHint="@android:color/white"
-        app:boxStrokeColor="@android:color/white"
-        app:hintTextColor="@android:color/white"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/phoneInputLayout">
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/emailInputLayout"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:hint="Email"
+                    android:textColorHint="@android:color/white"
+                    app:boxStrokeColor="@android:color/white"
+                    app:hintTextColor="@android:color/white">
 
-        <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/editTextAge"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:inputType="number"
-            android:maxLength="3"
-            android:textColor="@android:color/white" />
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/editTextEmail"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="textEmailAddress"
+                        android:textColor="@android:color/white" />
+                </com.google.android.material.textfield.TextInputLayout>
 
-    </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/phoneInputLayout"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:hint="Phone Number"
+                    android:textColorHint="@android:color/white"
+                    app:boxStrokeColor="@android:color/white"
+                    app:hintTextColor="@android:color/white">
 
-    <com.google.android.material.textfield.TextInputLayout
-        android:id="@+id/countryInputLayout"
-        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:hint="Country"
-        android:textColorHint="@android:color/white"
-        app:boxStrokeColor="@android:color/white"
-        app:hintTextColor="@android:color/white"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/ageInputLayout">
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/editTextPhone"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="phone"
+                        android:textColor="@android:color/white" />
+                </com.google.android.material.textfield.TextInputLayout>
 
-        <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/editTextCountry"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:inputType="text"
-            android:textColor="@android:color/white" />
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/ageInputLayout"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:hint="Age"
+                    android:textColorHint="@android:color/white"
+                    app:boxStrokeColor="@android:color/white"
+                    app:hintTextColor="@android:color/white">
 
-    </com.google.android.material.textfield.TextInputLayout>
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/editTextAge"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="number"
+                        android:maxLength="3"
+                        android:textColor="@android:color/white" />
+                </com.google.android.material.textfield.TextInputLayout>
 
-    <com.google.android.material.textfield.TextInputLayout
-        android:id="@+id/passwordInputLayout"
-        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:hint="Password"
-        android:textColorHint="@android:color/white"
-        app:boxStrokeColor="@android:color/white"
-        app:hintTextColor="@android:color/white"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/countryInputLayout"
-        app:passwordToggleEnabled="true"
-        app:passwordToggleTint="@android:color/white">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/buttonNext"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="32dp"
+                    android:padding="16dp"
+                    android:text="Next: Account Details"
+                    android:textSize="16sp"
+                    app:backgroundTint="#FF6F00"
+                    app:cornerRadius="12dp" />
 
-        <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/editTextPassword"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:inputType="textPassword"
-            android:textColor="@android:color/white" />
+            </LinearLayout>
 
-    </com.google.android.material.textfield.TextInputLayout>
+            <LinearLayout
+                android:id="@+id/stepTwoLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
 
-    <com.google.android.material.textfield.TextInputLayout
-        android:id="@+id/confirmPasswordInputLayout"
-        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:hint="Confirm Password"
-        android:textColorHint="@android:color/white"
-        app:boxStrokeColor="@android:color/white"
-        app:hintTextColor="@android:color/white"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/passwordInputLayout"
-        app:passwordToggleEnabled="true"
-        app:passwordToggleTint="@android:color/white">
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/countryInputLayout"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Country"
+                    android:textColorHint="@android:color/white"
+                    app:boxStrokeColor="@android:color/white"
+                    app:hintTextColor="@android:color/white">
 
-        <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/editTextConfirmPassword"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:inputType="textPassword"
-            android:textColor="@android:color/white" />
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/editTextCountry"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="text"
+                        android:textColor="@android:color/white" />
+                </com.google.android.material.textfield.TextInputLayout>
 
-    </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/passwordInputLayout"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:hint="Password"
+                    android:textColorHint="@android:color/white"
+                    app:boxStrokeColor="@android:color/white"
+                    app:hintTextColor="@android:color/white"
+                    app:passwordToggleEnabled="true"
+                    app:passwordToggleTint="@android:color/white">
 
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/editTextPassword"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="textPassword"
+                        android:textColor="@android:color/white" />
+                </com.google.android.material.textfield.TextInputLayout>
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/buttonSignup"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:padding="16dp"
-        android:text="Sign Up"
-        android:textSize="16sp"
-        app:backgroundTint="#FF6F00"
-        app:cornerRadius="12dp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/confirmPasswordInputLayout" />
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/confirmPasswordInputLayout"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:hint="Confirm Password"
+                    android:textColorHint="@android:color/white"
+                    app:boxStrokeColor="@android:color/white"
+                    app:hintTextColor="@android:color/white"
+                    app:passwordToggleEnabled="true"
+                    app:passwordToggleTint="@android:color/white">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/editTextConfirmPassword"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="textPassword"
+                        android:textColor="@android:color/white" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/buttonSignup"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="32dp"
+                    android:padding="16dp"
+                    android:text="Sign Up"
+                    android:textSize="16sp"
+                    app:backgroundTint="#FF6F00"
+                    app:cornerRadius="12dp" />
+
+                <TextView
+                    android:id="@+id/buttonBack"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:padding="8dp"
+                    android:text="← Back to Personal Info"
+                    android:textColor="@android:color/white"
+                    android:textSize="14sp"
+                    android:layout_gravity="center_horizontal"/>
+
+            </LinearLayout>
+
+        </LinearLayout>
+    </ScrollView>
 
     <TextView
         android:id="@+id/buttonLoginLink"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
         android:padding="8dp"
         android:text="Already have an account? Login"
         android:textColor="@android:color/white"
         android:textSize="14sp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/buttonSignup" />
+        app:layout_constraintStart_toStartOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

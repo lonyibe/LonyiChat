@@ -220,6 +220,12 @@ object ApiService {
         return try {
             val token = user.getIdToken(true).await().token
 
+            // FIX: Append a unique timestamp to the photoUrl before sending it to the backend.
+            // This forces the backend to save a truly unique string, which resolves client-side caching.
+            val uniquePhotoUrl = photoUrl?.let { url ->
+                if (url.isNotBlank()) "${url}?t=${System.currentTimeMillis()}" else ""
+            } ?: ""
+
             // MODIFIED: Build map including photoUrl
             val bodyMap = mutableMapOf<String, Any>(
                 "name" to name,
@@ -227,7 +233,7 @@ object ApiService {
                 "age" to age,
                 "country" to country,
                 // Pass the new photoUrl, allowing it to be an empty string if null, which the backend handles.
-                "photoUrl" to (photoUrl ?: "")
+                "photoUrl" to uniquePhotoUrl
             )
 
             val json = gson.toJson(bodyMap)
