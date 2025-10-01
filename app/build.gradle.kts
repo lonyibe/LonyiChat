@@ -1,12 +1,16 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    // We are not using Compose for this screen, but it's okay to leave this.
     alias(libs.plugins.kotlin.compose)
+    // 🌟 FIX: The plugin MUST be applied here.
+    // We remove `version "4.4.0" apply false` and just use the ID.
+    id("com.google.gms.google-services")
 }
 
 android {
     namespace = "com.arua.lonyichat"
+    // REMOVED: applicationId = "com.arua.lonyichat" (Moved/confirmed in defaultConfig)
+
     compileSdk = 36
 
     defaultConfig {
@@ -41,12 +45,19 @@ android {
 }
 
 dependencies {
-    // I have added the new splash screen library here
     implementation("androidx.core:core-splashscreen:1.0.1")
 
-    // Existing dependencies
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
+
+    // Firebase Platform BOM (manages versions)
+    implementation(platform("com.google.firebase:firebase-bom:33.0.0"))
+
+    // Firebase Authentication
+    implementation("com.google.firebase:firebase-auth-ktx")
+
+    // OkHttp for network calls to Vercel API
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
