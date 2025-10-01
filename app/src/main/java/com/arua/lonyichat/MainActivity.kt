@@ -26,7 +26,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsControllerCompat
@@ -40,7 +39,8 @@ import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import java.text.SimpleDateFormat
 import java.util.*
-import androidx.compose.ui.text.input.KeyboardOptions // 🌟 FIX: Added missing import for KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardOptions // FIX: Added the clean KeyboardOptions import
+import androidx.compose.ui.text.input.KeyboardType // FIX: Added the clean KeyboardType import
 
 private const val TAG = "MainActivity"
 
