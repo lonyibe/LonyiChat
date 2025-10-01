@@ -34,4 +34,18 @@ class HomeFeedViewModel : ViewModel() {
             }
         }
     }
+
+    // 🌟 ADDED: Function to create and submit a new post
+    fun createPost(content: String, type: String) {
+        viewModelScope.launch {
+            ApiService.createPost(content, type)
+                .onSuccess {
+                    // Refresh the feed immediately after a successful post
+                    fetchPosts()
+                }
+                .onFailure { error ->
+                    _uiState.value = _uiState.value.copy(error = "Failed to post: ${error.localizedMessage}")
+                }
+        }
+    }
 }

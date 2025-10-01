@@ -26,11 +26,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsControllerCompat
 import com.arua.lonyichat.data.Church
 import com.arua.lonyichat.data.MediaItem
+import com.arua.lonyichat.data.Profile
 import com.arua.lonyichat.ui.theme.LonyiChatTheme
 import com.arua.lonyichat.ui.viewmodel.*
 import com.google.firebase.auth.ktx.auth
@@ -38,13 +40,15 @@ import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.ui.text.input.KeyboardOptions // 🌟 FIX: Added missing import for KeyboardOptions
 
 private const val TAG = "MainActivity"
 
 // ---------------------------------------------------------------------------------
-// 👤 PROFILE STATE MANAGEMENT 👤
+// 👤 PROFILE STATE MANAGEMENT (FOR HEADER BAR) 👤
 // ---------------------------------------------------------------------------------
 
+// NOTE: This state is used for the header bar only. The main ProfileScreen uses ProfileViewModel.
 data class UserProfileState(
     val userName: String = "Loading...",
     val isLoading: Boolean = true
@@ -95,6 +99,7 @@ class MainActivity : ComponentActivity() {
     private val chatListViewModel: ChatListViewModel by viewModels()
     private val bibleViewModel: BibleViewModel by viewModels()
     private val mediaViewModel: MediaViewModel by viewModels()
+    private val profileViewModel: ProfileViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -119,7 +124,8 @@ class MainActivity : ComponentActivity() {
                         churchesViewModel,
                         chatListViewModel,
                         bibleViewModel,
-                        mediaViewModel
+                        mediaViewModel,
+                        profileViewModel // Passed new ViewModel
                     )
                 }
             }
@@ -133,7 +139,8 @@ fun LonyiChatApp(
     churchesViewModel: ChurchesViewModel,
     chatListViewModel: ChatListViewModel,
     bibleViewModel: BibleViewModel,
-    mediaViewModel: MediaViewModel
+    mediaViewModel: MediaViewModel,
+    profileViewModel: ProfileViewModel // Added new ViewModel parameter
 ) {
     val profileState = rememberProfileState()
     var selectedItem: Screen by remember { mutableStateOf(Screen.Home) }
@@ -172,7 +179,8 @@ fun LonyiChatApp(
                 churchesViewModel = churchesViewModel,
                 chatListViewModel = chatListViewModel,
                 bibleViewModel = bibleViewModel,
-                mediaViewModel = mediaViewModel
+                mediaViewModel = mediaViewModel,
+                profileViewModel = profileViewModel // Passed new ViewModel
             )
         }
     }
@@ -229,7 +237,8 @@ fun ScreenContent(
     churchesViewModel: ChurchesViewModel,
     chatListViewModel: ChatListViewModel,
     bibleViewModel: BibleViewModel,
-    mediaViewModel: MediaViewModel
+    mediaViewModel: MediaViewModel,
+    profileViewModel: ProfileViewModel // Added new ViewModel parameter
 ) {
     when (screen) {
         Screen.Home -> HomeFeedScreen(profileState, homeFeedViewModel)
@@ -237,49 +246,253 @@ fun ScreenContent(
         Screen.Bible -> BibleStudyScreen(bibleViewModel)
         Screen.Chat -> ChatScreen(chatListViewModel)
         Screen.Media -> MediaScreen(mediaViewModel)
-        Screen.Profile -> ProfileScreen(profileState)
+        Screen.Profile -> ProfileScreen(profileViewModel) // Passed new ViewModel
     }
 }
 
+// ---------------------------------------------------------------------------------
+// 👤 PROFILE SCREEN IMPLEMENTATION (Updated) 👤
+// ---------------------------------------------------------------------------------
+
 @Composable
-fun ProfileScreen(profileState: UserProfileState) {
+fun ProfileScreen(viewModel: ProfileViewModel) {
     val context = LocalContext.current
+    val uiState by viewModel.uiState.collectAsState()
+    // State for managing the edit dialog visibility
+    var showEditDialog by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // Loading and Error States
+        when {
+            uiState.isLoading -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+                return
+            }
+            uiState.error != null -> {
+                Text(
+                    "Error: ${uiState.error}",
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(32.dp)
+                )
+                Button(onClick = { viewModel.fetchProfile() }) {
+                    Text("Retry Load")
+                }
+                return
+            }
+            uiState.profile == null -> {
+                Text("Profile data not found.", modifier = Modifier.padding(32.dp))
+                return
+            }
+        }
+
+        // --- Profile Content ---
+        val profile = uiState.profile!!
+
         Icon(
             imageVector = Icons.Default.AccountCircle,
-            contentDescription = "Profile",
+            contentDescription = "Profile Photo",
             modifier = Modifier.size(100.dp),
             tint = MaterialTheme.colorScheme.primary
         )
         Spacer(modifier = Modifier.height(16.dp))
-        if (profileState.isLoading) {
-            Text("Loading profile...")
-        } else {
-            Text(
-                text = profileState.userName,
-                style = MaterialTheme.typography.headlineMedium
-            )
+
+        Text(
+            text = profile.name,
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = profile.email,
+            style = MaterialTheme.typography.bodyLarge,
+            color = Color.Gray
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Stats Row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            ProfileStat(count = profile.followingCount, label = "Following")
+            ProfileStat(count = profile.followerCount, label = "Followers")
+            ProfileStat(count = profile.churchCount, label = "Churches")
         }
+
         Spacer(modifier = Modifier.height(32.dp))
-        Button(onClick = { /* TODO: Handle Edit Profile logic */ }) {
-            Text("Edit Profile")
+
+        // Details Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                ProfileDetail(Icons.Default.Place, "Country", profile.country ?: "Not Set")
+                ProfileDetail(Icons.Default.Cake, "Age", profile.age?.toString() ?: "Not Set")
+                ProfileDetail(Icons.Default.Phone, "Phone", profile.phone ?: "Not Set")
+            }
         }
-        Spacer(modifier = Modifier.height(8.dp))
-        Button(onClick = {
-            Firebase.auth.signOut()
-            val intent = Intent(context, LoginActivity::class.java)
-            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            context.startActivity(intent)
-        }) {
-            Text("Logout")
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        // Action Buttons
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = { showEditDialog = true }, // Show dialog on click
+                enabled = !uiState.isSaving
+            ) {
+                if (uiState.isSaving) {
+                    CircularProgressIndicator(Modifier.size(24.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Saving...")
+                } else {
+                    Text("Edit Profile")
+                }
+            }
+
+            Button(onClick = {
+                Firebase.auth.signOut()
+                val intent = Intent(context, LoginActivity::class.java)
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                context.startActivity(intent)
+            }) {
+                Text("Logout")
+            }
         }
     }
+
+    // Edit Dialog
+    if (showEditDialog) {
+        EditProfileDialog(
+            profile = uiState.profile,
+            onDismiss = { showEditDialog = false },
+            onSave = { name, phone, age, country ->
+                viewModel.updateProfile(name, phone, age, country)
+                showEditDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+fun ProfileStat(count: Int, label: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = count.toString(),
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = Color.Gray
+        )
+    }
+}
+
+@Composable
+fun ProfileDetail(icon: ImageVector, label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = label, tint = MaterialTheme.colorScheme.primary)
+        Spacer(modifier = Modifier.width(16.dp))
+        Column {
+            Text(label, style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+            Text(value, style = MaterialTheme.typography.bodyLarge)
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------
+// ✏️ EDIT PROFILE DIALOG ✏️
+// ---------------------------------------------------------------------------------
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditProfileDialog(
+    profile: Profile?,
+    onDismiss: () -> Unit,
+    onSave: (name: String, phone: String, age: String, country: String) -> Unit
+) {
+    if (profile == null) {
+        onDismiss()
+        return
+    }
+
+    var name by remember { mutableStateOf(profile.name) }
+    var phone by remember { mutableStateOf(profile.phone ?: "") }
+    var age by remember { mutableStateOf(profile.age?.toString() ?: "") }
+    var country by remember { mutableStateOf(profile.country ?: "") }
+
+    val isSaveEnabled = name.isNotBlank() && phone.isNotBlank() && age.isNotBlank() && country.isNotBlank()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Your Profile") },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
+                // Name
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Name") },
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    singleLine = true
+                )
+                // Phone
+                OutlinedTextField(
+                    value = phone,
+                    onValueChange = { phone = it },
+                    label = { Text("Phone Number") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    singleLine = true
+                )
+                // Age
+                OutlinedTextField(
+                    value = age,
+                    onValueChange = { age = it.filter { it.isDigit() } },
+                    label = { Text("Age") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    singleLine = true
+                )
+                // Country
+                OutlinedTextField(
+                    value = country,
+                    onValueChange = { country = it },
+                    label = { Text("Country") },
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    singleLine = true
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSave(name, phone, age, country) },
+                enabled = isSaveEnabled
+            ) {
+                Text("Save Changes")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+        containerColor = MaterialTheme.colorScheme.background,
+        textContentColor = MaterialTheme.colorScheme.onBackground
+    )
 }
 
 // ---------------------------------------------------------------------------------
@@ -292,12 +505,19 @@ fun HomeFeedScreen(
     viewModel: HomeFeedViewModel
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    // State to control the visibility of the post creation dialog
+    var showPostDialog by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        PostCreationBar(profileState.userName, profileState.isLoading)
+        PostCreationBar(
+            userName = profileState.userName,
+            isLoading = profileState.isLoading,
+            onBarClicked = { showPostDialog = true }
+        )
         Divider(color = Color.Gray.copy(alpha = 0.5f), thickness = 1.dp)
 
         when {
@@ -331,10 +551,22 @@ fun HomeFeedScreen(
             }
         }
     }
+
+    // Show the dialog if the state is true
+    if (showPostDialog) {
+        PostCreationDialog(
+            profileState = profileState,
+            onDismiss = { showPostDialog = false },
+            onPost = { content ->
+                viewModel.createPost(content, "post")
+                showPostDialog = false
+            }
+        )
+    }
 }
 
 @Composable
-fun PostCreationBar(userName: String, isLoading: Boolean) {
+fun PostCreationBar(userName: String, isLoading: Boolean, onBarClicked: () -> Unit) {
     val prompt = when {
         isLoading -> "Loading user profile..."
         else -> "What is on your heart, $userName?"
@@ -342,7 +574,8 @@ fun PostCreationBar(userName: String, isLoading: Boolean) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(8.dp),
+            .padding(8.dp)
+            .clickable(onClick = onBarClicked), // Make the entire bar clickable
         elevation = CardDefaults.cardElevation(2.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color.White.copy(alpha = 0.1f)
@@ -358,7 +591,7 @@ fun PostCreationBar(userName: String, isLoading: Boolean) {
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(Color.Gray)
+                    .background(MaterialTheme.colorScheme.secondaryContainer)
             )
             Spacer(modifier = Modifier.size(8.dp))
             Text(
@@ -416,6 +649,84 @@ fun PostCard(post: com.arua.lonyichat.data.Post) {
             Divider(color = Color.Gray.copy(alpha = 0.3f))
         }
     }
+}
+
+// ---------------------------------------------------------------------------------
+// 🌟 ADDED: POST CREATION DIALOG 🌟
+// ---------------------------------------------------------------------------------
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PostCreationDialog(
+    profileState: UserProfileState,
+    onDismiss: () -> Unit,
+    onPost: (String) -> Unit
+) {
+    var postContent by remember { mutableStateOf("") }
+    val isPostButtonEnabled = postContent.isNotBlank()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "New Post",
+                style = MaterialTheme.typography.titleLarge
+            )
+        },
+        text = {
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.secondaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (!profileState.isLoading) {
+                            Text(profileState.userName.firstOrNull()?.toString() ?: "", style = MaterialTheme.typography.titleLarge)
+                        } else {
+                            // Show nothing or a loading indicator
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = profileState.userName,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = postContent,
+                    onValueChange = { postContent = it },
+                    label = { Text("Share your thought...") },
+                    placeholder = { Text("What is on your heart today?") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 100.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                    )
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onPost(postContent) },
+                enabled = isPostButtonEnabled
+            ) {
+                Text("Post")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+        containerColor = MaterialTheme.colorScheme.background,
+        textContentColor = MaterialTheme.colorScheme.onBackground
+    )
 }
 
 // ---------------------------------------------------------------------------------
@@ -819,7 +1130,8 @@ fun LonyiChatPreview() {
             ChurchesViewModel(),
             ChatListViewModel(),
             BibleViewModel(),
-            MediaViewModel()
+            MediaViewModel(),
+            ProfileViewModel()
         )
     }
 }

@@ -39,7 +39,88 @@ object ApiService {
                 Result.success(postResponse.posts)
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            return Result.failure(e)
+        }
+    }
+
+    suspend fun createPost(content: String, type: String = "post"): Result<Unit> {
+        val user = Firebase.auth.currentUser
+        if (user == null) {
+            return Result.failure(Exception("User not authenticated."))
+        }
+
+        return try {
+            val token = user.getIdToken(true).await().token
+            val json = gson.toJson(mapOf(
+                "content" to content,
+                "type" to type
+            ))
+            val body = json.toRequestBody(JSON)
+
+            val request = Request.Builder()
+                .url("$BASE_URL/posts")
+                .addHeader("Authorization", "Bearer $token")
+                .post(body)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    throw IOException("Unexpected code ${response.code}: ${response.body?.string()}")
+                }
+                Result.success(Unit)
+            }
+        } catch (e: Exception) {
+            return Result.failure(e)
+        }
+    }
+
+    // --- PROFILE ---
+    suspend fun getProfile(): Result<Profile> {
+        val user = Firebase.auth.currentUser ?: return Result.failure(Exception("User not authenticated."))
+
+        return try {
+            val token = user.getIdToken(true).await().token
+            val request = Request.Builder()
+                .url("$BASE_URL/profile")
+                .addHeader("Authorization", "Bearer $token")
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) throw IOException("API Error: ${response.code}")
+                val body = response.body!!.string()
+                val profileResponse = gson.fromJson(body, ProfileResponse::class.java)
+                Result.success(profileResponse.profile)
+            }
+        } catch (e: Exception) {
+            return Result.failure(e)
+        }
+    }
+
+    suspend fun updateProfile(name: String, phone: String, age: String, country: String): Result<Unit> {
+        val user = Firebase.auth.currentUser ?: return Result.failure(Exception("User not authenticated."))
+
+        return try {
+            val token = user.getIdToken(true).await().token
+            val json = gson.toJson(mapOf(
+                "name" to name,
+                "phone" to phone,
+                "age" to age,
+                "country" to country
+            ))
+            val body = json.toRequestBody(JSON)
+
+            val request = Request.Builder()
+                .url("$BASE_URL/profile")
+                .addHeader("Authorization", "Bearer $token")
+                .put(body) // Use PUT for update operation
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) throw IOException("API Error: ${response.code}")
+                Result.success(Unit)
+            }
+        } catch (e: Exception) {
+            return Result.failure(e)
         }
     }
 
@@ -60,7 +141,7 @@ object ApiService {
                 Result.success(churchResponse.churches)
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            return Result.failure(e)
         }
     }
 
@@ -79,7 +160,7 @@ object ApiService {
                 Result.success(Unit)
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            return Result.failure(e)
         }
     }
 
@@ -97,7 +178,7 @@ object ApiService {
                 Result.success(verseResponse.verse)
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            return Result.failure(e)
         }
     }
 
@@ -119,7 +200,7 @@ object ApiService {
                 Result.success(mediaResponse.media)
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            return Result.failure(e)
         }
     }
 }
