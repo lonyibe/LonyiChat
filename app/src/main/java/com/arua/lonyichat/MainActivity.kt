@@ -26,8 +26,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardOptions // FIXED: Clean import for KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardType // FIXED: Clean import for KeyboardType
+import androidx.compose.ui.text.input.KeyboardOptions // Clean Import
+import androidx.compose.ui.text.input.KeyboardType // Clean Import
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsControllerCompat
