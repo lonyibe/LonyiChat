@@ -4,7 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
-import android.net.Uri // ADDED
+import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -40,11 +40,12 @@ import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import java.text.SimpleDateFormat
 import java.util.*
-import androidx.activity.compose.rememberLauncherForActivityResult // ADDED
-import androidx.activity.result.contract.ActivityResultContracts // ADDED
-import coil.compose.AsyncImage // ADDED for Coil
-import coil.request.ImageRequest // ADDED
-import android.widget.Toast // FIX: Import for Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import android.widget.Toast
+import coil.request.CachePolicy // ADDED: Import for Coil Cache Policy
 
 
 private const val TAG = "MainActivity"
@@ -268,7 +269,7 @@ fun ScreenContent(
     chatListViewModel: ChatListViewModel,
     bibleViewModel: BibleViewModel,
     mediaViewModel: MediaViewModel,
-    profileViewModel: ProfileViewModel // Passed new ViewModel parameter
+    profileViewModel: ProfileViewModel // Passed new ViewModel
 ) {
     when (screen) {
         Screen.Home -> HomeFeedScreen(profileState, homeFeedViewModel)
@@ -298,7 +299,7 @@ fun ProfileScreen(viewModel: ProfileViewModel) {
             if (uri != null) {
                 // Pass the local URI and the Activity context to the ViewModel for Cloudinary upload
                 viewModel.updateProfilePhoto(uri, activity)
-                Toast.makeText(context, "Uploading photo...", Toast.LENGTH_SHORT).show() // FIX: Toast used correctly
+                Toast.makeText(context, "Uploading photo...", Toast.LENGTH_SHORT).show()
             }
         }
     )
@@ -353,6 +354,9 @@ fun ProfileScreen(viewModel: ProfileViewModel) {
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(profile.photoUrl)
                     .crossfade(true)
+                    // FIX: Explicitly disable memory and disk cache to force Coil to always fetch the new version
+                    .memoryCachePolicy(CachePolicy.DISABLED)
+                    .diskCachePolicy(CachePolicy.DISABLED)
                     .placeholder(R.drawable.ic_person_placeholder) // Use the local placeholder drawable
                     .error(R.drawable.ic_person_placeholder) // Fallback on error
                     .build(),
