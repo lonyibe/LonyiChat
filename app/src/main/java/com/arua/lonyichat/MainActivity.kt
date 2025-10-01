@@ -1,9 +1,11 @@
 package com.arua.lonyichat
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,13 +23,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-// FIX: Added specific imports for all missing icons
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Message
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
@@ -36,13 +39,17 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Divider
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -55,6 +62,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -62,7 +70,7 @@ import com.arua.lonyichat.ui.theme.LonyiChatTheme
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
-import androidx.compose.material3.IconButton
+
 
 private const val TAG = "MainActivity"
 
@@ -146,12 +154,14 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     data object Bible : Screen("bible", "Bible", Icons.Filled.Book)
     data object Chat : Screen("chat", "Chat", Icons.Filled.Message)
     data object Media : Screen("media", "Media", Icons.Filled.LiveTv)
+    data object Profile : Screen("profile", "Profile", Icons.Filled.Person)
 }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        // ✨ THIS LINE ENABLES THE IMMERSIVE, EDGE-TO-EDGE EXPERIENCE ✨
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        // Note: enableEdgeToEdge() is often used but removed here to simplify standard Scaffold behavior
         setContent {
             LonyiChatTheme {
                 LonyiChatApp()
@@ -162,30 +172,57 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun LonyiChatApp() {
-    // Inject the profile state here
     val profileState = rememberProfileState()
-
-    val items = listOf(Screen.Home, Screen.Groups, Screen.Bible, Screen.Chat, Screen.Media)
-    // FIX: Explicitly specify the type to resolve 'Assignment type mismatch'
     var selectedItem: Screen by remember { mutableStateOf(Screen.Home) }
+
+    val bottomBarItems = listOf(Screen.Home, Screen.Groups, Screen.Bible, Screen.Chat, Screen.Media)
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        bottomBar = {
-            LonyiChatBottomBar(
-                items = items,
-                selectedItem = selectedItem,
-                onItemSelected = { selectedItem = it }
+        topBar = {
+            LonyiChatTopBar(
+                title = if (selectedItem is Screen.Profile) "Profile" else selectedItem.title,
+                onProfileClicked = { selectedItem = Screen.Profile }
             )
+        },
+        bottomBar = {
+            if (selectedItem !is Screen.Profile) {
+                LonyiChatBottomBar(
+                    items = bottomBarItems,
+                    selectedItem = selectedItem,
+                    onItemSelected = { selectedItem = it }
+                )
+            }
         }
     ) { innerPadding ->
-        // 💡 Corrected innerPadding usage
         Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
-            // Pass profileState down to the HomeFeedScreen
             ScreenContent(screen = selectedItem, profileState = profileState)
         }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun LonyiChatTopBar(title: String, onProfileClicked: () -> Unit) {
+    TopAppBar(
+        title = { Text(title) },
+        actions = {
+            IconButton(onClick = onProfileClicked) {
+                Icon(
+                    imageVector = Icons.Default.AccountCircle,
+                    contentDescription = "Profile",
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            actionIconContentColor = MaterialTheme.colorScheme.onSurface
+        )
+    )
+}
+
 
 @Composable
 fun LonyiChatBottomBar(
@@ -207,16 +244,61 @@ fun LonyiChatBottomBar(
 
 @Composable
 fun ScreenContent(screen: Screen, profileState: UserProfileState) {
-    // 3. Content for each tab
     when (screen) {
-        // Pass profileState only to Home Screen
         Screen.Home -> HomeFeedScreen(profileState)
         Screen.Groups -> GroupsChurchScreen()
         Screen.Bible -> BibleStudyScreen()
         Screen.Chat -> ChatScreen()
         Screen.Media -> MediaScreen()
+        Screen.Profile -> ProfileScreen(profileState)
     }
 }
+
+@Composable
+fun ProfileScreen(profileState: UserProfileState) {
+    val context = LocalContext.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.AccountCircle,
+            contentDescription = "Profile",
+            modifier = Modifier.size(100.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (profileState.isLoading) {
+            Text("Loading profile...")
+        } else {
+            Text(
+                text = profileState.userName,
+                style = MaterialTheme.typography.headlineMedium
+            )
+        }
+        Spacer(modifier = Modifier.height(32.dp))
+
+        Button(onClick = { /* TODO: Handle Edit Profile logic */ }) {
+            Text("Edit Profile")
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Button(onClick = {
+            Firebase.auth.signOut()
+            val intent = Intent(context, LoginActivity::class.java)
+            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            context.startActivity(intent)
+        }) {
+            Text("Logout")
+        }
+    }
+}
+
 
 // ---------------------------------------------------------------------------------
 // 🌟 HOME FEED IMPLEMENTATION 🌟
@@ -227,17 +309,12 @@ fun HomeFeedScreen(profileState: UserProfileState) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF0F2F5)) // Light background color for the feed
+            .background(MaterialTheme.colorScheme.background)
     ) {
-        // 1. Post Creation Bar (Status Update)
         PostCreationBar(profileState.userName, profileState.isLoading)
-
-        Divider(color = Color.LightGray, thickness = 1.dp)
-
-        // 2. Feed Scrollable List
+        Divider(color = Color.Gray.copy(alpha = 0.5f), thickness = 1.dp)
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            // Ensure you import PaddingValues from androidx.compose.foundation.layout
             contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 8.dp)
         ) {
             items(mockPosts) { post ->
@@ -259,7 +336,10 @@ fun PostCreationBar(userName: String, isLoading: Boolean) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp),
-        elevation = CardDefaults.cardElevation(2.dp)
+        elevation = CardDefaults.cardElevation(2.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White.copy(alpha = 0.1f)
+        )
     ) {
         Row(
             modifier = Modifier
@@ -267,7 +347,6 @@ fun PostCreationBar(userName: String, isLoading: Boolean) {
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Profile Icon Placeholder
             Box(
                 modifier = Modifier
                     .size(40.dp)
@@ -276,14 +355,13 @@ fun PostCreationBar(userName: String, isLoading: Boolean) {
             )
             Spacer(modifier = Modifier.size(8.dp))
 
-            // Status Update Input Area - Now personalized
             Text(
                 text = prompt,
                 color = if (isLoading) Color.LightGray else Color.Gray,
                 modifier = Modifier.fillMaxWidth(0.9f)
             )
         }
-        Divider(color = Color.LightGray, thickness = 1.dp)
+        Divider(color = Color.Gray.copy(alpha = 0.3f), thickness = 1.dp)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -299,23 +377,24 @@ fun PostCreationBar(userName: String, isLoading: Boolean) {
 
 @Composable
 fun PostCard(initialPost: Post) {
-    // Use remember and mutableStateOf to hold the dynamic state of reactions for this post
     var reactions by remember { mutableIntStateOf(initialPost.reactions) }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp),
-        elevation = CardDefaults.cardElevation(2.dp)
+        elevation = CardDefaults.cardElevation(2.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White.copy(alpha = 0.1f)
+        )
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            // Header: Author and Time
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.secondary)
+                        .background(MaterialTheme.colorScheme.secondaryContainer)
                 )
                 Spacer(modifier = Modifier.size(8.dp))
                 Column {
@@ -326,26 +405,22 @@ fun PostCard(initialPost: Post) {
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Trending Song Tag (if present)
             initialPost.trendingSong?.let { song ->
-                Text("🎵 Trending Song: $song", color = Color(0xFF00796B), style = MaterialTheme.typography.bodySmall)
+                Text("🎵 Trending Song: $song", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
                 Spacer(modifier = Modifier.height(6.dp))
             }
 
-            // Content
             Text(initialPost.content, style = MaterialTheme.typography.bodyMedium)
 
             Spacer(modifier = Modifier.height(10.dp))
-            Divider(color = Color.LightGray)
+            Divider(color = Color.Gray.copy(alpha = 0.3f))
             Spacer(modifier = Modifier.height(4.dp))
 
-            // Actions: Reactions and Comments (Interactive)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Reactions (Hallelujah, Amen, Praise God placeholder) - Now Clickable!
                 Row(
                     modifier = Modifier.clickable {
                         reactions++
@@ -353,26 +428,21 @@ fun PostCard(initialPost: Post) {
                     },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("🙏", Modifier.padding(end = 4.dp)) // Hallelujah placeholder icon
+                    Text("🙏", Modifier.padding(end = 4.dp))
                     Text("$reactions Reactions", style = MaterialTheme.typography.labelMedium)
                 }
 
-                // Comments and Share
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    // Comments button - Now clickable
                     Row(
                         modifier = Modifier.clickable {
                             Log.d(TAG, "Comment button clicked for post ${initialPost.id}")
                         },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // 💡 Fixed reference to ChatBubbleOutline
                         Icon(Icons.Default.ChatBubbleOutline, contentDescription = "Comment", Modifier.size(18.dp))
                         Text(initialPost.comments.toString(), Modifier.padding(start = 4.dp), style = MaterialTheme.typography.labelMedium)
                     }
 
-                    // Share button - Now clickable
-                    // 💡 Fixed reference to Share
                     Icon(
                         Icons.Default.Share,
                         contentDescription = "Share",
@@ -405,10 +475,9 @@ fun BibleStudyScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF0F2F5))
+            .background(MaterialTheme.colorScheme.background)
             .padding(16.dp)
     ) {
-        // 1. Daily Bible Verse Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
@@ -436,7 +505,6 @@ fun BibleStudyScreen() {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // 2. Reading Plan / Progress
         Card(
             modifier = Modifier.fillMaxWidth(),
             elevation = CardDefaults.cardElevation(2.dp)
@@ -451,9 +519,8 @@ fun BibleStudyScreen() {
                 Text(text = "Currently reading: Genesis (Day 3 of 90)", style = MaterialTheme.typography.bodyMedium)
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // Progress Bar
                 LinearProgressIndicator(
-                    progress = 0.03f, // 3% complete
+                    progress = 0.03f,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(8.dp)
@@ -477,12 +544,10 @@ fun BibleStudyScreen() {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // 3. Bible Search/Tools Row
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            // Search Button
             Button(
                 onClick = { Log.d(TAG, "Bible Search clicked") },
                 modifier = Modifier.weight(1f).padding(end = 8.dp)
@@ -492,12 +557,10 @@ fun BibleStudyScreen() {
                 Text("Search Bible")
             }
 
-            // Books Button
             Button(
                 onClick = { Log.d(TAG, "Browse Books clicked") },
                 modifier = Modifier.weight(1f).padding(start = 8.dp)
             ) {
-                // 💡 Fixed reference to Timeline
                 Icon(Icons.Default.Timeline, contentDescription = "Books", Modifier.size(20.dp))
                 Spacer(Modifier.width(4.dp))
                 Text("Books A-Z")
@@ -511,10 +574,9 @@ fun ChatScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White)
+            .background(MaterialTheme.colorScheme.background)
             .padding(top = 16.dp)
     ) {
-        // Top Section: Find Christians / Friend Requests
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -530,12 +592,10 @@ fun ChatScreen() {
             ) {
                 Text("Find other Christians", style = MaterialTheme.typography.titleMedium)
 
-                // Button to go to search/requests
                 Row(
                     modifier = Modifier.clickable { Log.d(TAG, "Find Christians clicked") },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // 💡 Fixed reference to PersonAdd
                     Icon(Icons.Default.PersonAdd, contentDescription = "Find Friends", tint = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("Search", color = MaterialTheme.colorScheme.primary)
@@ -545,7 +605,6 @@ fun ChatScreen() {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Chat List Header
         Text(
             text = "Messages",
             style = MaterialTheme.typography.headlineSmall,
@@ -555,7 +614,6 @@ fun ChatScreen() {
 
         Divider(modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp))
 
-        // Chat List (LazyColumn for performance)
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -577,7 +635,6 @@ fun ChatThreadItem(chat: ChatThread) {
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Profile Photo/Avatar
         Box(
             modifier = Modifier
                 .size(50.dp)
@@ -589,7 +646,6 @@ fun ChatThreadItem(chat: ChatThread) {
         }
         Spacer(modifier = Modifier.width(12.dp))
 
-        // Name and Last Message
         Column(modifier = Modifier.weight(1f)) {
             Text(chat.recipient, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
             Text(
@@ -600,10 +656,9 @@ fun ChatThreadItem(chat: ChatThread) {
             )
         }
 
-        // Time Stamp
         Text(chat.time, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
     }
-    Divider(color = Color.LightGray)
+    Divider(color = Color.Gray.copy(alpha = 0.3f))
 }
 
 @Composable
@@ -613,15 +668,6 @@ fun MediaScreen() {
         modifier = Modifier.padding(16.dp)
     )
 }
-
-
-// 4. Preview Setup
-// NOTE: These extensions are often unnecessary if using standard Compose functions,
-// but we keep them here and use standard .dp from Compose UI where possible.
-private val Float.dp: androidx.compose.ui.unit.Dp
-    get() = androidx.compose.ui.unit.dp(this)
-private val Int.dp: androidx.compose.ui.unit.Dp
-    get() = androidx.compose.ui.unit.dp(this.toFloat())
 
 @Preview(showBackground = true)
 @Composable
