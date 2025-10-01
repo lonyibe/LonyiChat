@@ -179,6 +179,8 @@ fun LonyiChatApp() {
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        // ✨ THIS IS THE FIX 👇 ✨
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             LonyiChatTopBar(
                 title = if (selectedItem is Screen.Profile) "Profile" else selectedItem.title,
