@@ -26,8 +26,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardOptions // Clean Import
-import androidx.compose.ui.text.input.KeyboardType // Clean Import
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsControllerCompat
@@ -455,7 +454,7 @@ fun EditProfileDialog(
                     value = phone,
                     onValueChange = { phone = it },
                     label = { Text("Phone Number") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    // REMOVED: keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                     singleLine = true
                 )
@@ -464,7 +463,7 @@ fun EditProfileDialog(
                     value = age,
                     onValueChange = { age = it.filter { it.isDigit() } },
                     label = { Text("Age") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    // REMOVED: keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                     singleLine = true
                 )
