@@ -146,6 +146,10 @@ fun LonyiChatApp(
 
     val bottomBarItems = listOf(Screen.Home, Screen.Groups, Screen.Bible, Screen.Chat, Screen.Media)
 
+    // New navigation logic: Profile screen should show a back button and its button should navigate to home
+    val showBackButton = selectedItem is Screen.Profile
+    val onBackClicked = { selectedItem = Screen.Home }
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
@@ -153,6 +157,8 @@ fun LonyiChatApp(
         topBar = {
             LonyiChatTopBar(
                 title = if (selectedItem is Screen.Profile) "Profile" else selectedItem.title,
+                showBackButton = showBackButton, // ADDED
+                onBackClicked = onBackClicked, // ADDED
                 onProfileClicked = { selectedItem = Screen.Profile }
             )
         },
@@ -187,16 +193,35 @@ fun LonyiChatApp(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LonyiChatTopBar(title: String, onProfileClicked: () -> Unit) {
+fun LonyiChatTopBar(
+    title: String,
+    showBackButton: Boolean, // ADDED
+    onBackClicked: () -> Unit, // ADDED
+    onProfileClicked: () -> Unit
+) {
     TopAppBar(
         title = { Text(title) },
+        // MODIFIED: Conditionally display a back button in the navigationIcon slot
+        navigationIcon = {
+            if (showBackButton) {
+                IconButton(onClick = onBackClicked) {
+                    Icon(
+                        imageVector = Icons.Filled.ArrowBack,
+                        contentDescription = "Back"
+                    )
+                }
+            }
+        },
         actions = {
-            IconButton(onClick = onProfileClicked) {
-                Icon(
-                    imageVector = Icons.Default.AccountCircle,
-                    contentDescription = "Profile",
-                    modifier = Modifier.size(28.dp)
-                )
+            // Only show the profile icon if we're not already on the profile screen
+            if (!showBackButton) {
+                IconButton(onClick = onProfileClicked) {
+                    Icon(
+                        imageVector = Icons.Default.AccountCircle,
+                        contentDescription = "Profile",
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(
