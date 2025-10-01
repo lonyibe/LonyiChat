@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- 1. This is the new Splash Screen Theme -->
+    <style name="Theme.App.Starting" parent="Theme.SplashScreen">
+        <!-- Set the splash screen background color -->
+        <item name="windowSplashScreenBackground">#0C2340</item>
+        <!-- Set the icon to your logo -->
+        <item name="windowSplashScreenAnimatedIcon">@drawable/logo</item>
+        <!-- Set the theme for the app to transition to -->
+        <item name="postSplashScreenTheme">@style/Theme.LonyiChat.AppCompat</item>
+    </style>
+
+    <!-- This is the theme for your Login/Signup screens. -->
+    <style name="Theme.LonyiChat.AppCompat" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Make the status bar and navigation bar transparent -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:enforceNavigationBarContrast" tools:targetApi="q">false</item>
+    </style>
+
+    <!-- This is the original theme for your main (Compose) activity -->
+    <style name="Theme.LonyiChat" parent="android:Theme.Material.Light.NoActionBar" />
+
+</resources>

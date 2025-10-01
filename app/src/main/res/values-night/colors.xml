@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark Theme Colors -->
+    <color name="lonyi_background">#0C2340</color> <!-- The dark blue we already have -->
+    <color name="lonyi_text">#FFFFFF</color> <!-- White for text -->
+    <color name="lonyi_text_hint">#E5E7EB</color> <!-- Light gray for hints -->
+    <color name="lonyi_button_background">#FF6F00</color> <!-- The orange we already have -->
+    <color name="lonyi_button_text">#FFFFFF</color> <!-- White text on buttons -->
+</resources>
