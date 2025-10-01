@@ -18,19 +18,30 @@ class SignupActivity : AppCompatActivity() {
 
         setContentView(R.layout.activity_signup)
 
-        // Find the views
+        // Find the views - Existing
         val editTextEmail: TextInputEditText = findViewById(R.id.editTextEmail)
         val editTextPassword: TextInputEditText = findViewById(R.id.editTextPassword)
         val editTextConfirmPassword: TextInputEditText = findViewById(R.id.editTextConfirmPassword)
         val buttonSignup: MaterialButton = findViewById(R.id.buttonSignup)
         val buttonLoginLink: TextView = findViewById(R.id.buttonLoginLink)
 
+        // Find the views - New Fields
+        val editTextName: TextInputEditText = findViewById(R.id.editTextName)
+        val editTextPhone: TextInputEditText = findViewById(R.id.editTextPhone)
+        val editTextAge: TextInputEditText = findViewById(R.id.editTextAge)
+        val editTextCountry: TextInputEditText = findViewById(R.id.editTextCountry)
+
         buttonSignup.setOnClickListener {
+            val name = editTextName.text.toString()
             val email = editTextEmail.text.toString()
+            val phone = editTextPhone.text.toString()
+            val age = editTextAge.text.toString()
+            val country = editTextCountry.text.toString()
             val password = editTextPassword.text.toString()
             val confirmPassword = editTextConfirmPassword.text.toString()
 
-            if (email.isNotEmpty() && password.isNotEmpty() && confirmPassword.isNotEmpty()) {
+            // Update validation to check all new fields as well
+            if (name.isNotEmpty() && email.isNotEmpty() && phone.isNotEmpty() && age.isNotEmpty() && country.isNotEmpty() && password.isNotEmpty() && confirmPassword.isNotEmpty()) {
                 if (password == confirmPassword) {
                     // TODO: Add signup logic here
                     Toast.makeText(this, "Sign Up Successful (placeholder)", Toast.LENGTH_SHORT).show()
