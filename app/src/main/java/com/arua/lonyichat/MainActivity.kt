@@ -26,7 +26,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsControllerCompat
@@ -633,7 +632,7 @@ fun PostCard(post: com.arua.lonyichat.data.Post) {
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.secondaryContainer)
                 )
-                Spacer(modifier = Modifier.size(8.dp))
+                Spacer(modifier = Modifier.width(8.dp))
                 Column {
                     Text(post.authorName, fontWeight = FontWeight.Bold)
                     Text(
