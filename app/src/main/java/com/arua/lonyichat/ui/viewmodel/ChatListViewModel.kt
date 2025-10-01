@@ -42,7 +42,8 @@ class ChatListViewModel : ViewModel() {
             .whereArrayContains("participants", currentUserId)
             .orderBy("lastMessageTimestamp", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshots, e ->
-                if (e != nil) {
+                // ✨ FIXED: Changed 'nil' to 'null' for the Kotlin syntax ✨
+                if (e != null) {
                     Log.w("ChatListViewModel", "Listen failed.", e)
                     _uiState.value = ChatListUiState(error = "Failed to load chats.")
                     return@addSnapshotListener
