@@ -2,7 +2,6 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    // FIX: Removed 'version "4.4.0" apply false' and applied the plugin directly:
     id("com.google.gms.google-services")
 }
 
@@ -43,21 +42,19 @@ android {
 
 dependencies {
     implementation("androidx.core:core-splashscreen:1.0.1")
-
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
 
-    // Firebase Platform BOM (manages versions)
+    // Firebase Platform BOM
     implementation(platform("com.google.firebase:firebase-bom:33.0.0"))
-
-    // Firebase Authentication
     implementation("com.google.firebase:firebase-auth-ktx")
-
-    // Firebase Firestore (for reading profiles)
     implementation("com.google.firebase:firebase-firestore-ktx")
 
-    // OkHttp for network calls to Vercel API
+    // OkHttp for network calls
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // ✨ ADDED: Gson for parsing JSON from your backend ✨
+    implementation("com.google.code.gson:gson:2.10.1")
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -67,8 +64,6 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-
-    // ✨ CORRECTED THE ALIAS TO FIX THE ERROR ✨
     implementation(libs.androidx.compose.material.icons.extended)
 
     testImplementation(libs.junit)

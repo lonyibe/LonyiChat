@@ -7,59 +7,17 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.Book
-import androidx.compose.material.icons.filled.ChatBubbleOutline
-import androidx.compose.material.icons.filled.Group
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.LiveTv
-import androidx.compose.material.icons.filled.Message
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Timeline
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -71,11 +29,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsControllerCompat
+import com.arua.lonyichat.data.Church
 import com.arua.lonyichat.ui.theme.LonyiChatTheme
+import com.arua.lonyichat.ui.viewmodel.BibleViewModel
+import com.arua.lonyichat.ui.viewmodel.ChatListViewModel
+import com.arua.lonyichat.ui.viewmodel.ChurchesViewModel
+import com.arua.lonyichat.ui.viewmodel.HomeFeedViewModel
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
-
+import java.text.SimpleDateFormat
+import java.util.*
 
 private const val TAG = "MainActivity"
 
@@ -117,42 +81,7 @@ fun rememberProfileState(): UserProfileState {
     return currentState.value
 }
 
-
-// Data class for a mock Post
-data class Post(
-    val id: Int,
-    val author: String,
-    val content: String,
-    val time: String,
-    val reactions: Int,
-    val comments: Int,
-    val trendingSong: String? = null
-)
-
-// Mock Data for the Feed
-val mockPosts = listOf(
-    Post(1, "Brother David", "Praise God! Just got confirmation on a prayer request. Faith works!", "5m ago", 124, 15),
-    Post(2, "Sister Ruth", "Listening to a beautiful Christian worship song: 'Reckless Love'. So peaceful.", "2h ago", 89, 5, "Reckless Love - Cory Asbury"),
-    Post(3, "Pastor Mike", "Daily Verse: 'For God so loved the world...' (John 3:16). Share your favorite verse!", "1 day ago", 301, 45),
-    Post(4, "Church Group A", "Reminder: Bible study tonight at 7 PM. Topic: Forgiveness.", "2 days ago", 55, 10),
-)
-
-// Mock Data for Chat List
-data class ChatThread(
-    val id: Int,
-    val recipient: String,
-    val lastMessage: String,
-    val time: String
-)
-
-val mockChats = listOf(
-    ChatThread(1, "Sister Ruth", "Amen! I'm praying for you.", "1m ago"),
-    ChatThread(2, "Pastor Mike", "See you tonight at 7.", "3h ago"),
-    ChatThread(3, "Brother David", "That verse blessed me.", "1d ago"),
-)
-
-
-// 1. Define the Screens (Tabs)
+// Define the Screens (Tabs)
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     data object Home : Screen("home", "Feed", Icons.Filled.Home)
     data object Groups : Screen("groups", "Churches", Icons.Filled.Group)
@@ -163,28 +92,30 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
 }
 
 class MainActivity : ComponentActivity() {
+    private val homeFeedViewModel: HomeFeedViewModel by viewModels()
+    private val churchesViewModel: ChurchesViewModel by viewModels()
+    private val chatListViewModel: ChatListViewModel by viewModels()
+    private val bibleViewModel: BibleViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
-        // ✨ THIS LINE ENABLES THE IMMERSIVE, EDGE-TO-EDGE EXPERIENCE ✨
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent {
             LonyiChatTheme {
-                // ✨ ADDED: This block sets the status bar icons to light for better visibility ✨
                 val view = LocalView.current
                 if (!view.isInEditMode) {
                     SideEffect {
                         val window = (view.context as Activity).window
-                        // `false` makes the status bar icons light
-                        WindowInsetsControllerCompat(window, view).isAppearanceLightStatusBars = false
+                        val insetsController = WindowInsetsControllerCompat(window, view)
+                        insetsController.isAppearanceLightStatusBars = false
+                        insetsController.isAppearanceLightNavigationBars = false
                     }
                 }
-
-                // ✨ THIS IS THE FIX 👇: A Surface that fills the entire screen ✨
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    LonyiChatApp()
+                    LonyiChatApp(homeFeedViewModel, churchesViewModel, chatListViewModel, bibleViewModel)
                 }
             }
         }
@@ -192,7 +123,12 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun LonyiChatApp() {
+fun LonyiChatApp(
+    homeFeedViewModel: HomeFeedViewModel,
+    churchesViewModel: ChurchesViewModel,
+    chatListViewModel: ChatListViewModel,
+    bibleViewModel: BibleViewModel
+) {
     val profileState = rememberProfileState()
     var selectedItem: Screen by remember { mutableStateOf(Screen.Home) }
 
@@ -201,6 +137,7 @@ fun LonyiChatApp() {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = ScaffoldDefaults.contentWindowInsets.exclude(WindowInsets.navigationBars),
         topBar = {
             LonyiChatTopBar(
                 title = if (selectedItem is Screen.Profile) "Profile" else selectedItem.title,
@@ -217,8 +154,19 @@ fun LonyiChatApp() {
             }
         }
     ) { innerPadding ->
-        Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
-            ScreenContent(screen = selectedItem, profileState = profileState)
+        Box(
+            modifier = Modifier
+                .padding(innerPadding)
+                .fillMaxSize()
+        ) {
+            ScreenContent(
+                screen = selectedItem,
+                profileState = profileState,
+                homeFeedViewModel = homeFeedViewModel,
+                churchesViewModel = churchesViewModel,
+                chatListViewModel = chatListViewModel,
+                bibleViewModel = bibleViewModel
+            )
         }
     }
 }
@@ -245,14 +193,16 @@ fun LonyiChatTopBar(title: String, onProfileClicked: () -> Unit) {
     )
 }
 
-
 @Composable
 fun LonyiChatBottomBar(
     items: List<Screen>,
     selectedItem: Screen,
     onItemSelected: (Screen) -> Unit
 ) {
-    NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+    NavigationBar(
+        modifier = Modifier.navigationBarsPadding(),
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
         items.forEach { screen ->
             NavigationBarItem(
                 icon = { Icon(screen.icon, contentDescription = screen.title) },
@@ -265,12 +215,19 @@ fun LonyiChatBottomBar(
 }
 
 @Composable
-fun ScreenContent(screen: Screen, profileState: UserProfileState) {
+fun ScreenContent(
+    screen: Screen,
+    profileState: UserProfileState,
+    homeFeedViewModel: HomeFeedViewModel,
+    churchesViewModel: ChurchesViewModel,
+    chatListViewModel: ChatListViewModel,
+    bibleViewModel: BibleViewModel
+) {
     when (screen) {
-        Screen.Home -> HomeFeedScreen(profileState)
-        Screen.Groups -> GroupsChurchScreen()
-        Screen.Bible -> BibleStudyScreen()
-        Screen.Chat -> ChatScreen()
+        Screen.Home -> HomeFeedScreen(profileState, homeFeedViewModel)
+        Screen.Groups -> GroupsChurchScreen(churchesViewModel)
+        Screen.Bible -> BibleStudyScreen(bibleViewModel)
+        Screen.Chat -> ChatScreen(chatListViewModel)
         Screen.Media -> MediaScreen()
         Screen.Profile -> ProfileScreen(profileState)
     }
@@ -279,7 +236,6 @@ fun ScreenContent(screen: Screen, profileState: UserProfileState) {
 @Composable
 fun ProfileScreen(profileState: UserProfileState) {
     val context = LocalContext.current
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -294,7 +250,6 @@ fun ProfileScreen(profileState: UserProfileState) {
             tint = MaterialTheme.colorScheme.primary
         )
         Spacer(modifier = Modifier.height(16.dp))
-
         if (profileState.isLoading) {
             Text("Loading profile...")
         } else {
@@ -304,12 +259,10 @@ fun ProfileScreen(profileState: UserProfileState) {
             )
         }
         Spacer(modifier = Modifier.height(32.dp))
-
         Button(onClick = { /* TODO: Handle Edit Profile logic */ }) {
             Text("Edit Profile")
         }
         Spacer(modifier = Modifier.height(8.dp))
-
         Button(onClick = {
             Firebase.auth.signOut()
             val intent = Intent(context, LoginActivity::class.java)
@@ -321,13 +274,16 @@ fun ProfileScreen(profileState: UserProfileState) {
     }
 }
 
-
 // ---------------------------------------------------------------------------------
 // 🌟 HOME FEED IMPLEMENTATION 🌟
 // ---------------------------------------------------------------------------------
 
 @Composable
-fun HomeFeedScreen(profileState: UserProfileState) {
+fun HomeFeedScreen(
+    profileState: UserProfileState,
+    viewModel: HomeFeedViewModel
+) {
+    val uiState by viewModel.uiState.collectAsState()
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -335,13 +291,35 @@ fun HomeFeedScreen(profileState: UserProfileState) {
     ) {
         PostCreationBar(profileState.userName, profileState.isLoading)
         Divider(color = Color.Gray.copy(alpha = 0.5f), thickness = 1.dp)
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 8.dp)
-        ) {
-            items(mockPosts) { post ->
-                PostCard(initialPost = post)
-                Spacer(modifier = Modifier.height(8.dp))
+
+        when {
+            uiState.isLoading -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            }
+            uiState.error != null -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp), contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "Error: ${uiState.error}",
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+            else -> {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 8.dp)
+                ) {
+                    items(uiState.posts) { post ->
+                        PostCard(post = post)
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
             }
         }
     }
@@ -353,7 +331,6 @@ fun PostCreationBar(userName: String, isLoading: Boolean) {
         isLoading -> "Loading user profile..."
         else -> "What is on your heart, $userName?"
     }
-
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -376,7 +353,6 @@ fun PostCreationBar(userName: String, isLoading: Boolean) {
                     .background(Color.Gray)
             )
             Spacer(modifier = Modifier.size(8.dp))
-
             Text(
                 text = prompt,
                 color = if (isLoading) Color.LightGray else Color.Gray,
@@ -398,9 +374,7 @@ fun PostCreationBar(userName: String, isLoading: Boolean) {
 }
 
 @Composable
-fun PostCard(initialPost: Post) {
-    var reactions by remember { mutableIntStateOf(initialPost.reactions) }
-
+fun PostCard(post: com.arua.lonyichat.data.Post) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -420,184 +394,119 @@ fun PostCard(initialPost: Post) {
                 )
                 Spacer(modifier = Modifier.size(8.dp))
                 Column {
-                    Text(initialPost.author, fontWeight = FontWeight.Bold)
-                    Text(initialPost.time, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            initialPost.trendingSong?.let { song ->
-                Text("🎵 Trending Song: $song", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
-                Spacer(modifier = Modifier.height(6.dp))
-            }
-
-            Text(initialPost.content, style = MaterialTheme.typography.bodyMedium)
-
-            Spacer(modifier = Modifier.height(10.dp))
-            Divider(color = Color.Gray.copy(alpha = 0.3f))
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    modifier = Modifier.clickable {
-                        reactions++
-                        Log.d(TAG, "Post ${initialPost.id} reacted to. New count: $reactions")
-                    },
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("🙏", Modifier.padding(end = 4.dp))
-                    Text("$reactions Reactions", style = MaterialTheme.typography.labelMedium)
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Row(
-                        modifier = Modifier.clickable {
-                            Log.d(TAG, "Comment button clicked for post ${initialPost.id}")
-                        },
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.ChatBubbleOutline, contentDescription = "Comment", Modifier.size(18.dp))
-                        Text(initialPost.comments.toString(), Modifier.padding(start = 4.dp), style = MaterialTheme.typography.labelMedium)
-                    }
-
-                    Icon(
-                        Icons.Default.Share,
-                        contentDescription = "Share",
-                        modifier = Modifier
-                            .size(18.dp)
-                            .clickable {
-                                Log.d(TAG, "Share button clicked for post ${initialPost.id}")
-                            }
+                    Text(post.authorName, fontWeight = FontWeight.Bold)
+                    Text(
+                        post.createdAt.toDate().toFormattedString(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Gray
                     )
                 }
             }
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(post.content, style = MaterialTheme.typography.bodyMedium)
+            Spacer(modifier = Modifier.height(10.dp))
+            Divider(color = Color.Gray.copy(alpha = 0.3f))
         }
     }
 }
 
 // ---------------------------------------------------------------------------------
-// 📚 OTHER SCREEN PLACEHOLDERS 📚
+// ⛪️ CHURCHES / GROUPS SCREEN ⛪️
 // ---------------------------------------------------------------------------------
 
 @Composable
-fun GroupsChurchScreen() {
-    Text(
-        text = "Churches: Create/Follow Churches, Advertise Programs/Events, Create Events.",
-        modifier = Modifier.padding(16.dp)
-    )
-}
+fun GroupsChurchScreen(viewModel: ChurchesViewModel) {
+    val uiState by viewModel.uiState.collectAsState()
 
-@Composable
-fun BibleStudyScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
             .padding(16.dp)
     ) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-            elevation = CardDefaults.cardElevation(4.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "Daily Bread: Romans 8:28",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "\"And we know that in all things God works for the good of those who love him, who have been called according to his purpose.\"",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(onClick = { Log.d(TAG, "Read full chapter clicked") }) {
-                    Text("Read Full Chapter")
+        Text(
+            text = "Churches & Groups",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        when {
+            uiState.isLoading -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
                 }
             }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            elevation = CardDefaults.cardElevation(2.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "Your Reading Plan Progress",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(text = "Currently reading: Genesis (Day 3 of 90)", style = MaterialTheme.typography.bodyMedium)
-                Spacer(modifier = Modifier.height(4.dp))
-
-                LinearProgressIndicator(
-                    progress = 0.03f,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(8.dp)
-                        .clip(MaterialTheme.shapes.small),
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Button(onClick = { Log.d(TAG, "Continue plan clicked") }) {
-                        Text("Continue Plan")
-                    }
-                    Button(onClick = { Log.d(TAG, "Change plan clicked") }) {
-                        Text("Change Plan")
-                    }
+            uiState.error != null -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Error: ${uiState.error}", color = MaterialTheme.colorScheme.error)
                 }
             }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            Button(
-                onClick = { Log.d(TAG, "Bible Search clicked") },
-                modifier = Modifier.weight(1f).padding(end = 8.dp)
-            ) {
-                Icon(Icons.Default.Search, contentDescription = "Search", Modifier.size(20.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Search Bible")
-            }
-
-            Button(
-                onClick = { Log.d(TAG, "Browse Books clicked") },
-                modifier = Modifier.weight(1f).padding(start = 8.dp)
-            ) {
-                Icon(Icons.Default.Timeline, contentDescription = "Books", Modifier.size(20.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Books A-Z")
+            else -> {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(uiState.churches) { church ->
+                        ChurchCard(
+                            church = church,
+                            onFollowClicked = { viewModel.followChurch(church.id) }
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-fun ChatScreen() {
+fun ChurchCard(church: Church, onFollowClicked: () -> Unit) {
+    val currentUserId = Firebase.auth.currentUser?.uid
+    val isMember = church.members.contains(currentUserId)
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(church.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(church.description, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("${church.followerCount} Followers", style = MaterialTheme.typography.labelMedium)
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Button(
+                onClick = onFollowClicked,
+                enabled = !isMember,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isMember) Color.Gray else MaterialTheme.colorScheme.primary
+                )
+            ) {
+                Text(if (isMember) "Joined" else "Join")
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------
+// 💬 CHAT SCREEN 💬
+// ---------------------------------------------------------------------------------
+
+@Composable
+fun ChatScreen(viewModel: ChatListViewModel) {
+    val uiState by viewModel.uiState.collectAsState()
+    val currentUserId = Firebase.auth.currentUser?.uid
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(top = 16.dp)
+            .padding(top=16.dp)
     ) {
         Card(
             modifier = Modifier
@@ -633,27 +542,47 @@ fun ChatScreen() {
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 16.dp)
         )
-
         Divider(modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp))
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(mockChats) { chat ->
-                ChatThreadItem(chat = chat)
+        when {
+            uiState.isLoading -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            }
+            uiState.error != null -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Error: ${uiState.error}", color = MaterialTheme.colorScheme.error)
+                }
+            }
+            else -> {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(uiState.conversations) { chat ->
+                        val otherParticipantId = chat.participants.firstOrNull { it != currentUserId }
+                        val chatName = chat.participantNames[otherParticipantId] ?: "Unknown User"
+
+                        ChatThreadItem(
+                            chatName = chatName,
+                            lastMessage = chat.lastMessage,
+                            timestamp = chat.lastMessageTimestamp
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-fun ChatThreadItem(chat: ChatThread) {
+fun ChatThreadItem(chatName: String, lastMessage: String, timestamp: Date?) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { Log.d(TAG, "Chat thread clicked: ${chat.recipient}") }
+            .clickable { /* TODO: Navigate to conversation screen */ }
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -664,24 +593,132 @@ fun ChatThreadItem(chat: ChatThread) {
                 .background(MaterialTheme.colorScheme.secondaryContainer),
             contentAlignment = Alignment.Center
         ) {
-            Text(chat.recipient.first().toString(), style = MaterialTheme.typography.titleLarge)
+            Text(chatName.firstOrNull()?.toString() ?: " ", style = MaterialTheme.typography.titleLarge)
         }
         Spacer(modifier = Modifier.width(12.dp))
 
         Column(modifier = Modifier.weight(1f)) {
-            Text(chat.recipient, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+            Text(chatName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
             Text(
-                chat.lastMessage,
+                lastMessage,
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color.Gray,
                 maxLines = 1
             )
         }
-
-        Text(chat.time, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+        Text(timestamp?.toFormattedString() ?: "", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
     }
     Divider(color = Color.Gray.copy(alpha = 0.3f))
 }
+
+// ---------------------------------------------------------------------------------
+// 📚 BIBLE SCREEN 📚
+// ---------------------------------------------------------------------------------
+
+@Composable
+fun BibleStudyScreen(viewModel: BibleViewModel) {
+    val uiState by viewModel.uiState.collectAsState()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(16.dp)
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+            elevation = CardDefaults.cardElevation(4.dp)
+        ) {
+            when {
+                uiState.isLoading -> {
+                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+                uiState.error != null -> {
+                    Text(
+                        text = "Error: ${uiState.error}",
+                        modifier = Modifier.padding(16.dp),
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                uiState.verseOfTheDay != null -> {
+                    val verse = uiState.verseOfTheDay!!
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Daily Bread: ${verse.reference}",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "\"${verse.text}\"",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(onClick = { Log.d(TAG, "Read full chapter clicked") }) {
+                            Text("Read Full Chapter")
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = CardDefaults.cardElevation(2.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Your Reading Plan Progress",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(text = "Currently reading: Genesis (Day 3 of 90)", style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.height(4.dp))
+                LinearProgressIndicator(
+                    progress = 0.03f,
+                    modifier = Modifier.fillMaxWidth().height(8.dp).clip(MaterialTheme.shapes.small),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            Button(
+                onClick = { Log.d(TAG, "Bible Search clicked") },
+                modifier = Modifier.weight(1f).padding(end = 8.dp)
+            ) {
+                Icon(Icons.Default.Search, contentDescription = "Search", Modifier.size(20.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Search Bible")
+            }
+            Button(
+                onClick = { Log.d(TAG, "Browse Books clicked") },
+                modifier = Modifier.weight(1f).padding(start = 8.dp)
+            ) {
+                Icon(Icons.Default.Timeline, contentDescription = "Books", Modifier.size(20.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Books A-Z")
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------
+//  MEDIA SCREEN PLACEHOLDER
+// ---------------------------------------------------------------------------------
 
 @Composable
 fun MediaScreen() {
@@ -691,10 +728,18 @@ fun MediaScreen() {
     )
 }
 
+// ---------------------------------------------------------------------------------
+// UTILITY FUNCTIONS
+// ---------------------------------------------------------------------------------
+fun Date.toFormattedString(): String {
+    val simpleDateFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
+    return simpleDateFormat.format(this)
+}
+
 @Preview(showBackground = true)
 @Composable
 fun LonyiChatPreview() {
     LonyiChatTheme {
-        LonyiChatApp()
+        LonyiChatApp(HomeFeedViewModel(), ChurchesViewModel(), ChatListViewModel(), BibleViewModel())
     }
 }
