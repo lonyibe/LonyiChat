@@ -20,7 +20,6 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -30,12 +29,11 @@ android {
             )
         }
     }
-    compileOptions
-    {
-        // 🌟 ELITE CODE MASTER FIX: Use the specific set method that resolves the issue.
-        // This ensures the property is resolved within the AndroidCompileOptions context.
-        sourceCompatibility = JavaVersion.toVersion(11)
-        targetCompatibility = JavaVersion.toVersion(11)
+
+    // FIX 1 & 2: Use '=' assignment for compatibility settings inside compileOptions
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
     }
     kotlinOptions {
         jvmTarget = "11"
@@ -58,11 +56,11 @@ dependencies {
     // FIX for backend calls: REQUIRED for .await() on Firebase Tasks in coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 
-    // OkHttp
-    for network calls
-            implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // FIX 3, 4, 5: Correct syntax for OkHttp dependency
+    // OkHttp for network calls
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // ✨ ADDED: Gson for parsing JSON from your backend ✨
+    // ADDED: Gson for parsing JSON from your backend
     implementation("com.google.code.gson:gson:2.10.1")
 
     implementation(libs.androidx.core.ktx)

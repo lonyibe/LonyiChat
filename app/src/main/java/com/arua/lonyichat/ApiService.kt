@@ -9,6 +9,9 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
+import android.util.Log
+import kotlinx.coroutines.Dispatchers // ADDED: Required for Dispatchers.IO
+import kotlinx.coroutines.withContext // ADDED: Required to switch context
 
 // 🌟 ELITE CODE MASTER FIX: Custom exception for better error reporting 🌟
 class ApiException(message: String) : IOException(message)
@@ -37,21 +40,23 @@ object ApiService {
         }
 
         return try {
-            val token = user.getIdToken(true).await().token // FIX: .await() now works due to dependency fix
+            val token = user.getIdToken(true).await().token
             val request = Request.Builder()
                 .url("$BASE_URL/posts")
                 .addHeader("Authorization", "Bearer $token")
                 .build()
 
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    val errorBody = response.body?.string()
-                    // 🌟 ELITE CODE MASTER FIX: Use custom exception for API errors 🌟
-                    throw ApiException("Failed to fetch posts (${response.code}): ${getErrorMessage(errorBody)}")
+            // FIX: Wrap blocking network call in withContext(Dispatchers.IO)
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        val errorBody = response.body?.string()
+                        throw ApiException("Failed to fetch posts (${response.code}): ${getErrorMessage(errorBody)}")
+                    }
+                    val body = response.body?.string()
+                    val postResponse = gson.fromJson(body, PostResponse::class.java)
+                    Result.success(postResponse.posts)
                 }
-                val body = response.body?.string()
-                val postResponse = gson.fromJson(body, PostResponse::class.java)
-                Result.success(postResponse.posts)
             }
         } catch (e: Exception) {
             return Result.failure(e)
@@ -65,7 +70,7 @@ object ApiService {
         }
 
         return try {
-            val token = user.getIdToken(true).await().token // FIX: .await() now works due to dependency fix
+            val token = user.getIdToken(true).await().token
             val json = gson.toJson(mapOf(
                 "content" to content,
                 "type" to type
@@ -78,14 +83,21 @@ object ApiService {
                 .post(body)
                 .build()
 
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    val errorBody = response.body?.string()
-                    // 🌟 ELITE CODE MASTER FIX: Use custom exception for API errors 🌟
-                    throw ApiException("Failed to create post (${response.code}): ${getErrorMessage(errorBody)}")
+            // FIX: Wrap blocking network call in withContext(Dispatchers.IO)
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        val errorBody = response.body?.string()
+                        Log.e("ApiService", "POST /posts failed. Code: ${response.code}, Body: $errorBody")
+                        // 🌟 ELITE CODE MASTER FIX: Use custom exception for API errors 🌟
+                        throw ApiException("Failed to create post (${response.code}): ${getErrorMessage(errorBody)}")
+                    }
+                    Result.success(Unit)
                 }
-                Result.success(Unit)
             }
+        } catch (e: IOException) {
+            // FIX: Catch low-level network errors explicitly and provide a clear message.
+            return Result.failure(ApiException("Network error: Could not connect to LonyiChat server."))
         } catch (e: Exception) {
             return Result.failure(e)
         }
@@ -96,21 +108,24 @@ object ApiService {
         val user = Firebase.auth.currentUser ?: return Result.failure(ApiException("User not authenticated."))
 
         return try {
-            val token = user.getIdToken(true).await().token // FIX: .await() now works due to dependency fix
+            val token = user.getIdToken(true).await().token
             val request = Request.Builder()
                 .url("$BASE_URL/profile")
                 .addHeader("Authorization", "Bearer $token")
                 .build()
 
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    val errorBody = response.body?.string()
-                    // 🌟 ELITE CODE MASTER FIX: Use custom exception for API errors 🌟
-                    throw ApiException("Failed to fetch profile (${response.code}): ${getErrorMessage(errorBody)}")
+            // FIX: Wrap blocking network call in withContext(Dispatchers.IO)
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        val errorBody = response.body?.string()
+                        // 🌟 ELITE CODE MASTER FIX: Use custom exception for API errors 🌟
+                        throw ApiException("Failed to fetch profile (${response.code}): ${getErrorMessage(errorBody)}")
+                    }
+                    val body = response.body!!.string()
+                    val profileResponse = gson.fromJson(body, ProfileResponse::class.java)
+                    Result.success(profileResponse.profile)
                 }
-                val body = response.body!!.string()
-                val profileResponse = gson.fromJson(body, ProfileResponse::class.java)
-                Result.success(profileResponse.profile)
             }
         } catch (e: Exception) {
             return Result.failure(e)
@@ -121,7 +136,7 @@ object ApiService {
         val user = Firebase.auth.currentUser ?: return Result.failure(ApiException("User not authenticated."))
 
         return try {
-            val token = user.getIdToken(true).await().token // FIX: .await() now works due to dependency fix
+            val token = user.getIdToken(true).await().token
             val json = gson.toJson(mapOf(
                 "name" to name,
                 "phone" to phone,
@@ -136,13 +151,16 @@ object ApiService {
                 .put(body) // Use PUT for update operation
                 .build()
 
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    val errorBody = response.body?.string()
-                    // 🌟 ELITE CODE MASTER FIX: Use custom exception for API errors 🌟
-                    throw ApiException("Failed to update profile (${response.code}): ${getErrorMessage(errorBody)}")
+            // FIX: Wrap blocking network call in withContext(Dispatchers.IO)
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        val errorBody = response.body?.string()
+                        // 🌟 ELITE CODE MASTER FIX: Use custom exception for API errors 🌟
+                        throw ApiException("Failed to update profile (${response.code}): ${getErrorMessage(errorBody)}")
+                    }
+                    Result.success(Unit)
                 }
-                Result.success(Unit)
             }
         } catch (e: Exception) {
             return Result.failure(e)
@@ -159,11 +177,14 @@ object ApiService {
                 .addHeader("Authorization", "Bearer $token")
                 .build()
 
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) throw ApiException("API Error: ${response.code}")
-                val body = response.body!!.string()
-                val churchResponse = gson.fromJson(body, ChurchResponse::class.java)
-                Result.success(churchResponse.churches)
+            // FIX: Wrap blocking network call in withContext(Dispatchers.IO)
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) throw ApiException("API Error: ${response.code}")
+                    val body = response.body!!.string()
+                    val churchResponse = gson.fromJson(body, ChurchResponse::class.java)
+                    Result.success(churchResponse.churches)
+                }
             }
         } catch (e: Exception) {
             return Result.failure(e)
@@ -180,9 +201,12 @@ object ApiService {
                 .post("".toRequestBody(null)) // Empty body for this POST request
                 .build()
 
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) throw ApiException("API Error: ${response.code}")
-                Result.success(Unit)
+            // FIX: Wrap blocking network call in withContext(Dispatchers.IO)
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) throw ApiException("API Error: ${response.code}")
+                    Result.success(Unit)
+                }
             }
         } catch (e: Exception) {
             return Result.failure(e)
@@ -196,11 +220,14 @@ object ApiService {
                 .url("$BASE_URL/bible/verse-of-the-day")
                 .build()
 
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) throw ApiException("API Error: ${response.code}")
-                val body = response.body!!.string()
-                val verseResponse = gson.fromJson(body, VerseResponse::class.java)
-                Result.success(verseResponse.verse)
+            // FIX: Wrap blocking network call in withContext(Dispatchers.IO)
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) throw ApiException("API Error: ${response.code}")
+                    val body = response.body!!.string()
+                    val verseResponse = gson.fromJson(body, VerseResponse::class.java)
+                    Result.success(verseResponse.verse)
+                }
             }
         } catch (e: Exception) {
             return Result.failure(e)
@@ -217,12 +244,15 @@ object ApiService {
                 .addHeader("Authorization", "Bearer $token")
                 .build()
 
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) throw ApiException("API Error: ${response.code}")
-                val body = response.body!!.string()
-                // Assuming the backend key is "media"
-                val mediaResponse = gson.fromJson(body, MediaResponse::class.java)
-                Result.success(mediaResponse.media)
+            // FIX: Wrap blocking network call in withContext(Dispatchers.IO)
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) throw ApiException("API Error: ${response.code}")
+                    val body = response.body!!.string()
+                    // Assuming the backend key is "media"
+                    val mediaResponse = gson.fromJson(body, MediaResponse::class.java)
+                    Result.success(mediaResponse.media)
+                }
             }
         } catch (e: Exception) {
             return Result.failure(e)

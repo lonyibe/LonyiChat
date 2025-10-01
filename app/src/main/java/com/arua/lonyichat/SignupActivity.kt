@@ -5,14 +5,16 @@ import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.widget.TextView
 import android.widget.Toast
+// ADDED IMPORT for safer coroutine management
+import androidx.lifecycle.lifecycleScope
 import androidx.core.view.WindowCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
+// REMOVED 'import kotlinx.coroutines.GlobalScope'
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
@@ -126,7 +128,8 @@ class SignupActivity : AppCompatActivity() {
             .post(requestBody)
             .build()
 
-        GlobalScope.launch(Dispatchers.IO) {
+        // FIX: Changed GlobalScope to lifecycleScope to prevent crashes/ANRs during navigation
+        lifecycleScope.launch(Dispatchers.IO) {
             try {
                 HTTP_CLIENT.newCall(request).execute().use { response ->
                     val responseBody = response.body?.string()

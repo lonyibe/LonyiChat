@@ -50,7 +50,10 @@ class HomeFeedViewModel : ViewModel() {
                     fetchPosts()
                 }
                 .onFailure { error ->
-                    val errorMessage = "Failed to create post: ${error.localizedMessage}"
+                    // FIX: Check for a null localized message and provide a fallback.
+                    val userErrorMessage = error.localizedMessage ?: "Unknown connection error. Please try again."
+                    val errorMessage = "Failed to create post: $userErrorMessage"
+
                     Log.e(TAG, errorMessage, error) // UPDATED LOGGING
                     _uiState.value = _uiState.value.copy(error = errorMessage)
                 }
