@@ -1,3 +1,4 @@
+// lonyibe/lonyichat/LonyiChat-18232ca7fc18e60889ea90d7112b6cc682164b62/app/build.gradle.kts
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -19,6 +20,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -28,9 +30,12 @@ android {
             )
         }
     }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+    compileOptions
+    {
+        // 🌟 ELITE CODE MASTER FIX: Use the specific set method that resolves the issue.
+        // This ensures the property is resolved within the AndroidCompileOptions context.
+        sourceCompatibility = JavaVersion.toVersion(11)
+        targetCompatibility = JavaVersion.toVersion(11)
     }
     kotlinOptions {
         jvmTarget = "11"
@@ -50,8 +55,12 @@ dependencies {
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-firestore-ktx")
 
-    // OkHttp for network calls
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // FIX for backend calls: REQUIRED for .await() on Firebase Tasks in coroutines
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
+
+    // OkHttp
+    for network calls
+            implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     // ✨ ADDED: Gson for parsing JSON from your backend ✨
     implementation("com.google.code.gson:gson:2.10.1")
