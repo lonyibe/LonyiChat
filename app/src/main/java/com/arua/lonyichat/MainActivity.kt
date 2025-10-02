@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalFoundationApi::class) // ✨ FIX: Added file-level OptIn for combinedClickable
+@file:OptIn(ExperimentalFoundationApi::class) // ✨ FIX: Removed ExperimentalMaterial3Api opt-in from file level
 
 package com.arua.lonyichat
 
@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+// 🔥 REMOVED: androidx.compose.material3.pulltorefresh imports
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,10 +54,15 @@ import coil.request.ImageRequest
 import com.arua.lonyichat.data.*
 import com.arua.lonyichat.ui.theme.LonyiChatTheme
 import com.arua.lonyichat.ui.viewmodel.*
+import com.google.accompanist.swiperefresh.SwipeRefresh // ✨ NEW: Accompanist import
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState // ✨ NEW: Accompanist import
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
+// ✨ NEW: Constant for minimum duration of the pull-to-refresh animation
+private const val MIN_REFRESH_DURATION = 500L
 
 private const val TAG = "MainActivity"
 
@@ -130,6 +136,7 @@ fun LonyiChatApp(
     mediaViewModel: MediaViewModel,
     profileViewModel: ProfileViewModel
 ) {
+
     val profileUiState by profileViewModel.uiState.collectAsState()
 
     val profileState = UserProfileState(
@@ -239,7 +246,7 @@ fun LonyiChatApp(
         }
     }
 }
-
+// End LonyiChatApp
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LonyiChatTopBar(
@@ -440,19 +447,6 @@ fun ProfileScreen(viewModel: ProfileViewModel, onProfileUpdated: () -> Unit) {
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                ProfileDetail(Icons.Default.Place, "Country", profile.country ?: "Not Set")
-                ProfileDetail(Icons.Default.Cake, "Age", profile.age?.toString() ?: "Not Set")
-                ProfileDetail(Icons.Default.Phone, "Phone", profile.phone ?: "Not Set")
-            }
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
                 onClick = { showEditDialog = true },
@@ -610,7 +604,8 @@ fun EditProfileDialog(
         textContentColor = MaterialTheme.colorScheme.onBackground
     )
 }
-@OptIn(ExperimentalMaterial3Api::class)
+
+// 🔥 REMOVED @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeFeedScreen(
     profileState: UserProfileState,
@@ -619,6 +614,7 @@ fun HomeFeedScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope() // ✨ FIX: Added coroutineScope for nested launch/delay calls
 
     val createPostLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -647,7 +643,6 @@ fun HomeFeedScreen(
 
 
     val lazyListState = rememberLazyListState()
-    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(uiState.posts.firstOrNull()?.id) {
         if (uiState.posts.isNotEmpty()) {
@@ -657,7 +652,27 @@ fun HomeFeedScreen(
         }
     }
 
+    // ✨ PULL-TO-REFRESH IMPLEMENTATION START (HomeFeedScreen) - USING ACCOMPANIST ✨
+    // 1. Remember Accompanist state
+    val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = uiState.isLoading)
+
+    // 2. Define refresh action
+    val onRefresh = { // ✨ FIX: Removed implicit return type, allowing lambda to return Unit.
+        coroutineScope.launch {
+            val startTime = System.currentTimeMillis()
+            viewModel.fetchPosts()
+            val endTime = System.currentTimeMillis()
+            val duration = endTime - startTime
+            if (duration < MIN_REFRESH_DURATION) {
+                delay(MIN_REFRESH_DURATION - duration)
+            }
+        }
+        Unit // ✨ CRITICAL FIX: Explicitly return Unit to resolve Argument Type Mismatch
+    }
+    // ✨ PULL-TO-REFRESH IMPLEMENTATION END ✨
+
     when {
+        // Only show full-screen loading if list is empty and initial load is in progress
         uiState.isLoading && uiState.posts.isEmpty() -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
@@ -676,39 +691,46 @@ fun HomeFeedScreen(
             }
         }
         else -> {
-            LazyColumn(
-                state = lazyListState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .nestedScroll(scrollBehavior.nestedScrollConnection),
-                contentPadding = PaddingValues(bottom = 8.dp)
+            // 3. Wrap content in SwipeRefresh
+            SwipeRefresh(
+                state = swipeRefreshState,
+                onRefresh = onRefresh,
+                // The LazyColumn already handles scrolling and nested scroll connection
+                modifier = Modifier.fillMaxSize()
             ) {
-                item {
-                    PostCreationBar(
-                        profileState = profileState,
-                        onTextClicked = {
-                            val intent = Intent(context, CreatePostActivity::class.java)
-                            createPostLauncher.launch(intent)
-                        },
-                        onPhotoClicked = {
-                            val intent = Intent(context, CreatePostActivity::class.java)
-                            createPostLauncher.launch(intent)
-                        }
-                    )
-                    Divider(color = Color.Gray.copy(alpha = 0.3f), thickness = 1.dp)
-                }
+                LazyColumn(
+                    state = lazyListState,
+                    modifier = Modifier // Removed .nestedScroll(scrollBehavior.nestedScrollConnection) here, keeping it only on Scaffold
+                        .fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 8.dp)
+                ) {
+                    item {
+                        PostCreationBar(
+                            profileState = profileState,
+                            onTextClicked = {
+                                val intent = Intent(context, CreatePostActivity::class.java)
+                                createPostLauncher.launch(intent)
+                            },
+                            onPhotoClicked = {
+                                val intent = Intent(context, CreatePostActivity::class.java)
+                                createPostLauncher.launch(intent)
+                            }
+                        )
+                        Divider(color = Color.Gray.copy(alpha = 0.3f), thickness = 1.dp)
+                    }
 
-                items(uiState.posts, key = { it.id }) { post ->
-                    PostCard(
-                        post = post,
-                        viewModel = viewModel,
-                        onCommentClicked = {
-                            val intent = Intent(context, CommentsActivity::class.java)
-                            intent.putExtra("POST_ID", post.id)
-                            context.startActivity(intent)
-                        }
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    items(uiState.posts, key = { it.id }) { post ->
+                        PostCard(
+                            post = post,
+                            viewModel = viewModel,
+                            onCommentClicked = {
+                                val intent = Intent(context, CommentsActivity::class.java)
+                                intent.putExtra("POST_ID", post.id)
+                                context.startActivity(intent)
+                            }
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
                 }
             }
         }
@@ -1357,9 +1379,30 @@ fun EditPostDialog(
         textContentColor = MaterialTheme.colorScheme.onBackground
     )
 }
+
+// 🔥 REMOVED @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GroupsChurchScreen(viewModel: ChurchesViewModel) {
     val uiState by viewModel.uiState.collectAsState()
+    val coroutineScope = rememberCoroutineScope() // ✨ FIX: Added coroutineScope for nested launch/delay calls
+
+    // ✨ PULL-TO-REFRESH IMPLEMENTATION START (GroupsChurchScreen) - USING ACCOMPANIST ✨
+    val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = uiState.isLoading)
+
+    // 2. Define refresh action
+    val onRefresh = { // ✨ FIX: Removed implicit return type, allowing lambda to return Unit.
+        coroutineScope.launch {
+            val startTime = System.currentTimeMillis()
+            viewModel.fetchChurches()
+            val endTime = System.currentTimeMillis()
+            val duration = endTime - startTime
+            if (duration < MIN_REFRESH_DURATION) {
+                delay(MIN_REFRESH_DURATION - duration)
+            }
+        }
+        Unit // ✨ CRITICAL FIX: Explicitly return Unit to resolve Argument Type Mismatch
+    }
+    // ✨ PULL-TO-REFRESH IMPLEMENTATION END ✨
 
     Column(
         modifier = Modifier
@@ -1374,7 +1417,7 @@ fun GroupsChurchScreen(viewModel: ChurchesViewModel) {
         Spacer(modifier = Modifier.height(16.dp))
 
         when {
-            uiState.isLoading -> {
+            uiState.isLoading && uiState.churches.isEmpty() -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
@@ -1385,12 +1428,19 @@ fun GroupsChurchScreen(viewModel: ChurchesViewModel) {
                 }
             }
             else -> {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(uiState.churches) { church ->
-                        ChurchCard(
-                            church = church,
-                            onFollowClicked = { viewModel.followChurch(church.id) }
-                        )
+                // 3. Wrap content in SwipeRefresh
+                SwipeRefresh(
+                    state = swipeRefreshState,
+                    onRefresh = onRefresh,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(uiState.churches) { church ->
+                            ChurchCard(
+                                church = church,
+                                onFollowClicked = { viewModel.followChurch(church.id) }
+                            )
+                        }
                     }
                 }
             }
@@ -1436,10 +1486,30 @@ fun ChurchCard(church: Church, onFollowClicked: () -> Unit) {
     }
 }
 
+// 🔥 REMOVED @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(viewModel: ChatListViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     val currentUserId = ApiService.getCurrentUserId()
+    val coroutineScope = rememberCoroutineScope() // ✨ FIX: Added coroutineScope for nested launch/delay calls
+
+    // ✨ PULL-TO-REFRESH IMPLEMENTATION START (ChatScreen) - USING ACCOMPANIST ✨
+    val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = uiState.isLoading)
+
+    // 2. Define refresh action
+    val onRefresh = { // ✨ FIX: Removed implicit return type, allowing lambda to return Unit.
+        coroutineScope.launch {
+            val startTime = System.currentTimeMillis()
+            viewModel.fetchConversations()
+            val endTime = System.currentTimeMillis()
+            val duration = endTime - startTime
+            if (duration < MIN_REFRESH_DURATION) {
+                delay(MIN_REFRESH_DURATION - duration)
+            }
+        }
+        Unit // ✨ CRITICAL FIX: Explicitly return Unit to resolve Argument Type Mismatch
+    }
+    // ✨ PULL-TO-REFRESH IMPLEMENTATION END ✨
 
     Column(
         modifier = Modifier
@@ -1484,7 +1554,7 @@ fun ChatScreen(viewModel: ChatListViewModel) {
         Divider(modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp))
 
         when {
-            uiState.isLoading -> {
+            uiState.isLoading && uiState.conversations.isEmpty() -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
@@ -1495,19 +1565,26 @@ fun ChatScreen(viewModel: ChatListViewModel) {
                 }
             }
             else -> {
-                LazyColumn(
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                // 3. Wrap content in SwipeRefresh
+                SwipeRefresh(
+                    state = swipeRefreshState,
+                    onRefresh = onRefresh,
+                    modifier = Modifier.fillMaxSize()
                 ) {
-                    items(uiState.conversations) { chat ->
-                        val otherParticipantId = chat.participants.firstOrNull { it != currentUserId }
-                        val chatName = chat.participantNames[otherParticipantId] ?: "Unknown User"
+                    LazyColumn(
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(uiState.conversations) { chat ->
+                            val otherParticipantId = chat.participants.firstOrNull { it != currentUserId }
+                            val chatName = chat.participantNames[otherParticipantId] ?: "Unknown User"
 
-                        ChatThreadItem(
-                            chatName = chatName,
-                            lastMessage = chat.lastMessage,
-                            timestamp = chat.lastMessageTimestamp
-                        )
+                            ChatThreadItem(
+                                chatName = chatName,
+                                lastMessage = chat.lastMessage,
+                                timestamp = chat.lastMessageTimestamp
+                            )
+                        }
                     }
                 }
             }
@@ -1651,9 +1728,29 @@ fun BibleStudyScreen(viewModel: BibleViewModel) {
     }
 }
 
+// 🔥 REMOVED @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MediaScreen(viewModel: MediaViewModel) {
     val uiState by viewModel.uiState.collectAsState()
+    val coroutineScope = rememberCoroutineScope() // ✨ FIX: Added coroutineScope for nested launch/delay calls
+
+    // ✨ PULL-TO-REFRESH IMPLEMENTATION START (MediaScreen) - USING ACCOMPANIST ✨
+    val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = uiState.isLoading)
+
+    // 2. Define refresh action
+    val onRefresh = { // ✨ FIX: Removed implicit return type, allowing lambda to return Unit.
+        coroutineScope.launch {
+            val startTime = System.currentTimeMillis()
+            viewModel.fetchMedia()
+            val endTime = System.currentTimeMillis()
+            val duration = endTime - startTime
+            if (duration < MIN_REFRESH_DURATION) {
+                delay(MIN_REFRESH_DURATION - duration)
+            }
+        }
+        Unit // ✨ CRITICAL FIX: Explicitly return Unit to resolve Argument Type Mismatch
+    }
+    // ✨ PULL-TO-REFRESH IMPLEMENTATION END ✨
 
     Column(
         modifier = Modifier
@@ -1668,7 +1765,7 @@ fun MediaScreen(viewModel: MediaViewModel) {
         Spacer(modifier = Modifier.height(16.dp))
 
         when {
-            uiState.isLoading -> {
+            uiState.isLoading && uiState.mediaItems.isEmpty() -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
@@ -1679,9 +1776,16 @@ fun MediaScreen(viewModel: MediaViewModel) {
                 }
             }
             else -> {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(uiState.mediaItems) { mediaItem ->
-                        MediaItemCard(mediaItem = mediaItem)
+                // 3. Wrap content in SwipeRefresh
+                SwipeRefresh(
+                    state = swipeRefreshState,
+                    onRefresh = onRefresh,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(uiState.mediaItems) { mediaItem ->
+                            MediaItemCard(mediaItem = mediaItem)
+                        }
                     }
                 }
             }

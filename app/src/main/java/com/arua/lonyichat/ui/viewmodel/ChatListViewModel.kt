@@ -27,7 +27,8 @@ class ChatListViewModel : ViewModel() {
         fetchConversations()
     }
 
-    private fun fetchConversations() {
+    // ✨ FIX: Changed visibility from private to public to enable pull-to-refresh from UI
+    fun fetchConversations() {
         val currentUserId = ApiService.getCurrentUserId()
         if (currentUserId == null) {
             _uiState.value = ChatListUiState(error = "User not logged in.")
