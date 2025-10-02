@@ -22,6 +22,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource // ✨ FIX: ADDED MISSING IMPORT
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -42,8 +43,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 // -----------------------------------------------------------
 // ✨ CRITICAL FIX: Use wildcard and explicit PointerEventType import
-// to resolve all "Unresolved reference" errors (awaitPointerEventScope, isConsumed, isUp).
-import androidx.compose.ui.input.pointer.* // -----------------------------------------------------------
+import androidx.compose.ui.input.pointer.*
+// -----------------------------------------------------------
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -68,6 +69,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.ui.zIndex // Already imported in last step, keeping for clarity.
 
 // ✨ NEW: Reaction Data Model and List ✨
 data class AppReaction(val type: String, val emoji: String, val label: String)
@@ -958,7 +960,7 @@ fun PostCard(post: com.arua.lonyichat.data.Post, viewModel: HomeFeedViewModel, o
                 }
             }
 
-            // ✨ NEW: Reaction Summary Bar
+            // --- Reaction Summary Bar ---
             PostReactionSummary(
                 post = post,
                 onSummaryClicked = {
@@ -966,28 +968,58 @@ fun PostCard(post: com.arua.lonyichat.data.Post, viewModel: HomeFeedViewModel, o
                 }
             )
 
-            // ✨ NEW: Interaction Bar (Like, Comment, Share)
-            Box(modifier = Modifier.fillMaxWidth()) {
+            // --- Interaction Bar and Selector ---
+            // ✨ MODIFIED BLOCK: This Box now manages dismissal of the selector and prevents interaction/scroll underneath the hidden overlay.
+            Box(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+
+                // 1. Full-size clickable overlay for instant dismissal and scroll blocking
+                if (showReactionSelector) {
+                    Box(
+                        // Intercept all clicks within the bounds of this Box (the entire post card)
+                        modifier = Modifier
+                            .matchParentSize()
+                            .zIndex(1f) // Render on top of the interaction bar but under the menu
+                            .background(Color.Transparent) // Transparent to not obscure the view
+                            .clickable(
+                                // Use MutableInteractionSource and null indication to prevent any visual ripple
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { showReactionSelector = false } // Dismiss on click outside menu area
+                            )
+                            // Crucial for blocking scroll: consumes all scroll events if placed in scrollable parent
+                            .pointerInput(Unit) {
+                                awaitPointerEventScope {
+                                    while (true) {
+                                        val event = awaitPointerEvent()
+                                        // Consume scroll events to stop the LazyColumn from moving while the menu is up
+                                        if (event.changes.any { it.scrollDelta.y != 0f }) {
+                                            event.changes.forEach { it.consume() }
+                                        }
+                                    }
+                                }
+                            }
+                    )
+                }
+
+                // 2. Post Interaction Bar (Always visible)
                 PostInteractionBar(
                     post = post,
                     viewModel = viewModel,
                     onCommentClicked = onCommentClicked,
-                    onLikeClicked = {
-                        // Single click acts as a default 'amen' (Like) toggle
-                        viewModel.reactToPost(post.id, "amen")
-                    },
-                    onLikeLongPressed = {
-                        // Long click shows the reaction selector
-                        showReactionSelector = true
-                    }
+                    onLikeClicked = { viewModel.reactToPost(post.id, "amen") },
+                    onLikeLongPressed = { showReactionSelector = true },
+                    isSelectorVisible = showReactionSelector
                 )
 
-                // ✨ Reaction Selector Menu (Positioned just above the reaction button)
+                // 3. Reaction Selector Menu (Floating on top)
                 if (showReactionSelector) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopStart)
-                            .offset(x = 16.dp, y = (-56).dp) // Adjust position to float above the button
+                            .offset(x = 16.dp, y = (-56).dp)
+                            .zIndex(2f) // Ensure menu is on top of everything including the overlay
                     ) {
                         ReactionSelectorMenu(
                             onDismiss = { showReactionSelector = false },
@@ -1134,7 +1166,8 @@ fun PostInteractionBar(
     viewModel: HomeFeedViewModel,
     onCommentClicked: () -> Unit,
     onLikeClicked: () -> Unit,
-    onLikeLongPressed: () -> Unit
+    onLikeLongPressed: () -> Unit,
+    isSelectorVisible: Boolean // <<< ADDED
 ) {
     val currentReaction = when {
         post.userReactions.amen -> "amen"
@@ -1156,6 +1189,9 @@ fun PostInteractionBar(
         label = "reactionColor"
     )
 
+    // 1. DISABLE BUTTON when selector is visible
+    val interactionEnabled = !isSelectorVisible // <<< USED
+
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
         horizontalArrangement = Arrangement.SpaceAround,
@@ -1167,8 +1203,9 @@ fun PostInteractionBar(
             modifier = Modifier
                 .weight(1f)
                 .combinedClickable(
-                    onClick = onLikeClicked, // Single click for default reaction toggle (Amen)
-                    onLongClick = onLikeLongPressed // Long click for reaction selection
+                    enabled = interactionEnabled, // <<< USED
+                    onClick = onLikeClicked,
+                    onLongClick = onLikeLongPressed
                 )
                 .padding(vertical = 8.dp, horizontal = 16.dp),
             horizontalArrangement = Arrangement.Center
