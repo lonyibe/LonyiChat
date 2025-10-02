@@ -33,7 +33,6 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.arua.lonyichat.data.Church
 import com.arua.lonyichat.data.MediaItem
 import com.arua.lonyichat.data.Profile
-// REMOVED Firebase Auth and Firestore imports
 import com.arua.lonyichat.data.ApiService // ADDED: Use our new API Service
 import com.arua.lonyichat.ui.theme.LonyiChatTheme
 import com.arua.lonyichat.ui.viewmodel.*
@@ -60,7 +59,8 @@ data class UserProfileState(
 
 @Composable
 fun rememberProfileState(): UserProfileState {
-    // 🔥 DETACHMENT: No more Firebase initialization
+    // 🔥 FIX 1: Get the current activity context safely
+    val context = LocalContext.current
     val currentState = remember { mutableStateOf(UserProfileState()) }
 
     LaunchedEffect(Unit) {
@@ -69,11 +69,12 @@ fun rememberProfileState(): UserProfileState {
         if (userId == null) {
             Log.e(TAG, "User not authenticated. Navigating to Login.")
             currentState.value = currentState.value.copy(userName = "Guest", isLoading = false)
-            // Force navigation back to login if no token/ID is found
-            (this@MainActivity.context as? Activity)?.startActivity(Intent(this@MainActivity.context, LoginActivity::class.java).apply {
+
+            // 🔥 FIX 2: Correctly navigating using the acquired context
+            (context as? Activity)?.startActivity(Intent(context, LoginActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             })
-            return@LaunchedEffect
+            return@LaunchedEffect // This return is now valid inside the LaunchedEffect lambda
         }
 
         // 2. Fetch the profile data using the JWT
@@ -110,8 +111,8 @@ class MainActivity : ComponentActivity() {
     private val mediaViewModel: MediaViewModel by viewModels()
     private val profileViewModel: ProfileViewModel by viewModels()
 
-    // Added context property for use in rememberProfileState
-    val context = this
+    // 🔥 FIX 3: Removed the unnecessary and incorrect 'val context = this' property
+    // val context = this
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()

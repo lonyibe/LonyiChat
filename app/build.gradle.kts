@@ -31,10 +31,8 @@ android {
         }
     }
 
-    compileOptions
-    {
-        // FIX: Replaced broken 'sourceCompatibility' and 'targetCompatibility' calls
-        // with explicit syntax for Java compatibility
+    compileOptions  {
+        // ✨ DEFINITIVE FIX: Using explicit assignment to properties of the CompileOptions object ✨
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
