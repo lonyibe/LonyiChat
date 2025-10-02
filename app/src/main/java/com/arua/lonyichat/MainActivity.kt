@@ -33,7 +33,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.arua.lonyichat.data.Church
 import com.arua.lonyichat.data.MediaItem
 import com.arua.lonyichat.data.Profile
-import com.arua.lonyichat.data.ApiService // ADDED: Use our new API Service
+import com.arua.lonyichat.data.ApiService
 import com.arua.lonyichat.ui.theme.LonyiChatTheme
 import com.arua.lonyichat.ui.viewmodel.*
 import java.text.SimpleDateFormat
@@ -43,6 +43,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import android.widget.Toast
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.ui.layout.ContentScale
 import coil.request.CachePolicy
 
 
@@ -59,25 +62,21 @@ data class UserProfileState(
 
 @Composable
 fun rememberProfileState(): UserProfileState {
-    // 🔥 FIX 1: Get the current activity context safely
     val context = LocalContext.current
     val currentState = remember { mutableStateOf(UserProfileState()) }
 
     LaunchedEffect(Unit) {
-        // 1. Check if the user is authenticated via our new JWT system
         val userId = ApiService.getCurrentUserId()
         if (userId == null) {
             Log.e(TAG, "User not authenticated. Navigating to Login.")
             currentState.value = currentState.value.copy(userName = "Guest", isLoading = false)
 
-            // 🔥 FIX 2: Correctly navigating using the acquired context
             (context as? Activity)?.startActivity(Intent(context, LoginActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             })
-            return@LaunchedEffect // This return is now valid inside the LaunchedEffect lambda
+            return@LaunchedEffect
         }
 
-        // 2. Fetch the profile data using the JWT
         ApiService.getProfile()
             .onSuccess { profile ->
                 val name = profile.name
@@ -110,9 +109,6 @@ class MainActivity : ComponentActivity() {
     private val bibleViewModel: BibleViewModel by viewModels()
     private val mediaViewModel: MediaViewModel by viewModels()
     private val profileViewModel: ProfileViewModel by viewModels()
-
-    // 🔥 FIX 3: Removed the unnecessary and incorrect 'val context = this' property
-    // val context = this
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -155,7 +151,6 @@ fun LonyiChatApp(
     mediaViewModel: MediaViewModel,
     profileViewModel: ProfileViewModel
 ) {
-    // ⚠️ CRITICAL CHANGE: rememberProfileState now triggers navigation if unauthenticated.
     val profileState = rememberProfileState()
     var selectedItem: Screen by remember { mutableStateOf(Screen.Home) }
 
@@ -164,7 +159,6 @@ fun LonyiChatApp(
     val showBackButton = selectedItem is Screen.Profile
     val onBackClicked = { selectedItem = Screen.Home }
 
-    // Get Activity context for logout
     val context = LocalContext.current
 
     Scaffold(
@@ -296,7 +290,7 @@ fun ScreenContent(
 @Composable
 fun ProfileScreen(viewModel: ProfileViewModel) {
     val context = LocalContext.current
-    val activity = context as Activity // Get the Activity context
+    val activity = context as Activity
     val uiState by viewModel.uiState.collectAsState()
     var showEditDialog by remember { mutableStateOf(false) }
 
@@ -316,7 +310,6 @@ fun ProfileScreen(viewModel: ProfileViewModel) {
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Loading and Error States
         when {
             uiState.isLoading -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -341,36 +334,31 @@ fun ProfileScreen(viewModel: ProfileViewModel) {
             }
         }
 
-        // --- Profile Content ---
         val profile = uiState.profile!!
 
-        // MODIFIED: Clickable profile picture UI
         Box(
             modifier = Modifier
                 .size(100.dp)
                 .clip(CircleShape)
-                .clickable(enabled = !uiState.isSaving) { // Disable while saving
-                    imagePickerLauncher.launch("image/*") // Trigger the image picker
+                .clickable(enabled = !uiState.isSaving) {
+                    imagePickerLauncher.launch("image/*")
                 }
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center
         ) {
-            // Use Coil's AsyncImage to load the photo URL
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(profile.photoUrl)
                     .crossfade(true)
-                    // FIX: Explicitly disable memory and disk cache to force Coil to always fetch the new version
                     .memoryCachePolicy(CachePolicy.DISABLED)
                     .diskCachePolicy(CachePolicy.DISABLED)
-                    .placeholder(R.drawable.ic_person_placeholder) // Use the local placeholder drawable
-                    .error(R.drawable.ic_person_placeholder) // Fallback on error
+                    .placeholder(R.drawable.ic_person_placeholder)
+                    .error(R.drawable.ic_person_placeholder)
                     .build(),
                 contentDescription = "Profile Photo",
                 modifier = Modifier.fillMaxSize().clip(CircleShape),
             )
 
-            // Overlay an 'Edit' icon to clearly show it's clickable
             Icon(
                 imageVector = Icons.Default.AddAPhoto,
                 contentDescription = "Change Photo",
@@ -383,7 +371,6 @@ fun ProfileScreen(viewModel: ProfileViewModel) {
                 tint = MaterialTheme.colorScheme.onPrimary
             )
 
-            // Show loading overlay during upload
             if (uiState.isSaving) {
                 CircularProgressIndicator(
                     modifier = Modifier.align(Alignment.Center).size(100.dp),
@@ -406,7 +393,6 @@ fun ProfileScreen(viewModel: ProfileViewModel) {
         )
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Stats Row
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
@@ -418,7 +404,6 @@ fun ProfileScreen(viewModel: ProfileViewModel) {
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // Details Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -432,10 +417,9 @@ fun ProfileScreen(viewModel: ProfileViewModel) {
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // Action Buttons
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
-                onClick = { showEditDialog = true }, // Show dialog on click
+                onClick = { showEditDialog = true },
                 enabled = !uiState.isSaving
             ) {
                 if (uiState.isSaving) {
@@ -447,7 +431,6 @@ fun ProfileScreen(viewModel: ProfileViewModel) {
                 }
             }
 
-            // 🔥 DETACHMENT: Replaced Firebase signOut with ApiService logout
             Button(onClick = {
                 ApiService.logout()
                 val intent = Intent(context, LoginActivity::class.java)
@@ -459,7 +442,6 @@ fun ProfileScreen(viewModel: ProfileViewModel) {
         }
     }
 
-    // Edit Dialog
     if (showEditDialog) {
         EditProfileDialog(
             profile = uiState.profile,
@@ -533,7 +515,6 @@ fun EditProfileDialog(
         title = { Text("Edit Your Profile") },
         text = {
             Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
-                // Name
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -541,25 +522,20 @@ fun EditProfileDialog(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                     singleLine = true
                 )
-                // Phone
                 OutlinedTextField(
                     value = phone,
                     onValueChange = { phone = it },
                     label = { Text("Phone Number") },
-                    // REMOVED: keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                     singleLine = true
                 )
-                // Age
                 OutlinedTextField(
                     value = age,
                     onValueChange = { age = it.filter { it.isDigit() } },
                     label = { Text("Age") },
-                    // REMOVED: keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                     singleLine = true
                 )
-                // Country
                 OutlinedTextField(
                     value = country,
                     onValueChange = { country = it },
@@ -597,8 +573,22 @@ fun HomeFeedScreen(
     viewModel: HomeFeedViewModel
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    // State to control the visibility of the post creation dialog
-    var showPostDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current as Activity
+
+    var showTextPostDialog by remember { mutableStateOf(false) }
+
+    var showPhotoPostDialog by remember { mutableStateOf(false) }
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri: Uri? ->
+            if (uri != null) {
+                selectedImageUri = uri
+                showPhotoPostDialog = true
+            }
+        }
+    )
 
     Column(
         modifier = Modifier
@@ -608,7 +598,8 @@ fun HomeFeedScreen(
         PostCreationBar(
             userName = profileState.userName,
             isLoading = profileState.isLoading,
-            onBarClicked = { showPostDialog = true }
+            onTextClicked = { showTextPostDialog = true },
+            onPhotoClicked = { imagePickerLauncher.launch("image/*") }
         )
         Divider(color = Color.Gray.copy(alpha = 0.5f), thickness = 1.dp)
 
@@ -624,7 +615,6 @@ fun HomeFeedScreen(
                         .fillMaxSize()
                         .padding(16.dp), contentAlignment = Alignment.Center
                 ) {
-                    // Display the "User not authenticated" error clearly
                     Text(
                         "Error: ${uiState.error}",
                         color = MaterialTheme.colorScheme.error
@@ -645,21 +635,37 @@ fun HomeFeedScreen(
         }
     }
 
-    // Show the dialog if the state is true
-    if (showPostDialog) {
+    if (showTextPostDialog) {
         PostCreationDialog(
             profileState = profileState,
-            onDismiss = { showPostDialog = false },
+            onDismiss = { showTextPostDialog = false },
             onPost = { content ->
                 viewModel.createPost(content, "post")
-                showPostDialog = false
+                showTextPostDialog = false
+            }
+        )
+    }
+
+    if (showPhotoPostDialog && selectedImageUri != null) {
+        PhotoPostCreationDialog(
+            imageUri = selectedImageUri!!,
+            isUploading = uiState.isUploading,
+            onDismiss = { showPhotoPostDialog = false },
+            onPost = { caption ->
+                viewModel.createPhotoPost(caption, selectedImageUri!!, context)
+                showPhotoPostDialog = false
             }
         )
     }
 }
 
 @Composable
-fun PostCreationBar(userName: String, isLoading: Boolean, onBarClicked: () -> Unit) {
+fun PostCreationBar(
+    userName: String,
+    isLoading: Boolean,
+    onTextClicked: () -> Unit,
+    onPhotoClicked: () -> Unit
+) {
     val prompt = when {
         isLoading -> "Loading user profile..."
         else -> "What is on your heart, $userName?"
@@ -667,8 +673,7 @@ fun PostCreationBar(userName: String, isLoading: Boolean, onBarClicked: () -> Un
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(8.dp)
-            .clickable(onClick = onBarClicked), // Make the entire bar clickable
+            .padding(8.dp),
         elevation = CardDefaults.cardElevation(2.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color.White.copy(alpha = 0.1f)
@@ -690,20 +695,30 @@ fun PostCreationBar(userName: String, isLoading: Boolean, onBarClicked: () -> Un
             Text(
                 text = prompt,
                 color = if (isLoading) Color.LightGray else Color.Gray,
-                modifier = Modifier.fillMaxWidth(0.9f)
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .clickable { onTextClicked() }
             )
         }
         Divider(color = Color.Gray.copy(alpha = 0.3f), thickness = 1.dp)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 4.dp, horizontal = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
+                .padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            Text("Go Live", color = MaterialTheme.colorScheme.primary)
-            Text("Photo", color = MaterialTheme.colorScheme.primary)
-            Text("Check In", color = MaterialTheme.colorScheme.primary)
+            PostActionButton(icon = Icons.Default.Edit, text = "Text", onClick = onTextClicked)
+            PostActionButton(icon = Icons.Default.PhotoCamera, text = "Photo", onClick = onPhotoClicked)
         }
+    }
+}
+
+@Composable
+fun PostActionButton(icon: ImageVector, text: String, onClick: () -> Unit) {
+    TextButton(onClick = onClick) {
+        Icon(icon, contentDescription = text, tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.width(4.dp))
+        Text(text, color = MaterialTheme.colorScheme.primary)
     }
 }
 
@@ -738,6 +753,19 @@ fun PostCard(post: com.arua.lonyichat.data.Post) {
             }
             Spacer(modifier = Modifier.height(10.dp))
             Text(post.content, style = MaterialTheme.typography.bodyMedium)
+
+            if (post.imageUrl != null) {
+                Spacer(modifier = Modifier.height(10.dp))
+                AsyncImage(
+                    model = post.imageUrl,
+                    contentDescription = "Post image",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(MaterialTheme.shapes.medium),
+                    contentScale = ContentScale.Crop
+                )
+            }
+
             Spacer(modifier = Modifier.height(10.dp))
             Divider(color = Color.Gray.copy(alpha = 0.3f))
         }
@@ -778,8 +806,6 @@ fun PostCreationDialog(
                     ) {
                         if (!profileState.isLoading) {
                             Text(profileState.userName.firstOrNull()?.toString() ?: "", style = MaterialTheme.typography.titleLarge)
-                        } else {
-                            // Show nothing or a loading indicator
                         }
                     }
                     Spacer(modifier = Modifier.width(8.dp))
@@ -820,6 +846,59 @@ fun PostCreationDialog(
         },
         containerColor = MaterialTheme.colorScheme.background,
         textContentColor = MaterialTheme.colorScheme.onBackground
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PhotoPostCreationDialog(
+    imageUri: Uri,
+    isUploading: Boolean,
+    onDismiss: () -> Unit,
+    onPost: (String) -> Unit
+) {
+    var caption by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Create Photo Post") },
+        text = {
+            Column {
+                AsyncImage(
+                    model = imageUri,
+                    contentDescription = "Selected image",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1f)
+                        .clip(MaterialTheme.shapes.medium),
+                    contentScale = ContentScale.Crop
+                )
+                Spacer(Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = caption,
+                    onValueChange = { caption = it },
+                    label = { Text("Write a caption...") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onPost(caption) },
+                enabled = !isUploading
+            ) {
+                if (isUploading) {
+                    CircularProgressIndicator(Modifier.size(24.dp))
+                } else {
+                    Text("Post")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
     )
 }
 
@@ -870,8 +949,7 @@ fun GroupsChurchScreen(viewModel: ChurchesViewModel) {
 
 @Composable
 fun ChurchCard(church: Church, onFollowClicked: () -> Unit) {
-    // 🔥 DETACHMENT: This logic is now redundant as we don't have Firebase Auth
-    val currentUserId = ApiService.getCurrentUserId() // Check against new Mongo ID
+    val currentUserId = ApiService.getCurrentUserId()
     val isMember = church.members.contains(currentUserId)
 
     Card(
@@ -914,7 +992,6 @@ fun ChurchCard(church: Church, onFollowClicked: () -> Unit) {
 @Composable
 fun ChatScreen(viewModel: ChatListViewModel) {
     val uiState by viewModel.uiState.collectAsState()
-    // 🔥 DETACHMENT: Check against new Mongo ID
     val currentUserId = ApiService.getCurrentUserId()
 
     Column(

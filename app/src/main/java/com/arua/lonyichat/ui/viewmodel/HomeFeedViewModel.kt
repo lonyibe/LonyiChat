@@ -1,6 +1,8 @@
 package com.arua.lonyichat.ui.viewmodel
 
-import android.util.Log // ADDED
+import android.app.Activity
+import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arua.lonyichat.data.ApiService
@@ -9,12 +11,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-private const val TAG = "HomeFeedViewModel" // ADDED
+private const val TAG = "HomeFeedViewModel"
 
-// Represents the state of the Home Feed screen
 data class HomeFeedUiState(
     val posts: List<Post> = emptyList(),
     val isLoading: Boolean = false,
+    val isUploading: Boolean = false, // ✨ ADDED for upload indicator
     val error: String? = null
 )
 
@@ -33,30 +35,53 @@ class HomeFeedViewModel : ViewModel() {
             result.onSuccess { posts ->
                 _uiState.value = HomeFeedUiState(posts = posts)
             }.onFailure { error ->
-                Log.e(TAG, "Error fetching posts: ${error.localizedMessage}", error) // UPDATED LOGGING
+                Log.e(TAG, "Error fetching posts: ${error.localizedMessage}", error)
                 _uiState.value = HomeFeedUiState(error = error.localizedMessage)
             }
         }
     }
 
-    // 🌟 UPDATED: Function to create and submit a new post with explicit logging
     fun createPost(content: String, type: String) {
-        Log.d(TAG, "Attempting to create post of type: $type with content: $content") // ADDED LOGGING
+        Log.d(TAG, "Attempting to create post of type: $type with content: $content")
         viewModelScope.launch {
             ApiService.createPost(content, type)
                 .onSuccess {
-                    Log.d(TAG, "Post created successfully. Refreshing feed.") // ADDED LOGGING
-                    // Refresh the feed immediately after a successful post
+                    Log.d(TAG, "Post created successfully. Refreshing feed.")
                     fetchPosts()
                 }
                 .onFailure { error ->
-                    // FIX: Check for a null localized message and provide a fallback.
                     val userErrorMessage = error.localizedMessage ?: "Unknown connection error. Please try again."
                     val errorMessage = "Failed to create post: $userErrorMessage"
 
-                    Log.e(TAG, errorMessage, error) // UPDATED LOGGING
+                    Log.e(TAG, errorMessage, error)
                     _uiState.value = _uiState.value.copy(error = errorMessage)
                 }
         }
+    }
+
+    // ✨ ADDED: New function for creating posts with a photo
+    fun createPhotoPost(caption: String, imageUri: Uri, activity: Activity) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isUploading = true)
+            // Step 1: Upload the image
+            ApiService.uploadPostPhoto(imageUri, activity)
+                .onSuccess { imageUrl ->
+                    // Step 2: Create the post with the returned image URL
+                    ApiService.createPost(content = caption, imageUrl = imageUrl)
+                        .onSuccess {
+                            Log.d(TAG, "Photo post created successfully. Refreshing feed.")
+                            fetchPosts() // Refresh the feed
+                            _uiState.value = _uiState.value.copy(isUploading = false)
+                        }
+                        .onFailure { error -> handleUploadFailure(error) }
+                }
+                .onFailure { error -> handleUploadFailure(error) }
+        }
+    }
+
+    private fun handleUploadFailure(error: Throwable) {
+        val userErrorMessage = error.localizedMessage ?: "Unknown error"
+        Log.e(TAG, "Failed to create photo post: $userErrorMessage", error)
+        _uiState.value = _uiState.value.copy(error = userErrorMessage, isUploading = false)
     }
 }

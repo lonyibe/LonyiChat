@@ -10,6 +10,7 @@ data class Post(
     val authorName: String,
     val authorPhotoUrl: String?,
     val content: String,
+    val imageUrl: String?, // ✨ ADDED THIS LINE
     val type: String, // 'post' or 'status'
     val reactions: Reactions,
     val commentCount: Int,

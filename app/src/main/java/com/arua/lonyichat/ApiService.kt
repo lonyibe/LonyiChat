@@ -138,6 +138,82 @@ object ApiService {
         }
     }
 
+    suspend fun uploadPostPhoto(uri: Uri, context: Activity): Result<String> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+
+        return withContext(Dispatchers.IO) {
+            try {
+                val inputStream: InputStream? = context.contentResolver.openInputStream(uri)
+                if (inputStream == null) {
+                    return@withContext Result.failure(ApiException("Failed to open image file."))
+                }
+
+                val fileBytes = inputStream.use { it.readBytes() }
+                val requestBody = fileBytes.toRequestBody("image/*".toMediaTypeOrNull(), 0, fileBytes.size)
+
+                val multipartBody = MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart("postImage", "post-image.jpg", requestBody)
+                    .build()
+
+                val request = Request.Builder()
+                    .url("$BASE_URL/upload/post-image")
+                    .addHeader("Authorization", "Bearer $token")
+                    .post(multipartBody)
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    val responseBody = response.body?.string()
+                    if (!response.isSuccessful) {
+                        throw ApiException("Upload failed: ${getErrorMessage(responseBody)}")
+                    }
+                    val jsonResponse = gson.fromJson(responseBody, Map::class.java)
+                    val secureUrl = jsonResponse["secure_url"] as? String
+                    if (secureUrl.isNullOrBlank()) {
+                        return@withContext Result.failure(ApiException("Backend returned a success status but no URL."))
+                    }
+                    return@withContext Result.success(secureUrl)
+                }
+            } catch (e: Exception) {
+                return@withContext Result.failure(ApiException("File operation failed: ${e.localizedMessage}"))
+            }
+        }
+    }
+
+    suspend fun createPost(content: String, type: String = "post", imageUrl: String? = null): Result<Unit> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+
+        return try {
+            val json = gson.toJson(mapOf(
+                "content" to content,
+                "type" to type,
+                "imageUrl" to imageUrl
+            ))
+            val body = json.toRequestBody(JSON)
+
+            val request = Request.Builder()
+                .url("$BASE_URL/posts")
+                .addHeader("Authorization", "Bearer $token")
+                .post(body)
+                .build()
+
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        val responseBody = response.body?.string()
+                        Log.e("ApiService", "POST /posts failed. Code: ${response.code}, Body: $responseBody")
+                        throw ApiException("Failed to create post (${response.code}): ${getErrorMessage(responseBody)}")
+                    }
+                    Result.success(Unit)
+                }
+            }
+        } catch (e: IOException) {
+            return Result.failure(ApiException("Network error: Could not connect to LonyiChat server."))
+        } catch (e: Exception) {
+            return Result.failure(e)
+        }
+    }
+
     suspend fun getPosts(): Result<List<Post>> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
 
@@ -190,39 +266,6 @@ object ApiService {
                     Result.success(chatResponse.chats)
                 }
             }
-        } catch (e: Exception) {
-            return Result.failure(e)
-        }
-    }
-
-    suspend fun createPost(content: String, type: String = "post"): Result<Unit> {
-        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
-
-        return try {
-            val json = gson.toJson(mapOf(
-                "content" to content,
-                "type" to type
-            ))
-            val body = json.toRequestBody(JSON)
-
-            val request = Request.Builder()
-                .url("$BASE_URL/posts")
-                .addHeader("Authorization", "Bearer $token")
-                .post(body)
-                .build()
-
-            withContext(Dispatchers.IO) {
-                client.newCall(request).execute().use { response ->
-                    val responseBody = response.body?.string()
-                    if (!response.isSuccessful) {
-                        Log.e("ApiService", "POST /posts failed. Code: ${response.code}, Body: $responseBody")
-                        throw ApiException("Failed to create post (${response.code}): ${getErrorMessage(responseBody)}")
-                    }
-                    Result.success(Unit)
-                }
-            }
-        } catch (e: IOException) {
-            return Result.failure(ApiException("Network error: Could not connect to LonyiChat server."))
         } catch (e: Exception) {
             return Result.failure(e)
         }
