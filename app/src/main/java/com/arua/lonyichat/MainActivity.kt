@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalFoundationApi::class, ExperimentalMaterialApi::class) // ✨ FIX: Retain required OptIn annotations
+@file:OptIn(ExperimentalFoundationApi::class) // ✨ FIX: Added file-level OptIn for combinedClickable
 
 package com.arua.lonyichat
 
@@ -46,7 +46,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogProperties // ✨ ADDED: Import for DialogProperties
 import androidx.core.view.WindowInsetsControllerCompat
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -56,10 +56,6 @@ import com.arua.lonyichat.ui.viewmodel.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
-// ✨ FIX: Correct M2 Imports (part of androidx.compose.material:material-swipe)
-import androidx.compose.material.ExperimentalMaterialApi
-import androidx.compose.material.SwipeRefresh
-import androidx.compose.material.rememberSwipeRefreshState
 
 
 private const val TAG = "MainActivity"
@@ -661,23 +657,13 @@ fun HomeFeedScreen(
         }
     }
 
-    // ✨ NEW: SwipeRefresh State integration
-    // 🐛 FIX: isRefreshing logic needed adjustment. We only show the spinner if we're loading AND there are existing posts (for seamless pull-to-refresh).
-    val isSwipeRefreshing = remember(uiState.isLoading, uiState.posts) {
-        uiState.isLoading && uiState.posts.isNotEmpty()
-    }
-    val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = isSwipeRefreshing)
-
-
-    // The logic below now handles the initial empty/error state outside of SwipeRefresh
-    // to prevent the empty list from always showing the spinner.
     when {
-        uiState.isLoading && uiState.posts.isEmpty() && uiState.error == null -> {
+        uiState.isLoading && uiState.posts.isEmpty() -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
         }
-        uiState.error != null && uiState.posts.isEmpty() -> {
+        uiState.error != null -> {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -690,58 +676,288 @@ fun HomeFeedScreen(
             }
         }
         else -> {
-            // ✨ WRAPPING CONTENT IN SWIPEREFRESH
-            SwipeRefresh(
-                state = swipeRefreshState,
-                onRefresh = { viewModel.fetchPosts() },
-                modifier = Modifier.fillMaxSize()
+            LazyColumn(
+                state = lazyListState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .nestedScroll(scrollBehavior.nestedScrollConnection),
+                contentPadding = PaddingValues(bottom = 8.dp)
             ) {
-                LazyColumn(
-                    state = lazyListState,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection),
-                    contentPadding = PaddingValues(bottom = 8.dp)
+                item {
+                    PostCreationBar(
+                        profileState = profileState,
+                        onTextClicked = {
+                            val intent = Intent(context, CreatePostActivity::class.java)
+                            createPostLauncher.launch(intent)
+                        },
+                        onPhotoClicked = {
+                            val intent = Intent(context, CreatePostActivity::class.java)
+                            createPostLauncher.launch(intent)
+                        }
+                    )
+                    Divider(color = Color.Gray.copy(alpha = 0.3f), thickness = 1.dp)
+                }
+
+                items(uiState.posts, key = { it.id }) { post ->
+                    PostCard(
+                        post = post,
+                        viewModel = viewModel,
+                        onCommentClicked = {
+                            val intent = Intent(context, CommentsActivity::class.java)
+                            intent.putExtra("POST_ID", post.id)
+                            context.startActivity(intent)
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PostCreationBar(
+    profileState: UserProfileState,
+    onTextClicked: () -> Unit,
+    onPhotoClicked: () -> Unit
+) {
+    val prompt = when {
+        profileState.isLoading -> "Loading user profile..."
+        else -> "What is on your heart, ${profileState.userName}?"
+    }
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp),
+        elevation = CardDefaults.cardElevation(2.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White.copy(alpha = 0.1f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(profileState.photoUrl)
+                    .crossfade(true)
+                    .placeholder(R.drawable.ic_person_placeholder)
+                    .error(R.drawable.ic_person_placeholder)
+                    .build(),
+                contentDescription = "Your Profile Photo",
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+            )
+            Spacer(modifier = Modifier.size(8.dp))
+            Text(
+                text = prompt,
+                color = if (profileState.isLoading) Color.LightGray else Color.Gray,
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onTextClicked() }
+            )
+        }
+        Divider(color = Color.Gray.copy(alpha = 0.3f), thickness = 1.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            PostActionButton(icon = Icons.Default.Edit, text = "Text", onClick = onTextClicked)
+            PostActionButton(icon = Icons.Default.PhotoCamera, text = "Photo", onClick = onPhotoClicked)
+        }
+    }
+}
+@Composable
+fun PostActionButton(icon: ImageVector, text: String, onClick: () -> Unit) {
+    TextButton(onClick = onClick) {
+        Icon(icon, contentDescription = text, tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.width(4.dp))
+        Text(text, color = MaterialTheme.colorScheme.primary)
+    }
+}
+
+@Composable
+fun PostCard(post: com.arua.lonyichat.data.Post, viewModel: HomeFeedViewModel, onCommentClicked: () -> Unit) {
+    var showMenu by remember { mutableStateOf(false) }
+    val currentUserId = ApiService.getCurrentUserId()
+    val isAuthor = post.authorId == currentUserId
+    var showEditDialog by remember { mutableStateOf(false) }
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+
+    // ✨ NEW: State for the Reaction Selector Pop-up
+    var showReactionSelector by remember { mutableStateOf(false) }
+
+    // ✨ NEW: State to hold the URL of the image to be previewed
+    var fullScreenImageUrl by remember { mutableStateOf<String?>(null) }
+
+
+    if (isAuthor && showEditDialog) {
+        EditPostDialog(
+            postContent = post.content,
+            onDismiss = { showEditDialog = false },
+            onPost = { newContent ->
+                viewModel.updatePost(post.id, newContent)
+                showEditDialog = false
+            }
+        )
+    }
+
+    if (isAuthor && showDeleteConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = false },
+            title = { Text("Delete Post") },
+            text = { Text("Are you sure you want to permanently delete this post?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deletePost(post.id)
+                        showDeleteConfirmDialog = false
+                    }
                 ) {
-                    item {
-                        PostCreationBar(
-                            profileState = profileState,
-                            onTextClicked = {
-                                val intent = Intent(context, CreatePostActivity::class.java)
-                                createPostLauncher.launch(intent)
-                            },
-                            onPhotoClicked = {
-                                val intent = Intent(context, CreatePostActivity::class.java)
-                                createPostLauncher.launch(intent)
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // ✨ NEW: Full Screen Image Viewer Dialog
+    fullScreenImageUrl?.let { imageUrl ->
+        FullScreenImageDialog(
+            imageUrl = imageUrl,
+            onDismiss = { fullScreenImageUrl = null }
+        )
+    }
+
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp),
+        elevation = CardDefaults.cardElevation(2.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White.copy(alpha = 0.1f)
+        )
+    ) {
+        Column {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(post.authorPhotoUrl)
+                                .crossfade(true)
+                                .placeholder(R.drawable.ic_person_placeholder)
+                                .error(R.drawable.ic_person_placeholder)
+                                .build(),
+                            contentDescription = "Author's Profile Photo",
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(post.authorName, fontWeight = FontWeight.Bold)
+                            Text(
+                                post.createdAt.toDate().toFormattedString(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.Gray
+                            )
+                        }
+                    }
+                    if (isAuthor) {
+                        Box {
+                            IconButton(onClick = { showMenu = !showMenu }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "More options")
+                            }
+                            DropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Edit") },
+                                    onClick = {
+                                        showEditDialog = true
+                                        showMenu = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Delete") },
+                                    onClick = {
+                                        showDeleteConfirmDialog = true
+                                        showMenu = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(post.content, style = MaterialTheme.typography.bodyMedium)
+
+                if (post.imageUrl != null) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    AsyncImage(
+                        model = post.imageUrl,
+                        contentDescription = "Post image",
+                        // ✨ MODIFIED: Add clickable modifier to open the full screen dialog
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(MaterialTheme.shapes.medium)
+                            .clickable { fullScreenImageUrl = post.imageUrl }, // ✨ FIX: Set state to show dialog
+                        contentScale = ContentScale.Crop
+                    )
+                }
+            }
+
+            // ✨ NEW: Reaction Summary Bar
+            PostReactionSummary(
+                post = post,
+                onSummaryClicked = {
+                    viewModel.fetchReactors(post.id)
+                }
+            )
+
+            // ✨ NEW: Interaction Bar (Like, Comment, Share)
+            Box(modifier = Modifier.fillMaxWidth()) {
+                PostInteractionBar(
+                    post = post,
+                    viewModel = viewModel,
+                    onCommentClicked = onCommentClicked,
+                    onLikeClicked = {
+                        // Single click acts as a default 'amen' (Like) toggle
+                        viewModel.reactToPost(post.id, "amen")
+                    },
+                    onLikeLongPressed = {
+                        // Long click shows the reaction selector
+                        showReactionSelector = true
+                    }
+                )
+
+                // ✨ Reaction Selector Menu (Positioned just above the reaction button)
+                if (showReactionSelector) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .offset(x = 16.dp, y = (-56).dp) // Adjust position to float above the button
+                    ) {
+                        ReactionSelectorMenu(
+                            onDismiss = { showReactionSelector = false },
+                            onReactionSelected = { reactionType ->
+                                viewModel.reactToPost(post.id, reactionType)
+                                showReactionSelector = false
                             }
                         )
-                        Divider(color = Color.Gray.copy(alpha = 0.3f), thickness = 1.dp)
-                    }
-
-                    if (uiState.posts.isEmpty()) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(200.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("No posts yet. Pull down to refresh or be the first to share!")
-                            }
-                        }
-                    } else {
-                        items(uiState.posts, key = { it.id }) { post ->
-                            PostCard(
-                                post = post,
-                                viewModel = viewModel,
-                                onCommentClicked = {
-                                    val intent = Intent(context, CommentsActivity::class.java)
-                                    intent.putExtra("POST_ID", post.id)
-                                    context.startActivity(intent)
-                                }
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
                     }
                 }
             }
@@ -749,7 +965,7 @@ fun HomeFeedScreen(
     }
 }
 
-// ✨ NEW: Composable for the Full-Screen Image Dialog (Unchanged from previous step)
+// ✨ NEW: Composable for the Full-Screen Image Dialog ✨
 @Composable
 fun FullScreenImageDialog(
     imageUrl: String,

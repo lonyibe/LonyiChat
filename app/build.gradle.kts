@@ -45,8 +45,7 @@ android {
 dependencies {
     implementation("androidx.core:core-splashscreen:1.0.1")
 
-    // --- UPDATED
-    // FOR MODERN EMOJI/PLATFORM SUPPORT --- // 🐛 FIX: Ensure all parts of the comment block are correctly commented
+    // --- UPDATED FOR MODERN EMOJI/PLATFORM SUPPORT ---
     implementation("androidx.appcompat:appcompat:1.7.0") // BUMPED from 1.6.1 for emoji compatibility
     implementation("androidx.core:core-ktx:1.13.1") // BUMPED from 1.10.1 for latest features
     implementation("com.google.android.material:material:1.12.0") // BUMPED from 1.11.0 for emoji compatibility
@@ -64,8 +63,6 @@ dependencies {
 
     // ADDED: Coil for image loading from URLs
     implementation("io.coil-kt:coil-compose:2.6.0")
-
-    // REMOVED: androidx.compose.material:material-swipe:1.3.0 - This dependency caused a resolution error. We will use the native Material3 approach instead.
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
