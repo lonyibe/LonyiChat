@@ -6,15 +6,12 @@ import android.os.Bundle
 import android.view.View
 import android.widget.TextView
 import android.widget.Toast
-// ADDED IMPORT for safer coroutine management
 import androidx.lifecycle.lifecycleScope
 import androidx.core.view.WindowCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.ktx.auth
-import com.google.firebase.ktx.Firebase
-// REMOVED 'import kotlinx.coroutines.GlobalScope'
+// REMOVED ALL FIREBASE IMPORTS
+import com.arua.lonyichat.data.ApiService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import okhttp3.*
@@ -25,10 +22,9 @@ import java.io.IOException
 
 class SignupActivity : AppCompatActivity() {
 
-    private val auth by lazy { Firebase.auth }
-    private val VERCEL_API_BASE_URL = "https://lonyichat-backend.vercel.app"
-    private val HTTP_CLIENT = OkHttpClient()
-    private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+    // Removed Firebase Auth initialization
+    // VERCEL_API_BASE_URL and HTTP_CLIENT/JSON_MEDIA_TYPE are now managed by ApiService.kt
+    // We consolidate the entire network operation into a single helper function.
 
     // State variable to manage the current step
     private var currentStep = 1
@@ -97,9 +93,13 @@ class SignupActivity : AppCompatActivity() {
         if (step == 1) {
             stepOneLayout.visibility = View.VISIBLE
             stepTwoLayout.visibility = View.GONE
+            buttonNext.visibility = View.VISIBLE
+            buttonSignup.visibility = View.GONE
         } else {
             stepOneLayout.visibility = View.GONE
             stepTwoLayout.visibility = View.VISIBLE
+            buttonNext.visibility = View.GONE
+            buttonSignup.visibility = View.VISIBLE
         }
     }
 
@@ -134,94 +134,68 @@ class SignupActivity : AppCompatActivity() {
                 return
             }
 
-            // All good, initiate Firebase Signup
+            // All good, initiate Custom Backend Signup
             val name = editTextName.text.toString().trim()
             val email = editTextEmail.text.toString().trim()
             val phone = editTextPhone.text.toString().trim()
             val age = editTextAge.text.toString().trim()
 
-            initiateFirebaseSignup(name, email, phone, age, country, password)
+            initiateBackendSignup(name, email, phone, age, country, password)
         }
     }
 
-    private fun initiateFirebaseSignup(
+    private fun initiateBackendSignup(
         name: String, email: String, phone: String, age: String, country: String, password: String
     ) {
         buttonSignup.isEnabled = false
         buttonSignup.text = "Signing Up..."
 
-        // Step 1: Firebase Authentication (Email/Password)
-        auth.createUserWithEmailAndPassword(email, password)
-            .addOnCompleteListener(this) { task ->
-                if (task.isSuccessful) {
-                    val firebaseUser = auth.currentUser
-                    if (firebaseUser != null) {
-                        Toast.makeText(this, "Authentication successful. Saving profile...", Toast.LENGTH_SHORT).show()
-
-                        // Step 2: Send extended profile data to Vercel API
-                        sendProfileDataToVercel(firebaseUser.uid, name, email, phone, age, country)
-                    } else {
-                        onSignupFailed("Firebase user is null after creation.")
-                    }
-                } else {
-                    onSignupFailed("Authentication failed: ${task.exception?.localizedMessage}")
-                }
-
-                // Re-enable button in case of instant failure
-                if (!task.isSuccessful) {
-                    buttonSignup.isEnabled = true
-                    buttonSignup.text = "Sign Up"
-                }
-            }
-    }
-
-    private fun sendProfileDataToVercel(userId: String, name: String, email: String, phone: String, age: String, country: String) {
+        // Step 1: Combine Auth and Profile Save into one request to /auth/register
+        // This makes the client-side logic much cleaner.
         val json = JSONObject()
-        json.put("userId", userId)
         json.put("name", name)
         json.put("email", email)
         json.put("phone", phone)
         json.put("age", age)
         json.put("country", country)
-        json.put("photoUrl", "")
+        json.put("password", password) // Send password for hashing
+        // photoUrl is handled separately via the profile photo update or defaults to null on server
 
-        val requestBody = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+        val requestBody = json.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+        // FIX: Using the now public BASE_URL
         val request = Request.Builder()
-            .url("$VERCEL_API_BASE_URL/signup-profile")
+            .url(ApiService.BASE_URL + "/auth/register")
             .post(requestBody)
             .build()
 
-        // FIX: Changed GlobalScope to lifecycleScope to prevent crashes/ANRs during navigation
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                HTTP_CLIENT.newCall(request).execute().use { response ->
+                OkHttpClient().newCall(request).execute().use { response ->
                     val responseBody = response.body?.string()
 
                     launch(Dispatchers.Main) {
                         if (response.isSuccessful) {
+                            // On success, the server returns the JWT and MongoDB ID.
+                            // ApiService handles the token, so we can just navigate.
                             Toast.makeText(this@SignupActivity, "Registration complete! Welcome!", Toast.LENGTH_LONG).show()
-                            val intent = Intent(this@SignupActivity, MainActivity::class.java)
-                            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                            startActivity(intent)
-                            finish()
+                            navigateToMainScreen()
                         } else {
+                            // Helper to extract the message from the server response
                             val errorMsg = try {
                                 JSONObject(responseBody ?: "").getString("message")
                             } catch (e: Exception) {
                                 "Server responded with error code: ${response.code}"
                             }
-                            onSignupFailed("Profile save failed: $errorMsg")
-
-                            // Re-enable button on failure
-                            buttonSignup.isEnabled = true
-                            buttonSignup.text = "Sign Up"
+                            onSignupFailed("Registration failed: $errorMsg")
                         }
                     }
                 }
             } catch (e: IOException) {
                 launch(Dispatchers.Main) {
-                    onSignupFailed("Network error: Cannot reach Vercel API.")
-                    // Re-enable button on network error
+                    onSignupFailed("Network error: Cannot reach LonyiChat API.")
+                }
+            } finally {
+                launch(Dispatchers.Main) {
                     buttonSignup.isEnabled = true
                     buttonSignup.text = "Sign Up"
                 }
@@ -231,5 +205,13 @@ class SignupActivity : AppCompatActivity() {
 
     private fun onSignupFailed(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+    }
+
+    private fun navigateToMainScreen() {
+        val intent = Intent(this, MainActivity::class.java)
+        // Clears all previous activities so the user cannot press back to login
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        startActivity(intent)
+        finish()
     }
 }

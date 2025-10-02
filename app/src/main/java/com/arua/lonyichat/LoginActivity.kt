@@ -9,23 +9,20 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.ktx.auth
-import com.google.firebase.ktx.Firebase
+// REMOVED ALL FIREBASE AUTH IMPORTS
+import com.arua.lonyichat.data.ApiService
+import androidx.lifecycle.lifecycleScope // ADDED
+import kotlinx.coroutines.launch // ADDED
 
 class LoginActivity : AppCompatActivity() {
 
-    // Initialize Firebase Auth using a lazy delegate for proper timing
-    private val auth by lazy { Firebase.auth }
+    // Removed Firebase Auth initialization
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Check if user is already signed in (quick check before showing login UI)
-        if (auth.currentUser != null) {
-            navigateToMainScreen()
-            return
-        }
+        // WARNING: There is no check here if the user is already logged in (no Firebase currentUser).
+        // A proper solution would use SharedPreferences to store the JWT token and check it here.
 
         // This line MUST be called before "setContentView"
         installSplashScreen()
@@ -49,7 +46,7 @@ class LoginActivity : AppCompatActivity() {
     }
 
     /**
-     * Handles Firebase Email/Password Authentication.
+     * Handles custom backend JWT Authentication.
      */
     private fun handleLogin(
         emailInput: TextInputEditText,
@@ -67,22 +64,24 @@ class LoginActivity : AppCompatActivity() {
         loginButton.isEnabled = false
         loginButton.text = "Logging in..."
 
-        auth.signInWithEmailAndPassword(email, password)
-            .addOnCompleteListener(this) { task ->
-                if (task.isSuccessful) {
-                    // Sign in success, navigate to Main
-                    Toast.makeText(this, "Login Successful!", Toast.LENGTH_SHORT).show()
-                    navigateToMainScreen()
-                } else {
-                    // If sign in fails, display a message to the user.
-                    val message = task.exception?.localizedMessage ?: "Login failed."
-                    Toast.makeText(this, "Login failed: $message", Toast.LENGTH_LONG).show()
-                }
+        // NEW: Call the custom API login function
+        lifecycleScope.launch {
+            val result = ApiService.login(email, password)
 
-                // Re-enable button on completion (success or failure)
-                loginButton.isEnabled = true
-                loginButton.text = "Login"
+            result.onSuccess {
+                // Login success, the JWT token is now stored in ApiService
+                Toast.makeText(this@LoginActivity, "Login Successful!", Toast.LENGTH_SHORT).show()
+                navigateToMainScreen()
+            }.onFailure { error ->
+                // If sign in fails, display a message to the user.
+                val message = error.localizedMessage ?: "Login failed due to network error."
+                Toast.makeText(this@LoginActivity, "Login failed: $message", Toast.LENGTH_LONG).show()
             }
+
+            // Re-enable button on completion (success or failure)
+            loginButton.isEnabled = true
+            loginButton.text = "Login"
+        }
     }
 
     /**
