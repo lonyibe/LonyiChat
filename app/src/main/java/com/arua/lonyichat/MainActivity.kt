@@ -15,6 +15,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -47,6 +48,7 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.ui.layout.ContentScale
 import coil.request.CachePolicy
+import kotlinx.coroutines.launch
 
 
 private const val TAG = "MainActivity"
@@ -439,7 +441,6 @@ fun ProfileScreen(viewModel: ProfileViewModel, onProfileUpdated: () -> Unit) {
     }
 }
 
-// ... (The rest of your MainActivity.kt file remains unchanged)
 @Composable
 fun ProfileStat(count: Int, label: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -557,6 +558,9 @@ fun HomeFeedScreen(
     var showPhotoPostDialog by remember { mutableStateOf(false) }
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
 
+    val lazyListState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
         onResult = { uri: Uri? ->
@@ -567,54 +571,61 @@ fun HomeFeedScreen(
         }
     )
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        PostCreationBar(
-            profileState = profileState,
-            onTextClicked = { showTextPostDialog = true },
-            onPhotoClicked = { imagePickerLauncher.launch("image/*") }
-        )
-        Divider(color = Color.Gray.copy(alpha = 0.5f), thickness = 1.dp)
+    // ✨ This effect will now only scroll when a *new* post is added at the top
+    LaunchedEffect(uiState.posts.firstOrNull()?.id) {
+        if (uiState.posts.isNotEmpty()) {
+            coroutineScope.launch {
+                lazyListState.animateScrollToItem(0)
+            }
+        }
+    }
 
-        when {
-            uiState.isLoading -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
+    // ✨ MODIFIED: The main layout is now the LazyColumn itself
+    when {
+        uiState.isLoading && uiState.posts.isEmpty() -> {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
             }
-            uiState.error != null -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp), contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        "Error: ${uiState.error}",
-                        color = MaterialTheme.colorScheme.error
+        }
+        uiState.error != null -> {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp), contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "Error: ${uiState.error}",
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+        else -> {
+            LazyColumn(
+                state = lazyListState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 8.dp)
+            ) {
+                // ✨ ADDED: The PostCreationBar is now the first item in the list
+                item {
+                    PostCreationBar(
+                        profileState = profileState,
+                        onTextClicked = { showTextPostDialog = true },
+                        onPhotoClicked = { imagePickerLauncher.launch("image/*") }
                     )
+                    Divider(color = Color.Gray.copy(alpha = 0.5f), thickness = 1.dp)
                 }
-            }
-            else -> {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 8.dp)
-                ) {
-                    items(uiState.posts, key = { it.id }) { post ->
-                        PostCard(
-                            post = post,
-                            viewModel = viewModel,
-                            onCommentClicked = {
-                                // ✨ LAUNCH CommentsActivity
-                                val intent = Intent(context, CommentsActivity::class.java)
-                                intent.putExtra("POST_ID", post.id)
-                                context.startActivity(intent)
-                            }
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
+
+                items(uiState.posts, key = { it.id }) { post ->
+                    PostCard(
+                        post = post,
+                        viewModel = viewModel,
+                        onCommentClicked = {
+                            val intent = Intent(context, CommentsActivity::class.java)
+                            intent.putExtra("POST_ID", post.id)
+                            context.startActivity(intent)
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
             }
         }
