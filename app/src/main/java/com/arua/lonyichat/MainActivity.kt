@@ -41,11 +41,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow // ✨ ADDED: Import for TextOverflow
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties // ✨ ADDED: Import for DialogProperties
 import androidx.core.view.WindowInsetsControllerCompat
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -775,6 +776,9 @@ fun PostCard(post: com.arua.lonyichat.data.Post, viewModel: HomeFeedViewModel, o
     // ✨ NEW: State for the Reaction Selector Pop-up
     var showReactionSelector by remember { mutableStateOf(false) }
 
+    // ✨ NEW: State to hold the URL of the image to be previewed
+    var fullScreenImageUrl by remember { mutableStateOf<String?>(null) }
+
 
     if (isAuthor && showEditDialog) {
         EditPostDialog(
@@ -807,6 +811,14 @@ fun PostCard(post: com.arua.lonyichat.data.Post, viewModel: HomeFeedViewModel, o
                     Text("Cancel")
                 }
             }
+        )
+    }
+
+    // ✨ NEW: Full Screen Image Viewer Dialog
+    fullScreenImageUrl?.let { imageUrl ->
+        FullScreenImageDialog(
+            imageUrl = imageUrl,
+            onDismiss = { fullScreenImageUrl = null }
         )
     }
 
@@ -881,9 +893,11 @@ fun PostCard(post: com.arua.lonyichat.data.Post, viewModel: HomeFeedViewModel, o
                     AsyncImage(
                         model = post.imageUrl,
                         contentDescription = "Post image",
+                        // ✨ MODIFIED: Add clickable modifier to open the full screen dialog
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(MaterialTheme.shapes.medium),
+                            .clip(MaterialTheme.shapes.medium)
+                            .clickable { fullScreenImageUrl = post.imageUrl }, // ✨ FIX: Set state to show dialog
                         contentScale = ContentScale.Crop
                     )
                 }
@@ -929,6 +943,57 @@ fun PostCard(post: com.arua.lonyichat.data.Post, viewModel: HomeFeedViewModel, o
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+// ✨ NEW: Composable for the Full-Screen Image Dialog ✨
+@Composable
+fun FullScreenImageDialog(
+    imageUrl: String,
+    onDismiss: () -> Unit
+) {
+    // Use Dialog with usePlatformDefaultWidth = false and fillMaxSize() to create a full-screen effect.
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            // Draw behind status and navigation bars for a true full-screen experience
+            decorFitsSystemWindows = true
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black), // Black background for image viewing
+            contentAlignment = Alignment.Center
+        ) {
+            // AsyncImage loads the image URL passed from the post
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = "Full-screen post image",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentHeight()
+                    .clickable(onClick = onDismiss), // Dismiss on click
+                contentScale = ContentScale.Fit // Fit the image within the screen bounds
+            )
+
+            // Close button in the top right corner
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.5f))
+            ) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = "Close",
+                    tint = Color.White
+                )
             }
         }
     }
