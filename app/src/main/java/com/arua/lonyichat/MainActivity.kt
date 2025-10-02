@@ -15,6 +15,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -29,15 +32,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-// 🔥 REMOVED: androidx.compose.material3.pulltorefresh imports
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+// -----------------------------------------------------------
+// ✨ CRITICAL FIX: Use wildcard and explicit PointerEventType import
+// to resolve all "Unresolved reference" errors (awaitPointerEventScope, isConsumed, isUp).
+import androidx.compose.ui.input.pointer.* // -----------------------------------------------------------
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
@@ -47,19 +55,30 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties // ✨ ADDED: Import for DialogProperties
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.view.WindowInsetsControllerCompat
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.arua.lonyichat.data.*
 import com.arua.lonyichat.ui.theme.LonyiChatTheme
 import com.arua.lonyichat.ui.viewmodel.*
-import com.google.accompanist.swiperefresh.SwipeRefresh // ✨ NEW: Accompanist import
-import com.google.accompanist.swiperefresh.rememberSwipeRefreshState // ✨ NEW: Accompanist import
+import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+
+// ✨ NEW: Reaction Data Model and List ✨
+data class AppReaction(val type: String, val emoji: String, val label: String)
+
+val LonyiReactions = listOf(
+    AppReaction("amen", "🙏", "Amen"),
+    AppReaction("hallelujah", "🥳", "Hallelujah"),
+    AppReaction("praiseGod", "🙌", "Praise God")
+)
+// ---------------------------------------------------------------------------------
+
 
 // ✨ NEW: Constant for minimum duration of the pull-to-refresh animation
 private const val MIN_REFRESH_DURATION = 500L
@@ -1177,33 +1196,117 @@ fun PostInteractionBar(
     }
 }
 
-// ✨ NEW: ReactionSelectorMenu (Simple menu for reaction selection) ✨
+// ✨ MODIFIED: ReactionSelectorMenu (Facebook-like interactive hover/scale) ✨
 @Composable
 fun ReactionSelectorMenu(
     onDismiss: () -> Unit,
     onReactionSelected: (reactionType: String) -> Unit
 ) {
-    // A Card to visually represent a floating reaction selector bar
+    // State to track which reaction index is currently being focused (0, 1, 2, or null)
+    var focusedReactionIndex by remember { mutableStateOf<Int?>(null) }
+
+    // To track the layout bounds of the reaction row for touch detection
+    val reactionRowWidth = remember { mutableStateOf(0) }
+    val reactionCount = LonyiReactions.size
+
     Card(
         elevation = CardDefaults.cardElevation(8.dp),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Row(
-            modifier = Modifier.padding(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // Amen
-            TextButton(onClick = { onReactionSelected("amen"); onDismiss() }) { Text("🙏 Amen") }
-            // Hallelujah
-            TextButton(onClick = { onReactionSelected("hallelujah"); onDismiss() }) { Text("🥳 Hallelujah") }
-            // Praise God
-            TextButton(onClick = { onReactionSelected("praiseGod"); onDismiss() }) { Text("🙌 Praise God") }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            // 1. Hover Text Label (appears when a reaction is focused)
+            focusedReactionIndex?.let { index ->
+                val reaction = LonyiReactions[index]
+                Text(
+                    text = reaction.label,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .background(
+                            MaterialTheme.colorScheme.primary, // Orange background for text label
+                            RoundedCornerShape(4.dp)
+                        )
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            // 2. Reaction Icons Row
+            Row(
+                modifier = Modifier
+                    .onSizeChanged { reactionRowWidth.value = it.width }
+                    // CRITICAL: Use pointerInput to detect drag/hover movement over the options
+                    .pointerInput(Unit) {
+                        // Calculate the ideal width of each reaction slot for easy mapping
+                        val itemWidth = reactionRowWidth.value / reactionCount
+
+                        // Detect and process all pointer events (used for drag/hover)
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.first()
+
+                                val xPos = change.position.x.toInt()
+                                val newIndex = (xPos / itemWidth).coerceIn(0, reactionCount - 1)
+
+                                // Update focus on move/down
+                                if (change.pressed) {
+                                    focusedReactionIndex = newIndex
+                                }
+
+                                // ✨ FIX: Check event.type (action) instead of change.type (device type)
+                                if (event.type == PointerEventType.Release && !change.isConsumed) {
+                                    focusedReactionIndex?.let { index ->
+                                        onReactionSelected(LonyiReactions[index].type)
+                                    }
+                                    focusedReactionIndex = null
+                                    onDismiss()
+                                    // Consume the event to prevent upstream components from reacting after selection
+                                    change.consume()
+                                }
+
+                                // Clear focus on dismiss/outside interaction (simple check: if pointer moves outside the horizontal bounds)
+                                if (xPos < 0 || xPos > reactionRowWidth.value) {
+                                    focusedReactionIndex = null
+                                }
+                            }
+                        }
+                    }
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                LonyiReactions.forEachIndexed { index, reaction ->
+                    val isFocused = index == focusedReactionIndex
+                    val scale by animateFloatAsState(
+                        targetValue = if (isFocused) 1.5f else 1.0f,
+                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                        label = "reactionScale${index}"
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp) // Fixed size for touch target
+                            .scale(scale)
+                            .clip(CircleShape)
+                            .background(if (isFocused) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent), // Subtle background when focused
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = reaction.emoji,
+                            fontSize = 24.sp, // Larger emoji for a better visual
+                            modifier = Modifier.padding(4.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
-// ✨ NEW: ReactorListDialog (Displays list of users who reacted) ✨
+// ✨ NEW: ReactorListDialog (Displays list of users who reacted) (kept the same) ✨
 @Composable
 fun ReactorListDialog(
     uiState: ReactorUiState,
