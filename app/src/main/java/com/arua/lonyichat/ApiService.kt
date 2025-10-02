@@ -246,6 +246,54 @@ object ApiService {
         }
     }
 
+    suspend fun updatePost(postId: String, content: String): Result<Unit> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val json = gson.toJson(mapOf("content" to content))
+            val body = json.toRequestBody(JSON)
+            val request = Request.Builder()
+                .url("$BASE_URL/posts/$postId")
+                .addHeader("Authorization", "Bearer $token")
+                .put(body)
+                .build()
+
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        val errorBody = response.body?.string()
+                        throw ApiException("Failed to update post (${response.code}): ${getErrorMessage(errorBody)}")
+                    }
+                    Result.success(Unit)
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deletePost(postId: String): Result<Unit> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val request = Request.Builder()
+                .url("$BASE_URL/posts/$postId")
+                .addHeader("Authorization", "Bearer $token")
+                .delete()
+                .build()
+
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        val errorBody = response.body?.string()
+                        throw ApiException("Failed to delete post (${response.code}): ${getErrorMessage(errorBody)}")
+                    }
+                    Result.success(Unit)
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     // ✨ ADDED: Functions for post interactions
     suspend fun reactToPost(postId: String, reactionType: String): Result<Unit> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))

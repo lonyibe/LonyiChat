@@ -80,6 +80,26 @@ class HomeFeedViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(error = userErrorMessage, isUploading = false)
     }
 
+    fun updatePost(postId: String, content: String) {
+        viewModelScope.launch {
+            ApiService.updatePost(postId, content).onSuccess {
+                fetchPosts() // Refresh the feed to show the updated post
+            }.onFailure { error ->
+                _uiState.value = _uiState.value.copy(error = "Failed to update post: ${error.localizedMessage}")
+            }
+        }
+    }
+
+    fun deletePost(postId: String) {
+        viewModelScope.launch {
+            ApiService.deletePost(postId).onSuccess {
+                fetchPosts() // Refresh the feed to remove the deleted post
+            }.onFailure { error ->
+                _uiState.value = _uiState.value.copy(error = "Failed to delete post: ${error.localizedMessage}")
+            }
+        }
+    }
+
     // ✨ ADDED: Functions for post interactions
     fun reactToPost(postId: String, reactionType: String) {
         viewModelScope.launch {

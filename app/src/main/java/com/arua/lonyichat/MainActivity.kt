@@ -742,6 +742,48 @@ fun PostActionButton(icon: ImageVector, text: String, onClick: () -> Unit) {
 
 @Composable
 fun PostCard(post: com.arua.lonyichat.data.Post, viewModel: HomeFeedViewModel, onCommentClicked: () -> Unit) {
+    var showMenu by remember { mutableStateOf(false) }
+    val currentUserId = ApiService.getCurrentUserId()
+    val isAuthor = post.authorId == currentUserId
+    var showEditDialog by remember { mutableStateOf(false) }
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+
+
+    if (isAuthor && showEditDialog) {
+        EditPostDialog(
+            postContent = post.content,
+            onDismiss = { showEditDialog = false },
+            onPost = { newContent ->
+                viewModel.updatePost(post.id, newContent)
+                showEditDialog = false
+            }
+        )
+    }
+
+    if (isAuthor && showDeleteConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = false },
+            title = { Text("Delete Post") },
+            text = { Text("Are you sure you want to permanently delete this post?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deletePost(post.id)
+                        showDeleteConfirmDialog = false
+                    }
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -753,21 +795,49 @@ fun PostCard(post: com.arua.lonyichat.data.Post, viewModel: HomeFeedViewModel, o
     ) {
         Column {
             Column(modifier = Modifier.padding(12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.secondaryContainer)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column {
-                        Text(post.authorName, fontWeight = FontWeight.Bold)
-                        Text(
-                            post.createdAt.toDate().toFormattedString(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.Gray
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.secondaryContainer)
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(post.authorName, fontWeight = FontWeight.Bold)
+                            Text(
+                                post.createdAt.toDate().toFormattedString(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.Gray
+                            )
+                        }
+                    }
+                    if (isAuthor) {
+                        Box {
+                            IconButton(onClick = { showMenu = !showMenu }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "More options")
+                            }
+                            DropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Edit") },
+                                    onClick = {
+                                        showEditDialog = true
+                                        showMenu = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Delete") },
+                                    onClick = {
+                                        showDeleteConfirmDialog = true
+                                        showMenu = false
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.height(10.dp))
@@ -911,6 +981,56 @@ fun PostCreationDialog(
                 Text("Cancel")
             }
 
+        },
+        containerColor = MaterialTheme.colorScheme.background,
+        textContentColor = MaterialTheme.colorScheme.onBackground
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditPostDialog(
+    postContent: String,
+    onDismiss: () -> Unit,
+    onPost: (String) -> Unit
+) {
+    var updatedContent by remember { mutableStateOf(postContent) }
+    val isPostButtonEnabled = updatedContent.isNotBlank()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Edit Post",
+                style = MaterialTheme.typography.titleLarge
+            )
+        },
+        text = {
+            OutlinedTextField(
+                value = updatedContent,
+                onValueChange = { updatedContent = it },
+                label = { Text("Update your thought...") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 100.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                )
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = { onPost(updatedContent) },
+                enabled = isPostButtonEnabled
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
         },
         containerColor = MaterialTheme.colorScheme.background,
         textContentColor = MaterialTheme.colorScheme.onBackground
