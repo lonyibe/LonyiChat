@@ -95,6 +95,14 @@ fun CommentsScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shadowElevation = 8.dp
             ) {
+                // ✨ ADDED: OutlinedTextField colors for modern appeal
+                val textFieldColors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                )
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -103,16 +111,14 @@ fun CommentsScreen(
                         .padding(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextField(
+                    // ✨ MODIFIED: Changed TextField to OutlinedTextField for a visible border
+                    OutlinedTextField(
                         value = commentText,
                         onValueChange = { commentText = it },
                         modifier = Modifier.weight(1f),
                         placeholder = { Text("Add a comment...") },
-                        colors = TextFieldDefaults.colors(
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            disabledIndicatorColor = Color.Transparent
-                        )
+                        // ✨ APPLIED: Custom colors to OutlinedTextField
+                        colors = textFieldColors
                     )
                     IconButton(
                         onClick = {

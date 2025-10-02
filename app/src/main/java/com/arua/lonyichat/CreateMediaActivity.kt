@@ -66,6 +66,15 @@ fun CreateMediaScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current as Activity
 
+    // ✨ ADDED: Consistent, modern OutlinedTextField colors
+    val textFieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = MaterialTheme.colorScheme.primary, // LonyiOrange for focus
+        unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), // Subtle border
+        unfocusedContainerColor = Color.Transparent, // Keep it floating on background
+        focusedContainerColor = Color.Transparent,
+        cursorColor = MaterialTheme.colorScheme.primary
+    )
+
     val mediaPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
@@ -128,7 +137,8 @@ fun CreateMediaScreen(
                 onValueChange = { title = it },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Title") },
-                singleLine = true
+                singleLine = true,
+                colors = textFieldColors // ✨ APPLIED: Custom colors
             )
 
             OutlinedTextField(
@@ -137,7 +147,8 @@ fun CreateMediaScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .defaultMinSize(minHeight = 100.dp),
-                label = { Text("Description (optional)") }
+                label = { Text("Description (optional)") },
+                colors = textFieldColors // ✨ APPLIED: Custom colors
             )
 
             // REMOVED: The manual "Select Video or Music File" button

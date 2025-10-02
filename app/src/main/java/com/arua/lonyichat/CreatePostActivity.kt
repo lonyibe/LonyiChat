@@ -86,6 +86,15 @@ fun CreatePostScreen(
         selectedImageUri = uri
     }
 
+    // ✨ ADDED: Custom colors for a subtle border on a dark background, switching to OutlinedTextField
+    val textFieldColors = OutlinedTextFieldDefaults.colors(
+        focusedContainerColor = Color.Transparent,
+        unfocusedContainerColor = Color.Transparent,
+        focusedBorderColor = MaterialTheme.colorScheme.primary, // Highlight border on focus
+        unfocusedBorderColor = Color.White.copy(alpha = 0.3f), // Subtle border when unfocused
+        disabledBorderColor = Color.White.copy(alpha = 0.3f)
+    )
+
     // REMOVED: mediaPickerLauncher for video/audio is gone.
 
     Scaffold(
@@ -177,7 +186,8 @@ fun CreatePostScreen(
                 )
             }
             Spacer(modifier = Modifier.height(16.dp))
-            TextField(
+            // ✨ MODIFIED: Changed TextField to OutlinedTextField and applied custom colors
+            OutlinedTextField(
                 value = postContent,
                 onValueChange = { postContent = it },
                 modifier = Modifier
@@ -185,13 +195,7 @@ fun CreatePostScreen(
                     .defaultMinSize(minHeight = 150.dp),
                 // Reverting hint to simple prompt
                 placeholder = { Text("What is on your heart?") },
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    disabledIndicatorColor = Color.Transparent
-                )
+                colors = textFieldColors // ✨ APPLIED: Custom colors for subtle border
             )
 
             // SIMPLIFIED PREVIEW LOGIC: Only shows image preview

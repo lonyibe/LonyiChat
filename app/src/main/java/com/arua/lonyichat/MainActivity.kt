@@ -541,6 +541,19 @@ fun EditProfileDialog(
 
     val isSaveEnabled = name.isNotBlank() && phone.isNotBlank() && age.isNotBlank() && country.isNotBlank()
 
+    // ✨ ADDED: Consistent, modern OutlinedTextField colors
+    val textFieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = MaterialTheme.colorScheme.primary, // LonyiOrange for focus
+        unfocusedBorderColor = Color.White.copy(alpha = 0.5f), // Subtle white border
+        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+        focusedContainerColor = MaterialTheme.colorScheme.surface,
+        cursorColor = MaterialTheme.colorScheme.primary,
+        // Ensure text is readable against the container background
+        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+    )
+
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Edit Your Profile") },
@@ -551,28 +564,32 @@ fun EditProfileDialog(
                     onValueChange = { name = it },
                     label = { Text("Name") },
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                    singleLine = true
+                    singleLine = true,
+                    colors = textFieldColors // ✨ APPLIED: Custom colors
                 )
                 OutlinedTextField(
                     value = phone,
                     onValueChange = { phone = it },
                     label = { Text("Phone Number") },
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                    singleLine = true
+                    singleLine = true,
+                    colors = textFieldColors // ✨ APPLIED: Custom colors
                 )
                 OutlinedTextField(
                     value = age,
                     onValueChange = { age = it.filter { it.isDigit() } },
                     label = { Text("Age") },
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                    singleLine = true
+                    singleLine = true,
+                    colors = textFieldColors // ✨ APPLIED: Custom colors
                 )
                 OutlinedTextField(
                     value = country,
                     onValueChange = { country = it },
                     label = { Text("Country") },
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                    singleLine = true
+                    singleLine = true,
+                    colors = textFieldColors // ✨ APPLIED: Custom colors
                 )
             }
         },
@@ -1295,6 +1312,15 @@ fun EditPostDialog(
     var updatedContent by remember { mutableStateOf(postContent) }
     val isPostButtonEnabled = updatedContent.isNotBlank()
 
+    // ✨ ADDED: Consistent, modern OutlinedTextField colors
+    val textFieldColors = OutlinedTextFieldDefaults.colors(
+        focusedContainerColor = MaterialTheme.colorScheme.surface,
+        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+        focusedBorderColor = MaterialTheme.colorScheme.primary,
+        unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+        disabledBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+    )
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -1304,17 +1330,14 @@ fun EditPostDialog(
             )
         },
         text = {
-            OutlinedTextField(
+            OutlinedTextField( // ✨ MODIFIED: Using OutlinedTextField for a visible border
                 value = updatedContent,
                 onValueChange = { updatedContent = it },
                 label = { Text("Update your thought...") },
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 100.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surface
-                )
+                colors = textFieldColors // ✨ APPLIED: Custom colors
             )
         },
         confirmButton = {

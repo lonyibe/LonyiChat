@@ -8,7 +8,6 @@
     android:padding="24dp"
     tools:context=".LoginActivity">
 
-    <!-- App Logo -->
     <ImageView
         android:id="@+id/logoImageView"
         android:layout_width="120dp"
@@ -20,7 +19,6 @@
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintVertical_chainStyle="packed" />
 
-    <!-- Welcome Message -->
     <TextView
         android:id="@+id/welcomeMessage"
         android:layout_width="wrap_content"
@@ -34,7 +32,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/logoImageView" />
 
-    <!-- Email Input Field -->
     <com.google.android.material.textfield.TextInputLayout
         android:id="@+id/emailInputLayout"
         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
@@ -59,7 +56,6 @@
 
     </com.google.android.material.textfield.TextInputLayout>
 
-    <!-- Password Input Field -->
     <com.google.android.material.textfield.TextInputLayout
         android:id="@+id/passwordInputLayout"
         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
@@ -86,7 +82,6 @@
 
     </com.google.android.material.textfield.TextInputLayout>
 
-    <!-- Login Button -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/buttonLogin"
         android:layout_width="0dp"
@@ -102,7 +97,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/passwordInputLayout" />
 
-    <!-- Signup Button -->
     <TextView
         android:id="@+id/buttonSignup"
         android:layout_width="wrap_content"
