@@ -605,7 +605,6 @@ fun EditProfileDialog(
     )
 }
 
-// 🔥 REMOVED @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeFeedScreen(
     profileState: UserProfileState,
@@ -1380,7 +1379,6 @@ fun EditPostDialog(
     )
 }
 
-// 🔥 REMOVED @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GroupsChurchScreen(viewModel: ChurchesViewModel) {
     val uiState by viewModel.uiState.collectAsState()
@@ -1486,7 +1484,6 @@ fun ChurchCard(church: Church, onFollowClicked: () -> Unit) {
     }
 }
 
-// 🔥 REMOVED @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(viewModel: ChatListViewModel) {
     val uiState by viewModel.uiState.collectAsState()
@@ -1728,7 +1725,6 @@ fun BibleStudyScreen(viewModel: BibleViewModel) {
     }
 }
 
-// 🔥 REMOVED @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MediaScreen(viewModel: MediaViewModel) {
     val uiState by viewModel.uiState.collectAsState()
