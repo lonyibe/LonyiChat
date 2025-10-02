@@ -13,19 +13,26 @@ data class Post(
     val imageUrl: String?,
     val type: String, // 'post' or 'status'
     val reactions: Reactions,
+    val userReactions: UserReactions, // ✨ ADDED: To track if the current user has reacted
     val commentCount: Int,
-    val shareCount: Int, // ✨ ADDED
+    val shareCount: Int,
     @SerializedName("createdAt") val createdAt: Timestamp
 )
 
-// ✨ UPDATED: Now holds counts of reactions
+// Holds the counts of each reaction type
 data class Reactions(
     val amen: Int = 0,
     val hallelujah: Int = 0,
     val praiseGod: Int = 0
 )
 
-// ✨ ADDED: Data class for comments
+// ✨ ADDED: Holds the boolean state of the current user's reactions
+data class UserReactions(
+    val amen: Boolean = false,
+    val hallelujah: Boolean = false,
+    val praiseGod: Boolean = false
+)
+
 data class Comment(
     val authorId: String,
     val authorName: String,
@@ -46,4 +53,10 @@ data class Timestamp(
 data class PostResponse(
     val success: Boolean,
     val posts: List<Post>
+)
+
+// ✨ ADDED: Wrapper for a single post response (for creating a new post)
+data class SinglePostResponse(
+    val success: Boolean,
+    val post: Post
 )

@@ -9,6 +9,7 @@ import com.arua.lonyichat.data.ApiService
 import com.arua.lonyichat.data.Post
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 private const val TAG = "HomeFeedViewModel"
@@ -30,12 +31,12 @@ class HomeFeedViewModel : ViewModel() {
 
     fun fetchPosts() {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true)
+            _uiState.update { it.copy(isLoading = true) }
             ApiService.getPosts().onSuccess { posts ->
-                _uiState.value = _uiState.value.copy(posts = posts, isLoading = false)
+                _uiState.update { it.copy(posts = posts, isLoading = false) }
             }.onFailure { error ->
                 Log.e(TAG, "Error fetching posts: ${error.localizedMessage}", error)
-                _uiState.value = _uiState.value.copy(error = error.localizedMessage, isLoading = false)
+                _uiState.update { it.copy(error = error.localizedMessage, isLoading = false) }
             }
         }
     }
@@ -43,30 +44,34 @@ class HomeFeedViewModel : ViewModel() {
     fun createPost(content: String, type: String) {
         viewModelScope.launch {
             ApiService.createPost(content, type)
-                .onSuccess {
-                    Log.d(TAG, "Post created successfully. Refreshing feed.")
-                    fetchPosts()
+                .onSuccess { newPost ->
+                    // ✨ OPTIMISTIC UPDATE: Add the new post to the top of the list
+                    _uiState.update { currentState ->
+                        currentState.copy(posts = listOf(newPost) + currentState.posts)
+                    }
                 }
                 .onFailure { error ->
                     val userErrorMessage = error.localizedMessage ?: "Unknown connection error. Please try again."
-                    val errorMessage = "Failed to create post: $userErrorMessage"
-
-                    Log.e(TAG, errorMessage, error)
-                    _uiState.value = _uiState.value.copy(error = errorMessage)
+                    Log.e(TAG, "Failed to create post: $userErrorMessage", error)
+                    _uiState.update { it.copy(error = "Failed to create post: $userErrorMessage") }
                 }
         }
     }
 
     fun createPhotoPost(caption: String, imageUri: Uri, activity: Activity) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isUploading = true)
+            _uiState.update { it.copy(isUploading = true) }
             ApiService.uploadPostPhoto(imageUri, activity)
                 .onSuccess { imageUrl ->
                     ApiService.createPost(content = caption, imageUrl = imageUrl)
-                        .onSuccess {
-                            Log.d(TAG, "Photo post created successfully. Refreshing feed.")
-                            fetchPosts()
-                            _uiState.value = _uiState.value.copy(isUploading = false)
+                        .onSuccess { newPost ->
+                            // ✨ OPTIMISTIC UPDATE: Add the new photo post to the top of the list
+                            _uiState.update { currentState ->
+                                currentState.copy(
+                                    posts = listOf(newPost) + currentState.posts,
+                                    isUploading = false
+                                )
+                            }
                         }
                         .onFailure { error -> handleUploadFailure(error) }
                 }
@@ -77,52 +82,86 @@ class HomeFeedViewModel : ViewModel() {
     private fun handleUploadFailure(error: Throwable) {
         val userErrorMessage = error.localizedMessage ?: "Unknown error"
         Log.e(TAG, "Failed to create photo post: $userErrorMessage", error)
-        _uiState.value = _uiState.value.copy(error = userErrorMessage, isUploading = false)
+        _uiState.update { it.copy(error = userErrorMessage, isUploading = false) }
     }
 
     fun updatePost(postId: String, content: String) {
         viewModelScope.launch {
-            ApiService.updatePost(postId, content).onSuccess {
-                fetchPosts() // Refresh the feed to show the updated post
-            }.onFailure { error ->
-                _uiState.value = _uiState.value.copy(error = "Failed to update post: ${error.localizedMessage}")
+            // ✨ OPTIMISTIC UPDATE: Update the post content locally first
+            _uiState.update { currentState ->
+                val updatedPosts = currentState.posts.map { post ->
+                    if (post.id == postId) post.copy(content = content) else post
+                }
+                currentState.copy(posts = updatedPosts)
+            }
+
+            ApiService.updatePost(postId, content).onFailure { error ->
+                // On failure, refresh to revert the change
+                fetchPosts()
+                _uiState.update { it.copy(error = "Failed to update post: ${error.localizedMessage}") }
             }
         }
     }
 
     fun deletePost(postId: String) {
         viewModelScope.launch {
-            ApiService.deletePost(postId).onSuccess {
-                fetchPosts() // Refresh the feed to remove the deleted post
-            }.onFailure { error ->
-                _uiState.value = _uiState.value.copy(error = "Failed to delete post: ${error.localizedMessage}")
+            // ✨ OPTIMISTIC UPDATE: Remove the post locally first
+            val originalPosts = _uiState.value.posts
+            _uiState.update { currentState ->
+                currentState.copy(posts = currentState.posts.filterNot { it.id == postId })
+            }
+
+            ApiService.deletePost(postId).onFailure { error ->
+                // On failure, restore the original posts to revert the change
+                _uiState.update {
+                    it.copy(
+                        posts = originalPosts,
+                        error = "Failed to delete post: ${error.localizedMessage}"
+                    )
+                }
             }
         }
     }
 
-    // ✨ ADDED: Functions for post interactions
     fun reactToPost(postId: String, reactionType: String) {
         viewModelScope.launch {
-            ApiService.reactToPost(postId, reactionType).onSuccess {
-                // Optimistically update the UI before refetching
-                val updatedPosts = _uiState.value.posts.map { post ->
+            val originalPosts = _uiState.value.posts
+            // ✨ OPTIMISTIC UPDATE: Update the reaction state locally first
+            _uiState.update { currentState ->
+                val updatedPosts = currentState.posts.map { post ->
                     if (post.id == postId) {
-                        val reactions = post.reactions
-                        val updatedReactions = when (reactionType) {
-                            "amen" -> reactions.copy(amen = reactions.amen + 1)
-                            "hallelujah" -> reactions.copy(hallelujah = reactions.hallelujah + 1)
-                            "praiseGod" -> reactions.copy(praiseGod = reactions.praiseGod + 1)
-                            else -> reactions
+                        val userHasReacted = when (reactionType) {
+                            "amen" -> post.userReactions.amen
+                            "hallelujah" -> post.userReactions.hallelujah
+                            "praiseGod" -> post.userReactions.praiseGod
+                            else -> false
                         }
-                        post.copy(reactions = updatedReactions)
+
+                        val increment = if (userHasReacted) -1 else 1
+
+                        val updatedReactions = when (reactionType) {
+                            "amen" -> post.reactions.copy(amen = post.reactions.amen + increment)
+                            "hallelujah" -> post.reactions.copy(hallelujah = post.reactions.hallelujah + increment)
+                            "praiseGod" -> post.reactions.copy(praiseGod = post.reactions.praiseGod + increment)
+                            else -> post.reactions
+                        }
+                        val updatedUserReactions = when (reactionType) {
+                            "amen" -> post.userReactions.copy(amen = !userHasReacted)
+                            "hallelujah" -> post.userReactions.copy(hallelujah = !userHasReacted)
+                            "praiseGod" -> post.userReactions.copy(praiseGod = !userHasReacted)
+                            else -> post.userReactions
+                        }
+                        post.copy(reactions = updatedReactions, userReactions = updatedUserReactions)
                     } else {
                         post
                     }
                 }
-                _uiState.value = _uiState.value.copy(posts = updatedPosts)
+                currentState.copy(posts = updatedPosts)
+            }
 
-                // Refresh from server to get the definitive state
-                fetchPosts()
+            ApiService.reactToPost(postId, reactionType).onFailure {
+                // On failure, restore the original posts to revert the change
+                _uiState.update { it.copy(posts = originalPosts) }
             }
         }
     }
@@ -130,7 +169,17 @@ class HomeFeedViewModel : ViewModel() {
     fun addComment(postId: String, content: String) {
         viewModelScope.launch {
             ApiService.addComment(postId, content).onSuccess {
-                fetchPosts() // Refresh to show new comment count
+                // ✨ OPTIMISTIC UPDATE: Increment the comment count
+                _uiState.update { currentState ->
+                    val updatedPosts = currentState.posts.map { post ->
+                        if (post.id == postId) {
+                            post.copy(commentCount = post.commentCount + 1)
+                        } else {
+                            post
+                        }
+                    }
+                    currentState.copy(posts = updatedPosts)
+                }
             }
         }
     }
@@ -138,7 +187,17 @@ class HomeFeedViewModel : ViewModel() {
     fun sharePost(postId: String) {
         viewModelScope.launch {
             ApiService.sharePost(postId).onSuccess {
-                fetchPosts() // Refresh to show new share count
+                // ✨ OPTIMISTIC UPDATE: Increment the share count
+                _uiState.update { currentState ->
+                    val updatedPosts = currentState.posts.map { post ->
+                        if (post.id == postId) {
+                            post.copy(shareCount = post.shareCount + 1)
+                        } else {
+                            post
+                        }
+                    }
+                    currentState.copy(posts = updatedPosts)
+                }
             }
         }
     }

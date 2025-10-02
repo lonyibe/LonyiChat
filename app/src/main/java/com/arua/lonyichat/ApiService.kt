@@ -182,7 +182,7 @@ object ApiService {
         }
     }
 
-    suspend fun createPost(content: String, type: String = "post", imageUrl: String? = null): Result<Unit> {
+    suspend fun createPost(content: String, type: String = "post", imageUrl: String? = null): Result<Post> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
 
         return try {
@@ -201,12 +201,13 @@ object ApiService {
 
             withContext(Dispatchers.IO) {
                 client.newCall(request).execute().use { response ->
+                    val responseBody = response.body?.string()
                     if (!response.isSuccessful) {
-                        val responseBody = response.body?.string()
                         Log.e("ApiService", "POST /posts failed. Code: ${response.code}, Body: $responseBody")
                         throw ApiException("Failed to create post (${response.code}): ${getErrorMessage(responseBody)}")
                     }
-                    Result.success(Unit)
+                    val singlePostResponse = gson.fromJson(responseBody, SinglePostResponse::class.java)
+                    Result.success(singlePostResponse.post)
                 }
             }
         } catch (e: IOException) {
@@ -294,7 +295,6 @@ object ApiService {
         }
     }
 
-    // ✨ ADDED: Functions for post interactions
     suspend fun reactToPost(postId: String, reactionType: String): Result<Unit> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {

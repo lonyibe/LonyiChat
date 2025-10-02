@@ -9,6 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -45,6 +46,7 @@ import coil.request.ImageRequest
 import android.widget.Toast
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.ui.layout.ContentScale
+import coil.request.CachePolicy
 
 
 private const val TAG = "MainActivity"
@@ -335,9 +337,6 @@ fun ProfileScreen(viewModel: ProfileViewModel, onProfileUpdated: () -> Unit) {
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(profile.photoUrl)
                     .crossfade(true)
-                    // ✨ REMOVED: Caching is now enabled by default for speed
-                    // .memoryCachePolicy(CachePolicy.DISABLED)
-                    // .diskCachePolicy(CachePolicy.DISABLED)
                     .placeholder(R.drawable.ic_person_placeholder)
                     .error(R.drawable.ic_person_placeholder)
                     .build(),
@@ -606,7 +605,7 @@ fun HomeFeedScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 8.dp)
                 ) {
-                    items(uiState.posts) { post ->
+                    items(uiState.posts, key = { it.id }) { post -> // ✨ ADDED: key for better performance
                         PostCard(
                             post = post,
                             viewModel = viewModel,
@@ -853,16 +852,19 @@ fun PostCard(post: com.arua.lonyichat.data.Post, viewModel: HomeFeedViewModel, o
                 ReactionButton(
                     text = "Amen 🙏",
                     count = post.reactions.amen,
+                    isReacted = post.userReactions.amen,
                     onClick = { viewModel.reactToPost(post.id, "amen") }
                 )
                 ReactionButton(
                     text = "Hallelujah 🙌",
                     count = post.reactions.hallelujah,
+                    isReacted = post.userReactions.hallelujah,
                     onClick = { viewModel.reactToPost(post.id, "hallelujah") }
                 )
                 ReactionButton(
                     text = "Praise God 🎉",
                     count = post.reactions.praiseGod,
+                    isReacted = post.userReactions.praiseGod,
                     onClick = { viewModel.reactToPost(post.id, "praiseGod") }
                 )
             }
@@ -880,9 +882,17 @@ fun PostCard(post: com.arua.lonyichat.data.Post, viewModel: HomeFeedViewModel, o
 }
 
 @Composable
-fun ReactionButton(text: String, count: Int, onClick: () -> Unit) {
+fun ReactionButton(
+    text: String,
+    count: Int,
+    isReacted: Boolean,
+    onClick: () -> Unit
+) {
+    val contentColor by animateColorAsState(
+        targetValue = if (isReacted) MaterialTheme.colorScheme.primary else Color.Gray
+    )
     TextButton(onClick = onClick) {
-        Text("$text ($count)")
+        Text("$text ($count)", color = contentColor)
     }
 }
 
