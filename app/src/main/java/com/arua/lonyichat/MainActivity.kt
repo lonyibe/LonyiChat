@@ -854,20 +854,21 @@ fun PostCard(post: com.arua.lonyichat.data.Post, viewModel: HomeFeedViewModel, o
                 horizontalArrangement = Arrangement.SpaceAround,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // FIX: Replaced corrupted characters with Unicode Emojis
                 ReactionButton(
-                    text = "Amen 剌",
+                    text = "Amen 🙏",
                     count = post.reactions.amen,
                     isReacted = post.userReactions.amen,
                     onClick = { viewModel.reactToPost(post.id, "amen") }
                 )
                 ReactionButton(
-                    text = "Hallelujah 剏",
+                    text = "Hallelujah 🥳",
                     count = post.reactions.hallelujah,
                     isReacted = post.userReactions.hallelujah,
                     onClick = { viewModel.reactToPost(post.id, "hallelujah") }
                 )
                 ReactionButton(
-                    text = "Praise God 脂",
+                    text = "Praise God 🙌",
                     count = post.reactions.praiseGod,
                     isReacted = post.userReactions.praiseGod,
                     onClick = { viewModel.reactToPost(post.id, "praiseGod") }

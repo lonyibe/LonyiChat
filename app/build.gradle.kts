@@ -50,6 +50,9 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1") // BUMPED from 1.10.1 for latest features
     implementation("com.google.android.material:material:1.12.0") // BUMPED from 1.11.0 for emoji compatibility
 
+    // ✨ FIX: Explicitly adding androidx.emoji2 to ensure correct backporting of modern emojis on older Android versions. ✨
+    implementation("androidx.emoji2:emoji2:1.4.0")
+
     // Removed all Firebase and associated dependencies
 
     // OkHttp for network calls
