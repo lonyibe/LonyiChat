@@ -14,7 +14,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.LonyiChat"
-        android:usesCleartextTraffic="true"> // ✨ ADDED THIS LINE to allow HTTP connections ✨
+        android:usesCleartextTraffic="true">
 
         <activity
             android:name=".LoginActivity"
@@ -34,7 +34,11 @@
         <activity
             android:name=".MainActivity"
             android:exported="false"
-            android:label="@string/app_name"
+            android:theme="@style/Theme.LonyiChat.AppCompat" />
+
+        <activity
+            android:name=".CommentsActivity"
+            android:exported="false"
             android:theme="@style/Theme.LonyiChat.AppCompat" />
 
     </application>

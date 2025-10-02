@@ -557,9 +557,6 @@ fun HomeFeedScreen(
     var showPhotoPostDialog by remember { mutableStateOf(false) }
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
 
-    var showCommentDialogForPostId by remember { mutableStateOf<String?>(null) }
-
-
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
         onResult = { uri: Uri? ->
@@ -605,11 +602,16 @@ fun HomeFeedScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 8.dp)
                 ) {
-                    items(uiState.posts, key = { it.id }) { post -> // ✨ ADDED: key for better performance
+                    items(uiState.posts, key = { it.id }) { post ->
                         PostCard(
                             post = post,
                             viewModel = viewModel,
-                            onCommentClicked = { showCommentDialogForPostId = post.id }
+                            onCommentClicked = {
+                                // ✨ LAUNCH CommentsActivity
+                                val intent = Intent(context, CommentsActivity::class.java)
+                                intent.putExtra("POST_ID", post.id)
+                                context.startActivity(intent)
+                            }
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                     }
@@ -637,17 +639,6 @@ fun HomeFeedScreen(
             onPost = { caption ->
                 viewModel.createPhotoPost(caption, selectedImageUri!!, context)
                 showPhotoPostDialog = false
-            }
-        )
-    }
-
-    if (showCommentDialogForPostId != null) {
-        val postId = showCommentDialogForPostId!!
-        CommentCreationDialog(
-            onDismiss = { showCommentDialogForPostId = null },
-            onComment = { content ->
-                viewModel.addComment(postId, content)
-                showCommentDialogForPostId = null
             }
         )
     }
@@ -1077,41 +1068,6 @@ fun PhotoPostCreationDialog(
                 } else {
                     Text("Post")
                 }
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun CommentCreationDialog(
-    onDismiss: () -> Unit,
-    onComment: (String) -> Unit
-) {
-    var commentContent by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add a comment") },
-        text = {
-            OutlinedTextField(
-                value = commentContent,
-                onValueChange = { commentContent = it },
-                label = { Text("Your comment...") },
-                modifier = Modifier.fillMaxWidth()
-            )
-        },
-        confirmButton = {
-            Button(
-                onClick = { onComment(commentContent) },
-                enabled = commentContent.isNotBlank()
-            ) {
-                Text("Post")
             }
         },
         dismissButton = {
