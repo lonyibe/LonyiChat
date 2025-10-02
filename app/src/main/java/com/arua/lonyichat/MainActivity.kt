@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalFoundationApi::class) // ✨ FIX: Added file-level OptIn for combinedClickable
+
 package com.arua.lonyichat
 
 import android.app.Activity
@@ -13,13 +15,16 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -38,13 +43,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.core.view.WindowInsetsControllerCompat
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.arua.lonyichat.data.ApiService
-import com.arua.lonyichat.data.Church
-import com.arua.lonyichat.data.MediaItem
-import com.arua.lonyichat.data.Profile
+import com.arua.lonyichat.data.*
 import com.arua.lonyichat.ui.theme.LonyiChatTheme
 import com.arua.lonyichat.ui.viewmodel.*
 import kotlinx.coroutines.launch
@@ -177,14 +181,12 @@ fun LonyiChatApp(
             }
         },
         floatingActionButton = {
-            if (selectedItem is Screen.Media) {
-                // Reworked FAB to redirect to the unified content creation screen
+            if (selectedItem is Screen.Home) { // Changed FAB to Home screen for general content creation
                 val createPostLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.StartActivityForResult()
                 ) { result ->
                     if (result.resultCode == Activity.RESULT_OK) {
-                        // Refresh media and home feeds after successful upload from CreatePostActivity
-                        mediaViewModel.fetchMedia()
+                        // Refresh home feed after successful upload
                         homeFeedViewModel.fetchPosts()
                     }
                 }
@@ -194,7 +196,24 @@ fun LonyiChatApp(
                         createPostLauncher.launch(intent)
                     }
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = "Create Content")
+                    Icon(Icons.Default.Edit, contentDescription = "Create Post")
+                }
+            } else if (selectedItem is Screen.Media) {
+                val createMediaLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.StartActivityForResult()
+                ) { result ->
+                    if (result.resultCode == Activity.RESULT_OK) {
+                        // Refresh media feed after successful upload
+                        mediaViewModel.fetchMedia()
+                    }
+                }
+                FloatingActionButton(
+                    onClick = {
+                        val intent = Intent(context, CreateMediaActivity::class.java)
+                        createMediaLauncher.launch(intent)
+                    }
+                ) {
+                    Icon(Icons.Default.VideoCall, contentDescription = "Upload Media")
                 }
             }
         }
@@ -590,6 +609,24 @@ fun HomeFeedScreen(
         }
     }
 
+    // NEW: Reactor List Dialog logic
+    val reactorUiState by viewModel.reactorUiState.collectAsState()
+
+    // Show Reactor List Dialog if data is loading or loaded
+    if (reactorUiState.reactors.amen.isNotEmpty() || reactorUiState.reactors.hallelujah.isNotEmpty() || reactorUiState.reactors.praiseGod.isNotEmpty() || reactorUiState.isLoading) {
+        ReactorListDialog(
+            uiState = reactorUiState,
+            onDismiss = { viewModel.clearReactorState() } // Clear state on dismiss
+        )
+    }
+
+    if (reactorUiState.error != null) {
+        // Show Toast for error in loading reactors (if a previous one exists, the one below it will clear it)
+        Toast.makeText(LocalContext.current, "Error loading reactors: ${reactorUiState.error}", Toast.LENGTH_LONG).show()
+        viewModel.clearReactorState()
+    }
+
+
     val lazyListState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
@@ -639,7 +676,7 @@ fun HomeFeedScreen(
                             createPostLauncher.launch(intent)
                         }
                     )
-                    Divider(color = Color.Gray.copy(alpha = 0.5f), thickness = 1.dp)
+                    Divider(color = Color.Gray.copy(alpha = 0.3f), thickness = 1.dp)
                 }
 
                 items(uiState.posts, key = { it.id }) { post ->
@@ -733,6 +770,9 @@ fun PostCard(post: com.arua.lonyichat.data.Post, viewModel: HomeFeedViewModel, o
     val isAuthor = post.authorId == currentUserId
     var showEditDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+
+    // ✨ NEW: State for the Reaction Selector Pop-up
+    var showReactionSelector by remember { mutableStateOf(false) }
 
 
     if (isAuthor && showEditDialog) {
@@ -848,67 +888,59 @@ fun PostCard(post: com.arua.lonyichat.data.Post, viewModel: HomeFeedViewModel, o
                 }
             }
 
-            Divider()
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                horizontalArrangement = Arrangement.SpaceAround,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // FIX: Replaced corrupted characters with Unicode Emojis
-                ReactionButton(
-                    text = "Amen 🙏",
-                    count = post.reactions.amen,
-                    isReacted = post.userReactions.amen,
-                    onClick = { viewModel.reactToPost(post.id, "amen") }
+            // ✨ NEW: Reaction Summary Bar
+            PostReactionSummary(
+                post = post,
+                onSummaryClicked = {
+                    viewModel.fetchReactors(post.id)
+                }
+            )
+
+            // ✨ NEW: Interaction Bar (Like, Comment, Share)
+            Box(modifier = Modifier.fillMaxWidth()) {
+                PostInteractionBar(
+                    post = post,
+                    viewModel = viewModel,
+                    onCommentClicked = onCommentClicked,
+                    onLikeClicked = {
+                        // Single click acts as a default 'amen' (Like) toggle
+                        viewModel.reactToPost(post.id, "amen")
+                    },
+                    onLikeLongPressed = {
+                        // Long click shows the reaction selector
+                        showReactionSelector = true
+                    }
                 )
-                ReactionButton(
-                    text = "Hallelujah 🥳",
-                    count = post.reactions.hallelujah,
-                    isReacted = post.userReactions.hallelujah,
-                    onClick = { viewModel.reactToPost(post.id, "hallelujah") }
-                )
-                ReactionButton(
-                    text = "Praise God 🙌",
-                    count = post.reactions.praiseGod,
-                    isReacted = post.userReactions.praiseGod,
-                    onClick = { viewModel.reactToPost(post.id, "praiseGod") }
-                )
-            }
-            Divider()
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceAround
-            ) {
-                InteractionButton(icon = Icons.Default.ThumbUp, text = "Like", onClick = { viewModel.reactToPost(post.id, "amen") })
-                InteractionButton(icon = Icons.Default.Comment, text = "Comment", onClick = onCommentClicked)
-                InteractionButton(icon = Icons.Default.Share, text = "Share", onClick = { viewModel.sharePost(post.id) })
+
+                // ✨ Reaction Selector Menu (Positioned just above the reaction button)
+                if (showReactionSelector) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .offset(x = 16.dp, y = (-56).dp) // Adjust position to float above the button
+                    ) {
+                        ReactionSelectorMenu(
+                            onDismiss = { showReactionSelector = false },
+                            onReactionSelected = { reactionType ->
+                                viewModel.reactToPost(post.id, reactionType)
+                                showReactionSelector = false
+                            }
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-fun ReactionButton(
-    text: String,
-    count: Int,
-    isReacted: Boolean,
-    onClick: () -> Unit
-) {
-    val contentColor by animateColorAsState(
-        targetValue = if (isReacted) MaterialTheme.colorScheme.primary else Color.Gray
-    )
-    TextButton(onClick = onClick) {
-        Text("$text ($count)", color = contentColor)
-    }
-}
-
-@Composable
-fun InteractionButton(icon: ImageVector, text: String, onClick: () -> Unit) {
+fun InteractionButton(icon: ImageVector, text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
+        modifier = modifier
             .clickable(onClick = onClick)
-            .padding(vertical = 8.dp, horizontal = 16.dp)
+            .padding(vertical = 8.dp, horizontal = 16.dp),
+        horizontalArrangement = Arrangement.Center
     ) {
         Icon(icon, contentDescription = text, tint = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.width(8.dp))
@@ -916,7 +948,272 @@ fun InteractionButton(icon: ImageVector, text: String, onClick: () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+// ✨ NEW: PostReactionSummary (Display total count and trigger dialog) ✨
+@Composable
+fun PostReactionSummary(post: com.arua.lonyichat.data.Post, onSummaryClicked: () -> Unit) {
+    val totalReactions = post.reactions.amen + post.reactions.hallelujah + post.reactions.praiseGod
+
+    // Divider is always shown, but the summary is only shown if there are reactions
+    Divider(color = Color.Gray.copy(alpha = 0.3f), thickness = 1.dp)
+
+    if (totalReactions > 0) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onSummaryClicked)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Reaction icons placeholder (Facebook-like)
+                if (post.reactions.amen > 0) {
+                    Text("🙏", fontSize = 16.sp)
+                    Spacer(Modifier.width(4.dp))
+                }
+                if (post.reactions.hallelujah > 0) {
+                    Text("🥳", fontSize = 16.sp)
+                    Spacer(Modifier.width(4.dp))
+                }
+                if (post.reactions.praiseGod > 0) {
+                    Text("🙌", fontSize = 16.sp)
+                    Spacer(Modifier.width(4.dp))
+                }
+
+                Text(
+                    text = totalReactions.toString(),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(start = 4.dp)
+                )
+            }
+
+            // Show comment and share counts on the right
+            Text(
+                text = "${post.commentCount} Comments · ${post.shareCount} Shares",
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.Gray
+            )
+        }
+        Divider(color = Color.Gray.copy(alpha = 0.3f), thickness = 1.dp)
+    }
+}
+
+
+// ✨ NEW: PostInteractionBar (Handles Like button with Long-Press) ✨
+@Composable
+fun PostInteractionBar(
+    post: com.arua.lonyichat.data.Post,
+    viewModel: HomeFeedViewModel,
+    onCommentClicked: () -> Unit,
+    onLikeClicked: () -> Unit,
+    onLikeLongPressed: () -> Unit
+) {
+    val currentReaction = when {
+        post.userReactions.amen -> "amen"
+        post.userReactions.hallelujah -> "hallelujah"
+        post.userReactions.praiseGod -> "praiseGod"
+        else -> null
+    }
+
+    // Determine the icon and text based on the user's current reaction
+    val (icon, text) = when (currentReaction) {
+        "amen" -> Pair(Icons.Default.ThumbUp, "Amen")
+        "hallelujah" -> Pair(Icons.Default.Star, "Hallelujah")
+        "praiseGod" -> Pair(Icons.Default.Favorite, "Praise God")
+        else -> Pair(Icons.Default.ThumbUp, "Like")
+    }
+
+    val contentColor by animateColorAsState(
+        targetValue = if (currentReaction != null) MaterialTheme.colorScheme.primary else Color.Gray,
+        label = "reactionColor"
+    )
+
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+        horizontalArrangement = Arrangement.SpaceAround,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // --- Reaction Button (Long Press for Selector) ---
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .weight(1f)
+                .combinedClickable(
+                    onClick = onLikeClicked, // Single click for default reaction toggle (Amen)
+                    onLongClick = onLikeLongPressed // Long click for reaction selection
+                )
+                .padding(vertical = 8.dp, horizontal = 16.dp),
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(icon, contentDescription = text, tint = contentColor)
+            Spacer(Modifier.width(8.dp))
+            Text(text, color = contentColor)
+        }
+
+        // --- Comment Button ---
+        InteractionButton(
+            icon = Icons.Default.Comment,
+            text = "Comment",
+            onClick = onCommentClicked,
+            modifier = Modifier.weight(1f)
+        )
+
+        // --- Share Button ---
+        InteractionButton(
+            icon = Icons.Default.Share,
+            text = "Share",
+            onClick = { viewModel.sharePost(post.id) },
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+// ✨ NEW: ReactionSelectorMenu (Simple menu for reaction selection) ✨
+@Composable
+fun ReactionSelectorMenu(
+    onDismiss: () -> Unit,
+    onReactionSelected: (reactionType: String) -> Unit
+) {
+    // A Card to visually represent a floating reaction selector bar
+    Card(
+        elevation = CardDefaults.cardElevation(8.dp),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Row(
+            modifier = Modifier.padding(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Amen
+            TextButton(onClick = { onReactionSelected("amen"); onDismiss() }) { Text("🙏 Amen") }
+            // Hallelujah
+            TextButton(onClick = { onReactionSelected("hallelujah"); onDismiss() }) { Text("🥳 Hallelujah") }
+            // Praise God
+            TextButton(onClick = { onReactionSelected("praiseGod"); onDismiss() }) { Text("🙌 Praise God") }
+        }
+    }
+}
+
+// ✨ NEW: ReactorListDialog (Displays list of users who reacted) ✨
+@Composable
+fun ReactorListDialog(
+    uiState: ReactorUiState,
+    onDismiss: () -> Unit
+) {
+    // Determine the content to display based on the current loading/data state
+    val content: @Composable () -> Unit = {
+        if (uiState.isLoading) {
+            Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else if (uiState.error != null) {
+            Text("Error loading reactions: ${uiState.error}", color = MaterialTheme.colorScheme.error)
+        } else {
+            val amenReactors = uiState.reactors.amen
+            val hallelujahReactors = uiState.reactors.hallelujah
+            val praiseGodReactors = uiState.reactors.praiseGod
+
+            // Get all unique reactors for the "All" tab
+            val allReactors = (amenReactors + hallelujahReactors + praiseGodReactors)
+                .distinctBy { it.userId }
+                .toMutableList()
+
+            Column(modifier = Modifier.fillMaxWidth()) {
+                // Tab Row for Reaction Types (All, Amen, Hallelujah, Praise God)
+                var selectedTab by remember { mutableStateOf(0) }
+                val tabs = listOf(
+                    Triple("All", allReactors.size, null),
+                    Triple("Amen", amenReactors.size, "🙏"),
+                    Triple("Hallelujah", hallelujahReactors.size, "🥳"),
+                    Triple("Praise God", praiseGodReactors.size, "🙌")
+                )
+
+                ScrollableTabRow(
+                    selectedTabIndex = selectedTab,
+                    containerColor = MaterialTheme.colorScheme.background,
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    tabs.forEachIndexed { index, tabData ->
+                        val (title, count, emoji) = tabData
+                        Tab(
+                            selected = selectedTab == index,
+                            onClick = { selectedTab = index },
+                            text = { Text("$title ($count)", style = MaterialTheme.typography.labelLarge) },
+                            icon = if (emoji != null) {
+                                { Text(emoji, fontSize = 20.sp) }
+                            } else null
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                val currentList = when (selectedTab) {
+                    1 -> amenReactors
+                    2 -> hallelujahReactors
+                    3 -> praiseGodReactors
+                    else -> allReactors
+                }
+
+                if (currentList.isEmpty()) {
+                    Text("No one has left this reaction yet.", modifier = Modifier.padding(16.dp))
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp, max = 300.dp)
+                    ) {
+                        items(currentList, key = { it.userId }) { reactor ->
+                            ReactorItem(reactor = reactor)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Post Reactions") },
+        text = content,
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        },
+        containerColor = MaterialTheme.colorScheme.background,
+        textContentColor = MaterialTheme.colorScheme.onBackground
+    )
+}
+
+@Composable
+fun ReactorItem(reactor: Reactor) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(reactor.photoUrl)
+                .crossfade(true)
+                .placeholder(R.drawable.ic_person_placeholder)
+                .error(R.drawable.ic_person_placeholder)
+                .build(),
+            contentDescription = "Reactor Profile Photo",
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape),
+            contentScale = ContentScale.Crop
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(reactor.name, fontWeight = FontWeight.Medium)
+    }
+}
+
+
 @Composable
 fun EditPostDialog(
     postContent: String,

@@ -3,7 +3,7 @@ package com.arua.lonyichat.data
 import android.app.Activity
 import android.content.Context
 import android.net.Uri
-import android.util.Log // Already present
+import android.util.Log // Re-added Log import
 import com.arua.lonyichat.LonyiChatApp
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
@@ -15,7 +15,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
-import java.io.InputStream
+import java.io.InputStream // Re-added InputStream import
 
 class ApiException(message: String) : IOException(message)
 
@@ -109,6 +109,7 @@ object ApiService {
                     return@withContext Result.failure(ApiException("Failed to open image file."))
                 }
 
+                // FIX: inputStream.use { it.readBytes() } is correct, the IDE error was likely due to missing InputStream import
                 val fileBytes = inputStream.use { it.readBytes() }
                 val requestBody = fileBytes.toRequestBody("image/*".toMediaTypeOrNull(), 0, fileBytes.size)
 
@@ -151,6 +152,7 @@ object ApiService {
                     return@withContext Result.failure(ApiException("Failed to open image file."))
                 }
 
+                // FIX: inputStream.use { it.readBytes() } is correct
                 val fileBytes = inputStream.use { it.readBytes() }
                 val requestBody = fileBytes.toRequestBody("image/*".toMediaTypeOrNull(), 0, fileBytes.size)
 
@@ -564,9 +566,33 @@ object ApiService {
         }
     }
 
-    // ✨ ADDED: Function to upload media files
+    suspend fun getPostReactors(postId: String): Result<ReactorsResponse> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val request = Request.Builder()
+                .url("$BASE_URL/posts/$postId/reactors")
+                .addHeader("Authorization", "Bearer $token")
+                .get()
+                .build()
+
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        val errorBody = response.body?.string()
+                        throw ApiException("Failed to fetch reactors: ${getErrorMessage(errorBody)}")
+                    }
+                    val body = response.body!!.string()
+                    val reactorsResponse = gson.fromJson(body, ReactorsResponse::class.java)
+                    Result.success(reactorsResponse)
+                }
+            }
+        } catch (e: Exception) {
+            return Result.failure(e)
+        }
+    }
+
     suspend fun uploadMedia(uri: Uri, title: String, description: String, context: Activity): Result<Unit> {
-        Log.d("ApiService", "Starting media upload for title: $title") // ADDED LOG
+        Log.d("ApiService", "Starting media upload for title: $title")
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
 
         return withContext(Dispatchers.IO) {
@@ -574,10 +600,11 @@ object ApiService {
                 val inputStream = context.contentResolver.openInputStream(uri)
                 val mimeType = context.contentResolver.getType(uri)
                 if (inputStream == null || mimeType == null) {
-                    Log.e("ApiService", "Failed to open media file or get MIME type.") // ADDED LOG
+                    Log.e("ApiService", "Failed to open media file or get MIME type.")
                     return@withContext Result.failure(ApiException("Failed to open media file."))
                 }
 
+                // FIX: inputStream.use { it.readBytes() } is correct
                 val fileBytes = inputStream.use { it.readBytes() }
                 val requestBody = fileBytes.toRequestBody(mimeType.toMediaTypeOrNull())
 
@@ -595,16 +622,16 @@ object ApiService {
                     .build()
 
                 client.newCall(request).execute().use { response ->
-                    Log.d("ApiService", "Media upload response code: ${response.code}") // ADDED LOG
+                    Log.d("ApiService", "Media upload response code: ${response.code}")
                     if (!response.isSuccessful) {
                         val errorBody = response.body?.string()
-                        Log.e("ApiService", "Media upload failed. Error body: $errorBody") // ADDED LOG
+                        Log.e("ApiService", "Media upload failed. Error body: $errorBody")
                         throw ApiException("Media upload failed: ${getErrorMessage(errorBody)}")
                     }
                     Result.success(Unit)
                 }
             } catch (e: Exception) {
-                Log.e("ApiService", "Media upload exception: ${e.localizedMessage}") // ADDED LOG
+                Log.e("ApiService", "Media upload exception: ${e.localizedMessage}")
                 Result.failure(e)
             }
         }

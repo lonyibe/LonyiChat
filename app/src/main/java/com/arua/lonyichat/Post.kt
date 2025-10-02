@@ -60,3 +60,21 @@ data class SinglePostResponse(
     val success: Boolean,
     val post: Post
 )
+
+// ✨ NEW: Data models for fetching reactors list from the new API endpoint ✨
+data class Reactor(
+    val userId: String,
+    val name: String,
+    val photoUrl: String?
+)
+
+data class ReactionsWithUsers(
+    val amen: List<Reactor> = emptyList(),
+    val hallelujah: List<Reactor> = emptyList(),
+    val praiseGod: List<Reactor> = emptyList()
+)
+
+data class ReactorsResponse(
+    val success: Boolean,
+    val reactions: ReactionsWithUsers
+)

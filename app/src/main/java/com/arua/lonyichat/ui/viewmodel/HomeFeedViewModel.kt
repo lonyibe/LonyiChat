@@ -2,11 +2,12 @@ package com.arua.lonyichat.ui.viewmodel
 
 import android.app.Activity
 import android.net.Uri
-import android.util.Log // Already present
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arua.lonyichat.data.ApiService
 import com.arua.lonyichat.data.Post
+import com.arua.lonyichat.data.ReactionsWithUsers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,9 +23,20 @@ data class HomeFeedUiState(
     val error: String? = null
 )
 
+// ✨ NEW: State for the Reactor List Dialog ✨
+data class ReactorUiState(
+    val isLoading: Boolean = false,
+    val reactors: ReactionsWithUsers = ReactionsWithUsers(),
+    val error: String? = null
+)
+
 class HomeFeedViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(HomeFeedUiState())
     val uiState: StateFlow<HomeFeedUiState> = _uiState
+
+    // ✨ NEW: Reactor Dialog State ✨
+    private val _reactorUiState = MutableStateFlow(ReactorUiState())
+    val reactorUiState: StateFlow<ReactorUiState> = _reactorUiState.asStateFlow()
 
     // ✨ 1. ADDED: A state to signal when a post is successfully created
     private val _postCreationSuccess = MutableStateFlow(false)
@@ -150,34 +162,69 @@ class HomeFeedViewModel : ViewModel() {
         }
     }
 
+    // ✨ NEW: Function to fetch reactors for the dialog ✨
+    fun fetchReactors(postId: String) {
+        viewModelScope.launch {
+            _reactorUiState.update { ReactorUiState(isLoading = true) }
+            ApiService.getPostReactors(postId).onSuccess { response ->
+                _reactorUiState.update { it.copy(reactors = response.reactions, isLoading = false) }
+            }.onFailure { error ->
+                _reactorUiState.update { it.copy(error = error.localizedMessage, isLoading = false) }
+            }
+        }
+    }
+
+    // ✨ NEW: Function to clear reactor state after dialog dismisses ✨
+    fun clearReactorState() {
+        _reactorUiState.value = ReactorUiState()
+    }
+
     fun reactToPost(postId: String, reactionType: String) {
         viewModelScope.launch {
             val originalPosts = _uiState.value.posts
             _uiState.update { currentState ->
                 val updatedPosts = currentState.posts.map { post ->
                     if (post.id == postId) {
-                        val userHasReacted = when (reactionType) {
+
+                        val isSameReaction = when (reactionType) {
                             "amen" -> post.userReactions.amen
                             "hallelujah" -> post.userReactions.hallelujah
                             "praiseGod" -> post.userReactions.praiseGod
                             else -> false
                         }
 
-                        val increment = if (userHasReacted) -1 else 1
+                        // 1. Calculate new reaction counts (always reset other two, then set the new/un-set the old)
+                        val updatedReactions = post.reactions.copy(
+                            amen = post.reactions.amen - if (post.userReactions.amen) 1 else 0,
+                            hallelujah = post.reactions.hallelujah - if (post.userReactions.hallelujah) 1 else 0,
+                            praiseGod = post.reactions.praiseGod - if (post.userReactions.praiseGod) 1 else 0
+                        )
 
-                        val updatedReactions = when (reactionType) {
-                            "amen" -> post.reactions.copy(amen = post.reactions.amen + increment)
-                            "hallelujah" -> post.reactions.copy(hallelujah = post.reactions.hallelujah + increment)
-                            "praiseGod" -> post.reactions.copy(praiseGod = post.reactions.praiseGod + increment)
-                            else -> post.reactions
+                        val finalReactions = when {
+                            // If user clicks the SAME reaction, it's a removal (already removed in updatedReactions)
+                            isSameReaction -> updatedReactions
+                            // If user clicks a NEW reaction, increment the new one
+                            else -> updatedReactions.copy(
+                                amen = updatedReactions.amen + if (reactionType == "amen") 1 else 0,
+                                hallelujah = updatedReactions.hallelujah + if (reactionType == "hallelujah") 1 else 0,
+                                praiseGod = updatedReactions.praiseGod + if (reactionType == "praiseGod") 1 else 0
+                            )
                         }
-                        val updatedUserReactions = when (reactionType) {
-                            "amen" -> post.userReactions.copy(amen = !userHasReacted)
-                            "hallelujah" -> post.userReactions.copy(hallelujah = !userHasReacted)
-                            "praiseGod" -> post.userReactions.copy(praiseGod = !userHasReacted)
-                            else -> post.userReactions
+
+                        // 2. Calculate new user reaction flags
+                        val finalUserReactions = when {
+                            // If user clicks the SAME reaction, clear all flags (removal)
+                            isSameReaction -> post.userReactions.copy(amen = false, hallelujah = false, praiseGod = false)
+                            // If user clicks a NEW reaction, set only the new one to true
+                            else -> post.userReactions.copy(
+                                amen = reactionType == "amen",
+                                hallelujah = reactionType == "hallelujah",
+                                praiseGod = reactionType == "praiseGod"
+                            )
                         }
-                        post.copy(reactions = updatedReactions, userReactions = updatedUserReactions)
+
+                        post.copy(reactions = finalReactions, userReactions = finalUserReactions)
+
                     } else {
                         post
                     }
@@ -186,6 +233,7 @@ class HomeFeedViewModel : ViewModel() {
             }
 
             ApiService.reactToPost(postId, reactionType).onFailure {
+                // If API fails, revert the optimistic update
                 _uiState.update { it.copy(posts = originalPosts) }
             }
         }
