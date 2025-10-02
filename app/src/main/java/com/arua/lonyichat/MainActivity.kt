@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalFoundationApi::class) // ✨ FIX: Removed ExperimentalMaterial3Api opt-in from file level
+@file:OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class) // ✨ FIX: ADDED ExperimentalMaterial3Api to file level
 
 package com.arua.lonyichat
 
@@ -126,7 +126,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+// REMOVED @OptIn(ExperimentalMaterial3Api::class) - moved to file level
 @Composable
 fun LonyiChatApp(
     homeFeedViewModel: HomeFeedViewModel,
@@ -247,8 +247,7 @@ fun LonyiChatApp(
     }
 }
 // End LonyiChatApp
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
+@Composable // REMOVED @OptIn(ExperimentalMaterial3Api::class) - moved to file level
 fun LonyiChatTopBar(
     title: String,
     showBackButton: Boolean,
@@ -307,7 +306,6 @@ fun LonyiChatBottomBar(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScreenContent(
     screen: Screen,
@@ -516,7 +514,6 @@ fun ProfileDetail(icon: ImageVector, label: String, value: String) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditProfileDialog(
     profile: Profile?,
@@ -605,6 +602,7 @@ fun EditProfileDialog(
     )
 }
 
+// REMOVED @OptIn(ExperimentalMaterial3Api::class) - moved to file level
 @Composable
 fun HomeFeedScreen(
     profileState: UserProfileState,
