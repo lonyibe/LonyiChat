@@ -35,9 +35,11 @@ class CommentsViewModel : ViewModel() {
     fun addComment(postId: String, content: String) {
         viewModelScope.launch {
             ApiService.addComment(postId, content)
-                .onSuccess {
-                    // Refresh the comments list to show the new one
-                    fetchComments(postId)
+                .onSuccess { newComment ->
+                    // ✨ OPTIMISTIC UPDATE: Add the new comment directly to the list
+                    _uiState.update { currentState ->
+                        currentState.copy(comments = currentState.comments + newComment)
+                    }
                 }
                 .onFailure { error ->
                     _uiState.update { it.copy(error = "Failed to post comment: ${error.localizedMessage}") }

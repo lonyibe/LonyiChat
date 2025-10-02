@@ -38,6 +38,8 @@ object ApiService {
     data class AuthResponse(val success: Boolean, val token: String, val userId: String, val message: String?)
     data class ChatConversationsResponse(val success: Boolean, val chats: List<Chat>)
     data class CommentsResponse(val success: Boolean, val comments: List<Comment>)
+    // ✨ ADDED: Wrapper for a single comment response
+    data class SingleCommentResponse(val success: Boolean, val comment: Comment)
 
 
     private fun getErrorMessage(responseBody: String?): String {
@@ -316,7 +318,7 @@ object ApiService {
         }
     }
 
-    suspend fun addComment(postId: String, content: String): Result<Unit> {
+    suspend fun addComment(postId: String, content: String): Result<Comment> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {
             val json = gson.toJson(mapOf("content" to content))
@@ -328,10 +330,15 @@ object ApiService {
                 .build()
             withContext(Dispatchers.IO) {
                 client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) throw ApiException("Failed to add comment")
+                    if (!response.isSuccessful) {
+                        val errorBody = response.body?.string()
+                        throw ApiException("Failed to add comment: ${getErrorMessage(errorBody)}")
+                    }
+                    val responseBody = response.body!!.string()
+                    val singleCommentResponse = gson.fromJson(responseBody, SingleCommentResponse::class.java)
+                    Result.success(singleCommentResponse.comment)
                 }
             }
-            Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
         }
