@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -33,6 +34,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -173,6 +175,26 @@ fun LonyiChatApp(
                     onItemSelected = { selectedItem = it }
                 )
             }
+        },
+        // ✨ ADDED: FloatingActionButton for the Media screen
+        floatingActionButton = {
+            if (selectedItem is Screen.Media) {
+                val createMediaLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.StartActivityForResult()
+                ) { result ->
+                    if (result.resultCode == Activity.RESULT_OK) {
+                        mediaViewModel.fetchMedia()
+                    }
+                }
+                FloatingActionButton(
+                    onClick = {
+                        val intent = Intent(context, CreateMediaActivity::class.java)
+                        createMediaLauncher.launch(intent)
+                    }
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Upload Media")
+                }
+            }
         }
     ) { innerPadding ->
         Box(
@@ -210,7 +232,7 @@ fun LonyiChatTopBar(
             if (showBackButton) {
                 IconButton(onClick = onBackClicked) {
                     Icon(
-                        imageVector = Icons.Filled.ArrowBack,
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back"
                     )
                 }
@@ -280,9 +302,7 @@ fun ScreenContent(
     }
 }
 
-// ... The rest of the file is correct ...
-// I am including the full file for completeness
-
+// ... The rest of the file is correct and remains unchanged...
 @Composable
 fun ProfileScreen(viewModel: ProfileViewModel, onProfileUpdated: () -> Unit) {
     val context = LocalContext.current

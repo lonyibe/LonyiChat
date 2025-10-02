@@ -17,6 +17,11 @@
         android:usesCleartextTraffic="true">
 
         <activity
+            android:name=".CreateMediaActivity"
+            android:exported="false"
+            android:theme="@style/Theme.LonyiChat.AppCompat" />
+
+        <activity
             android:name=".CreatePostActivity"
             android:exported="false"
             android:theme="@style/Theme.LonyiChat.AppCompat" />

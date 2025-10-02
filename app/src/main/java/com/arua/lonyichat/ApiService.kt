@@ -38,7 +38,6 @@ object ApiService {
     data class AuthResponse(val success: Boolean, val token: String, val userId: String, val message: String?)
     data class ChatConversationsResponse(val success: Boolean, val chats: List<Chat>)
     data class CommentsResponse(val success: Boolean, val comments: List<Comment>)
-    // ✨ ADDED: Wrapper for a single comment response
     data class SingleCommentResponse(val success: Boolean, val comment: Comment)
 
 
@@ -562,6 +561,47 @@ object ApiService {
             }
         } catch (e: Exception) {
             return Result.failure(e)
+        }
+    }
+
+    // ✨ ADDED: Function to upload media files
+    suspend fun uploadMedia(uri: Uri, title: String, description: String, context: Activity): Result<Unit> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+
+        return withContext(Dispatchers.IO) {
+            try {
+                val inputStream = context.contentResolver.openInputStream(uri)
+                val mimeType = context.contentResolver.getType(uri)
+                if (inputStream == null || mimeType == null) {
+                    return@withContext Result.failure(ApiException("Failed to open media file."))
+                }
+
+                val fileBytes = inputStream.use { it.readBytes() }
+                val requestBody = fileBytes.toRequestBody(mimeType.toMediaTypeOrNull())
+
+                val multipartBody = MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart("title", title)
+                    .addFormDataPart("description", description)
+                    .addFormDataPart("mediaFile", "upload", requestBody)
+                    .build()
+
+                val request = Request.Builder()
+                    .url("$BASE_URL/upload/media")
+                    .addHeader("Authorization", "Bearer $token")
+                    .post(multipartBody)
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        val errorBody = response.body?.string()
+                        throw ApiException("Media upload failed: ${getErrorMessage(errorBody)}")
+                    }
+                    Result.success(Unit)
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
         }
     }
 }
