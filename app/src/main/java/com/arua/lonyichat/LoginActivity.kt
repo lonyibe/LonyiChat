@@ -9,23 +9,24 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
-// REMOVED ALL FIREBASE AUTH IMPORTS
 import com.arua.lonyichat.data.ApiService
-import androidx.lifecycle.lifecycleScope // ADDED
-import kotlinx.coroutines.launch // ADDED
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 
 class LoginActivity : AppCompatActivity() {
-
-    // Removed Firebase Auth initialization
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // WARNING: There is no check here if the user is already logged in (no Firebase currentUser).
-        // A proper solution would use SharedPreferences to store the JWT token and check it here.
-
         // This line MUST be called before "setContentView"
         installSplashScreen()
+
+        // ✨ PERSISTENT LOGIN CHECK: Check if the user is already logged in.
+        if (ApiService.getCurrentUserId() != null) {
+            // If they are, navigate directly to the main screen.
+            navigateToMainScreen()
+            return // Stop the rest of the onCreate from running.
+        }
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_login)
@@ -64,21 +65,17 @@ class LoginActivity : AppCompatActivity() {
         loginButton.isEnabled = false
         loginButton.text = "Logging in..."
 
-        // NEW: Call the custom API login function
         lifecycleScope.launch {
             val result = ApiService.login(email, password)
 
             result.onSuccess {
-                // Login success, the JWT token is now stored in ApiService
                 Toast.makeText(this@LoginActivity, "Login Successful!", Toast.LENGTH_SHORT).show()
                 navigateToMainScreen()
             }.onFailure { error ->
-                // If sign in fails, display a message to the user.
                 val message = error.localizedMessage ?: "Login failed due to network error."
                 Toast.makeText(this@LoginActivity, "Login failed: $message", Toast.LENGTH_LONG).show()
             }
 
-            // Re-enable button on completion (success or failure)
             loginButton.isEnabled = true
             loginButton.text = "Login"
         }
@@ -89,7 +86,6 @@ class LoginActivity : AppCompatActivity() {
      */
     private fun navigateToMainScreen() {
         val intent = Intent(this, MainActivity::class.java)
-        // Clears all previous activities so the user cannot press back to login
         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         startActivity(intent)
         finish()

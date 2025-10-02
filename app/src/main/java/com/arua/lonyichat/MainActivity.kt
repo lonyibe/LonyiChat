@@ -45,7 +45,6 @@ import coil.request.ImageRequest
 import android.widget.Toast
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.ui.layout.ContentScale
-import coil.request.CachePolicy
 
 
 private const val TAG = "MainActivity"
@@ -262,9 +261,7 @@ fun ScreenContent(
         Screen.Groups -> GroupsChurchScreen(churchesViewModel)
         Screen.Bible -> BibleStudyScreen(bibleViewModel)
         Screen.Chat -> ChatScreen(chatListViewModel)
-        Screen.Media -> MediaScreen(mediaViewModel,
-        )
-        // ✨ PASS a callback to the ProfileScreen that refreshes the home feed.
+        Screen.Media -> MediaScreen(mediaViewModel)
         Screen.Profile -> ProfileScreen(profileViewModel) {
             homeFeedViewModel.fetchPosts()
         }
@@ -276,7 +273,7 @@ fun ScreenContent(
 // ---------------------------------------------------------------------------------
 
 @Composable
-fun ProfileScreen(viewModel: ProfileViewModel, onProfileUpdated: () -> Unit) { // ✨ ADDED onProfileUpdated callback
+fun ProfileScreen(viewModel: ProfileViewModel, onProfileUpdated: () -> Unit) {
     val context = LocalContext.current
     val activity = context as Activity
     val uiState by viewModel.uiState.collectAsState()
@@ -286,7 +283,7 @@ fun ProfileScreen(viewModel: ProfileViewModel, onProfileUpdated: () -> Unit) { /
         contract = ActivityResultContracts.GetContent(),
         onResult = { uri: Uri? ->
             if (uri != null) {
-                viewModel.updateProfilePhoto(uri, activity, onSuccess = onProfileUpdated) // ✨ PASS callback
+                viewModel.updateProfilePhoto(uri, activity, onSuccess = onProfileUpdated)
                 Toast.makeText(context, "Uploading photo...", Toast.LENGTH_SHORT).show()
             }
         }
@@ -338,8 +335,9 @@ fun ProfileScreen(viewModel: ProfileViewModel, onProfileUpdated: () -> Unit) { /
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(profile.photoUrl)
                     .crossfade(true)
-                    .memoryCachePolicy(CachePolicy.DISABLED)
-                    .diskCachePolicy(CachePolicy.DISABLED)
+                    // ✨ REMOVED: Caching is now enabled by default for speed
+                    // .memoryCachePolicy(CachePolicy.DISABLED)
+                    // .diskCachePolicy(CachePolicy.DISABLED)
                     .placeholder(R.drawable.ic_person_placeholder)
                     .error(R.drawable.ic_person_placeholder)
                     .build(),
@@ -435,7 +433,7 @@ fun ProfileScreen(viewModel: ProfileViewModel, onProfileUpdated: () -> Unit) { /
             profile = uiState.profile,
             onDismiss = { showEditDialog = false },
             onSave = { name, phone, age, country ->
-                viewModel.updateProfile(name, phone, age, country, onSuccess = onProfileUpdated) // ✨ PASS callback
+                viewModel.updateProfile(name, phone, age, country, onSuccess = onProfileUpdated)
                 showEditDialog = false
             }
         )
