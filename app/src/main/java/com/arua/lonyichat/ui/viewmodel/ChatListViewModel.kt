@@ -4,10 +4,9 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arua.lonyichat.data.Chat
-import com.google.firebase.auth.ktx.auth
-import com.google.firebase.firestore.Query
-import com.google.firebase.firestore.ktx.firestore
-import com.google.firebase.ktx.Firebase
+import com.arua.lonyichat.data.ApiService // 🔥 ADDED
+import com.arua.lonyichat.data.ApiException
+// REMOVED all Firebase imports
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -22,15 +21,14 @@ class ChatListViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(ChatListUiState())
     val uiState: StateFlow<ChatListUiState> = _uiState
 
-    private val firestore = Firebase.firestore
-    private val auth = Firebase.auth
+    // REMOVED Firebase properties
 
     init {
         fetchConversations()
     }
 
     private fun fetchConversations() {
-        val currentUserId = auth.currentUser?.uid
+        val currentUserId = ApiService.getCurrentUserId()
         if (currentUserId == null) {
             _uiState.value = ChatListUiState(error = "User not logged in.")
             return
@@ -38,23 +36,14 @@ class ChatListViewModel : ViewModel() {
 
         _uiState.value = ChatListUiState(isLoading = true)
 
-        firestore.collection("chats")
-            .whereArrayContains("participants", currentUserId)
-            .orderBy("lastMessageTimestamp", Query.Direction.DESCENDING)
-            .addSnapshotListener { snapshots, e ->
-                // ✨ FIXED: Changed 'nil' to 'null' for the Kotlin syntax ✨
-                if (e != null) {
-                    Log.w("ChatListViewModel", "Listen failed.", e)
-                    _uiState.value = ChatListUiState(error = "Failed to load chats.")
-                    return@addSnapshotListener
-                }
-
-                if (snapshots != null) {
-                    val chats = snapshots.toObjects(Chat::class.java).mapIndexed { index, chat ->
-                        chat.copy(id = snapshots.documents[index].id)
-                    }
-                    _uiState.value = ChatListUiState(conversations = chats)
-                }
+        // 🔥 DETACHMENT: Replaced Firestore listener with a one-time API call
+        viewModelScope.launch {
+            ApiService.getChatConversations().onSuccess { chats ->
+                _uiState.value = ChatListUiState(conversations = chats)
+            }.onFailure { error ->
+                Log.w("ChatListViewModel", "Listen failed.", error)
+                _uiState.value = ChatListUiState(error = "Failed to load chats: ${error.localizedMessage}")
             }
+        }
     }
 }

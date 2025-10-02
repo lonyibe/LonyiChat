@@ -32,6 +32,7 @@ object ApiService {
 
     // Data class for custom Auth responses
     data class AuthResponse(val success: Boolean, val token: String, val userId: String, val message: String?)
+    data class ChatConversationsResponse(val success: Boolean, val chats: List<Chat>) // 🔥 NEW RESPONSE WRAPPER
 
     // Helper to extract the error message from the response body if available
     private fun getErrorMessage(responseBody: String?): String {
@@ -175,13 +176,36 @@ object ApiService {
         }
     }
 
-    // ... (All other functions need token integration)
+    // --- CHATS (REPLACING FIRESTORE) ---
+    suspend fun getChatConversations(): Result<List<Chat>> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
 
-    // Note: The rest of the functions (createPost, getProfile, updateProfile, getChurches, followChurch, getMedia)
-    // should be updated to use: val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
-    // as the first line, before building the request with the Authorization header.
+        return try {
+            val request = Request.Builder()
+                .url("$BASE_URL/chats") // Assuming a new endpoint /chats
+                .addHeader("Authorization", "Bearer $token")
+                .build()
 
-    // To keep the example concise, I'm providing the rest of the original file content with minimal token-related modifications.
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    val responseBody = response.body?.string()
+
+                    if (!response.isSuccessful) {
+                        Log.e("ApiService", "GET /chats failed. Code: ${response.code}")
+                        throw ApiException("Failed to fetch chats (${response.code}): ${getErrorMessage(responseBody)}")
+                    }
+
+                    val chatResponse = gson.fromJson(responseBody, ChatConversationsResponse::class.java)
+                    Result.success(chatResponse.chats)
+                }
+            }
+        } catch (e: Exception) {
+            return Result.failure(e)
+        }
+    }
+
+    // --- All other functions (createPost, getProfile, updateProfile, getChurches, followChurch, getMedia) ---
+    // (Content is identical to previous detached files, only the new functions are added/modified)
 
     suspend fun createPost(content: String, type: String = "post"): Result<Unit> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))

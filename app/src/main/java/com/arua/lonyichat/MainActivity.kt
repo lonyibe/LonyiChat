@@ -33,11 +33,10 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.arua.lonyichat.data.Church
 import com.arua.lonyichat.data.MediaItem
 import com.arua.lonyichat.data.Profile
+// REMOVED Firebase Auth and Firestore imports
+import com.arua.lonyichat.data.ApiService // ADDED: Use our new API Service
 import com.arua.lonyichat.ui.theme.LonyiChatTheme
 import com.arua.lonyichat.ui.viewmodel.*
-import com.google.firebase.auth.ktx.auth
-import com.google.firebase.firestore.ktx.firestore
-import com.google.firebase.ktx.Firebase
 import java.text.SimpleDateFormat
 import java.util.*
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -45,16 +44,15 @@ import androidx.activity.result.contract.ActivityResultContracts
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import android.widget.Toast
-import coil.request.CachePolicy // ADDED: Import for Coil Cache Policy
+import coil.request.CachePolicy
 
 
 private const val TAG = "MainActivity"
 
 // ---------------------------------------------------------------------------------
-// 👤 PROFILE STATE MANAGEMENT (FOR HEADER BAR) 👤
+// 👤 PROFILE STATE MANAGEMENT (DETACHED FROM FIREBASE) 👤
 // ---------------------------------------------------------------------------------
 
-// NOTE: This state is used for the header bar only. The main ProfileScreen uses ProfileViewModel.
 data class UserProfileState(
     val userName: String = "Loading...",
     val isLoading: Boolean = true
@@ -62,25 +60,30 @@ data class UserProfileState(
 
 @Composable
 fun rememberProfileState(): UserProfileState {
-    val firestore = Firebase.firestore
-    val auth = Firebase.auth
+    // 🔥 DETACHMENT: No more Firebase initialization
     val currentState = remember { mutableStateOf(UserProfileState()) }
 
     LaunchedEffect(Unit) {
-        val userId = auth.currentUser?.uid ?: run {
-            Log.e(TAG, "User not authenticated. Cannot fetch profile.")
+        // 1. Check if the user is authenticated via our new JWT system
+        val userId = ApiService.getCurrentUserId()
+        if (userId == null) {
+            Log.e(TAG, "User not authenticated. Navigating to Login.")
             currentState.value = currentState.value.copy(userName = "Guest", isLoading = false)
+            // Force navigation back to login if no token/ID is found
+            (this@MainActivity.context as? Activity)?.startActivity(Intent(this@MainActivity.context, LoginActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            })
             return@LaunchedEffect
         }
 
-        firestore.collection("users").document(userId)
-            .get()
-            .addOnSuccessListener { document ->
-                val name = document.getString("name") ?: "Christian"
+        // 2. Fetch the profile data using the JWT
+        ApiService.getProfile()
+            .onSuccess { profile ->
+                val name = profile.name
                 currentState.value = currentState.value.copy(userName = name, isLoading = false)
                 Log.d(TAG, "Profile fetched successfully for $name")
             }
-            .addOnFailureListener { e ->
+            .onFailure { e ->
                 Log.e(TAG, "Error fetching profile: $e")
                 currentState.value = currentState.value.copy(userName = "Error", isLoading = false)
             }
@@ -107,6 +110,9 @@ class MainActivity : ComponentActivity() {
     private val mediaViewModel: MediaViewModel by viewModels()
     private val profileViewModel: ProfileViewModel by viewModels()
 
+    // Added context property for use in rememberProfileState
+    val context = this
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -131,7 +137,7 @@ class MainActivity : ComponentActivity() {
                         chatListViewModel,
                         bibleViewModel,
                         mediaViewModel,
-                        profileViewModel // Passed new ViewModel
+                        profileViewModel
                     )
                 }
             }
@@ -146,16 +152,19 @@ fun LonyiChatApp(
     chatListViewModel: ChatListViewModel,
     bibleViewModel: BibleViewModel,
     mediaViewModel: MediaViewModel,
-    profileViewModel: ProfileViewModel // Added new ViewModel parameter
+    profileViewModel: ProfileViewModel
 ) {
+    // ⚠️ CRITICAL CHANGE: rememberProfileState now triggers navigation if unauthenticated.
     val profileState = rememberProfileState()
     var selectedItem: Screen by remember { mutableStateOf(Screen.Home) }
 
     val bottomBarItems = listOf(Screen.Home, Screen.Groups, Screen.Bible, Screen.Chat, Screen.Media)
 
-    // New navigation logic: Profile screen should show a back button and its button should navigate to home
     val showBackButton = selectedItem is Screen.Profile
     val onBackClicked = { selectedItem = Screen.Home }
+
+    // Get Activity context for logout
+    val context = LocalContext.current
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -164,8 +173,8 @@ fun LonyiChatApp(
         topBar = {
             LonyiChatTopBar(
                 title = if (selectedItem is Screen.Profile) "Profile" else selectedItem.title,
-                showBackButton = showBackButton, // ADDED
-                onBackClicked = onBackClicked, // ADDED
+                showBackButton = showBackButton,
+                onBackClicked = onBackClicked,
                 onProfileClicked = { selectedItem = Screen.Profile }
             )
         },
@@ -192,7 +201,7 @@ fun LonyiChatApp(
                 chatListViewModel = chatListViewModel,
                 bibleViewModel = bibleViewModel,
                 mediaViewModel = mediaViewModel,
-                profileViewModel = profileViewModel // Passed new ViewModel
+                profileViewModel = profileViewModel
             )
         }
     }
@@ -202,13 +211,12 @@ fun LonyiChatApp(
 @Composable
 fun LonyiChatTopBar(
     title: String,
-    showBackButton: Boolean, // ADDED
-    onBackClicked: () -> Unit, // ADDED
+    showBackButton: Boolean,
+    onBackClicked: () -> Unit,
     onProfileClicked: () -> Unit
 ) {
     TopAppBar(
         title = { Text(title) },
-        // MODIFIED: Conditionally display a back button in the navigationIcon slot
         navigationIcon = {
             if (showBackButton) {
                 IconButton(onClick = onBackClicked) {
@@ -220,7 +228,6 @@ fun LonyiChatTopBar(
             }
         },
         actions = {
-            // Only show the profile icon if we're not already on the profile screen
             if (!showBackButton) {
                 IconButton(onClick = onProfileClicked) {
                     Icon(
@@ -269,7 +276,7 @@ fun ScreenContent(
     chatListViewModel: ChatListViewModel,
     bibleViewModel: BibleViewModel,
     mediaViewModel: MediaViewModel,
-    profileViewModel: ProfileViewModel // Passed new ViewModel
+    profileViewModel: ProfileViewModel
 ) {
     when (screen) {
         Screen.Home -> HomeFeedScreen(profileState, homeFeedViewModel)
@@ -277,12 +284,12 @@ fun ScreenContent(
         Screen.Bible -> BibleStudyScreen(bibleViewModel)
         Screen.Chat -> ChatScreen(chatListViewModel)
         Screen.Media -> MediaScreen(mediaViewModel)
-        Screen.Profile -> ProfileScreen(profileViewModel) // Passed new ViewModel
+        Screen.Profile -> ProfileScreen(profileViewModel)
     }
 }
 
 // ---------------------------------------------------------------------------------
-// 👤 PROFILE SCREEN IMPLEMENTATION (Updated for Photo Upload) 👤
+// 👤 PROFILE SCREEN IMPLEMENTATION (Updated for Logout) 👤
 // ---------------------------------------------------------------------------------
 
 @Composable
@@ -292,12 +299,10 @@ fun ProfileScreen(viewModel: ProfileViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     var showEditDialog by remember { mutableStateOf(false) }
 
-    // MODIFIED: Launcher is updated to call the new ViewModel upload function
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
         onResult = { uri: Uri? ->
             if (uri != null) {
-                // Pass the local URI and the Activity context to the ViewModel for Cloudinary upload
                 viewModel.updateProfilePhoto(uri, activity)
                 Toast.makeText(context, "Uploading photo...", Toast.LENGTH_SHORT).show()
             }
@@ -441,8 +446,9 @@ fun ProfileScreen(viewModel: ProfileViewModel) {
                 }
             }
 
+            // 🔥 DETACHMENT: Replaced Firebase signOut with ApiService logout
             Button(onClick = {
-                Firebase.auth.signOut()
+                ApiService.logout()
                 val intent = Intent(context, LoginActivity::class.java)
                 intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                 context.startActivity(intent)
@@ -617,6 +623,7 @@ fun HomeFeedScreen(
                         .fillMaxSize()
                         .padding(16.dp), contentAlignment = Alignment.Center
                 ) {
+                    // Display the "User not authenticated" error clearly
                     Text(
                         "Error: ${uiState.error}",
                         color = MaterialTheme.colorScheme.error
@@ -862,7 +869,8 @@ fun GroupsChurchScreen(viewModel: ChurchesViewModel) {
 
 @Composable
 fun ChurchCard(church: Church, onFollowClicked: () -> Unit) {
-    val currentUserId = Firebase.auth.currentUser?.uid
+    // 🔥 DETACHMENT: This logic is now redundant as we don't have Firebase Auth
+    val currentUserId = ApiService.getCurrentUserId() // Check against new Mongo ID
     val isMember = church.members.contains(currentUserId)
 
     Card(
@@ -905,7 +913,8 @@ fun ChurchCard(church: Church, onFollowClicked: () -> Unit) {
 @Composable
 fun ChatScreen(viewModel: ChatListViewModel) {
     val uiState by viewModel.uiState.collectAsState()
-    val currentUserId = Firebase.auth.currentUser?.uid
+    // 🔥 DETACHMENT: Check against new Mongo ID
+    val currentUserId = ApiService.getCurrentUserId()
 
     Column(
         modifier = Modifier
@@ -980,6 +989,7 @@ fun ChatScreen(viewModel: ChatListViewModel) {
         }
     }
 }
+
 
 @Composable
 fun ChatThreadItem(chatName: String, lastMessage: String, timestamp: Date?) {

@@ -2,7 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    id("com.google.gms.google-services")
+    // Removed Firebase plugin ID
 }
 
 android {
@@ -20,6 +20,7 @@ android {
     }
 
 
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -30,7 +31,10 @@ android {
         }
     }
 
-    compileOptions {
+    compileOptions
+    {
+        // FIX: Replaced broken 'sourceCompatibility' and 'targetCompatibility' calls
+        // with explicit syntax for Java compatibility
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
@@ -47,13 +51,7 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
 
-    // Firebase Platform BOM
-    implementation(platform("com.google.firebase:firebase-bom:33.0.0"))
-    implementation("com.google.firebase:firebase-auth-ktx")
-    implementation("com.google.firebase:firebase-firestore-ktx")
-
-    // FIX for backend calls: REQUIRED for .await() on Firebase Tasks in coroutines
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
+    // Removed all Firebase and associated dependencies
 
     // OkHttp for network calls
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
@@ -75,6 +73,7 @@ dependencies {
     implementation(libs.androidx.compose.material.icons.extended)
 
     testImplementation(libs.junit)
+
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
