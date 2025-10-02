@@ -3,7 +3,7 @@ package com.arua.lonyichat.data
 import android.app.Activity
 import android.content.Context
 import android.net.Uri
-import android.util.Log
+import android.util.Log // Already present
 import com.arua.lonyichat.LonyiChatApp
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
@@ -566,6 +566,7 @@ object ApiService {
 
     // ✨ ADDED: Function to upload media files
     suspend fun uploadMedia(uri: Uri, title: String, description: String, context: Activity): Result<Unit> {
+        Log.d("ApiService", "Starting media upload for title: $title") // ADDED LOG
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
 
         return withContext(Dispatchers.IO) {
@@ -573,6 +574,7 @@ object ApiService {
                 val inputStream = context.contentResolver.openInputStream(uri)
                 val mimeType = context.contentResolver.getType(uri)
                 if (inputStream == null || mimeType == null) {
+                    Log.e("ApiService", "Failed to open media file or get MIME type.") // ADDED LOG
                     return@withContext Result.failure(ApiException("Failed to open media file."))
                 }
 
@@ -593,13 +595,16 @@ object ApiService {
                     .build()
 
                 client.newCall(request).execute().use { response ->
+                    Log.d("ApiService", "Media upload response code: ${response.code}") // ADDED LOG
                     if (!response.isSuccessful) {
                         val errorBody = response.body?.string()
+                        Log.e("ApiService", "Media upload failed. Error body: $errorBody") // ADDED LOG
                         throw ApiException("Media upload failed: ${getErrorMessage(errorBody)}")
                     }
                     Result.success(Unit)
                 }
             } catch (e: Exception) {
+                Log.e("ApiService", "Media upload exception: ${e.localizedMessage}") // ADDED LOG
                 Result.failure(e)
             }
         }

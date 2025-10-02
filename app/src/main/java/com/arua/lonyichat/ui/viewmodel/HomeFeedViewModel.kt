@@ -2,7 +2,7 @@ package com.arua.lonyichat.ui.viewmodel
 
 import android.app.Activity
 import android.net.Uri
-import android.util.Log
+import android.util.Log // Already present
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arua.lonyichat.data.ApiService
@@ -58,7 +58,7 @@ class HomeFeedViewModel : ViewModel() {
                     _uiState.update { currentState ->
                         currentState.copy(posts = listOf(newPost) + currentState.posts)
                     }
-                    _postCreationSuccess.value = true // ✨ 3. TRIGGER the success signal
+                    _postCreationSuccess.value = true
                 }
                 .onFailure { error ->
                     val userErrorMessage = error.localizedMessage ?: "Unknown connection error. Please try again."
@@ -81,7 +81,7 @@ class HomeFeedViewModel : ViewModel() {
                                     isUploading = false
                                 )
                             }
-                            _postCreationSuccess.value = true // ✨ 4. TRIGGER the success signal
+                            _postCreationSuccess.value = true
                         }
                         .onFailure { error -> handleUploadFailure(error) }
                 }
@@ -89,9 +89,30 @@ class HomeFeedViewModel : ViewModel() {
         }
     }
 
+    // ✨ UPDATED: Function to handle direct media (video/music) upload
+    fun createMediaItem(title: String, mediaUri: Uri, activity: Activity) {
+        Log.d(TAG, "createMediaItem called for URI: $mediaUri") // ADDED LOG
+        viewModelScope.launch {
+            // Trim the title, if empty use a placeholder for safe API interaction
+            val finalTitle = title.trim().ifBlank { "Untitled Media" }
+
+            _uiState.update { it.copy(isUploading = true, error = null) }
+
+            // Pass the finalTitle as both title and description
+            ApiService.uploadMedia(mediaUri, finalTitle, finalTitle, activity)
+                .onSuccess {
+                    // Screen does NOT close
+                    _uiState.update { it.copy(isUploading = false) }
+                }
+                .onFailure { error ->
+                    handleUploadFailure(error)
+                }
+        }
+    }
+
     private fun handleUploadFailure(error: Throwable) {
         val userErrorMessage = error.localizedMessage ?: "Unknown error"
-        Log.e(TAG, "Failed to create photo post: $userErrorMessage", error)
+        Log.e(TAG, "Failed to create photo post or media: $userErrorMessage", error) // MODIFIED LOG
         _uiState.update { it.copy(error = userErrorMessage, isUploading = false) }
     }
 

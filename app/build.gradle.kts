@@ -19,8 +19,6 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-
-
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -46,8 +44,11 @@ android {
 
 dependencies {
     implementation("androidx.core:core-splashscreen:1.0.1")
-    implementation("androidx.appcompat:appcompat:1.6.1")
-    implementation("com.google.android.material:material:1.11.0")
+
+    // --- UPDATED FOR MODERN EMOJI/PLATFORM SUPPORT ---
+    implementation("androidx.appcompat:appcompat:1.7.0") // BUMPED from 1.6.1 for emoji compatibility
+    implementation("androidx.core:core-ktx:1.13.1") // BUMPED from 1.10.1 for latest features
+    implementation("com.google.android.material:material:1.12.0") // BUMPED from 1.11.0 for emoji compatibility
 
     // Removed all Firebase and associated dependencies
 

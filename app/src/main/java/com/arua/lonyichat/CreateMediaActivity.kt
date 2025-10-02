@@ -67,7 +67,7 @@ fun CreateMediaScreen(
     val context = LocalContext.current as Activity
 
     val mediaPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         selectedMediaUri = uri
         uri?.let {
@@ -78,6 +78,11 @@ fun CreateMediaScreen(
                 selectedFileName = cursor.getString(nameIndex)
             }
         }
+    }
+
+    // NEW: Auto-launch the file picker as soon as the screen loads
+    LaunchedEffect(Unit) {
+        mediaPickerLauncher.launch(arrayOf("video/*", "audio/*"))
     }
 
     Scaffold(
@@ -96,6 +101,7 @@ fun CreateMediaScreen(
                                 viewModel.uploadMedia(it, title, description, context)
                             }
                         },
+                        // The button is enabled only if a title is provided AND a file is selected
                         enabled = title.isNotBlank() && selectedMediaUri != null && !uiState.isLoading
                     ) {
                         if (uiState.isLoading) {
@@ -134,14 +140,10 @@ fun CreateMediaScreen(
                 label = { Text("Description (optional)") }
             )
 
-            Button(onClick = {
-                // Let user pick video OR audio
-                mediaPickerLauncher.launch("video/*, audio/*")
-            }) {
-                Text("Select Video or Music File")
-            }
+            // REMOVED: The manual "Select Video or Music File" button
 
             if (selectedFileName != null) {
+                // Show confirmation card if a file is selected
                 val isVideo = context.contentResolver.getType(selectedMediaUri!!)?.startsWith("video/") == true
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -150,6 +152,19 @@ fun CreateMediaScreen(
                         Text(text = selectedFileName!!, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
+                Text(
+                    text = "File selected. Enter a title and tap Upload.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            } else {
+                // Show instruction if no file has been selected (e.g., if the user cancelled the picker)
+                Text(
+                    text = "A file picker should appear automatically. Please select a file.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -162,7 +177,6 @@ fun CreateMediaScreen(
     }
 
     // Listen for a change in the media items list, which signals a successful upload
-    // We use a snapshot to compare the list size before and after the upload
     val mediaCount = remember { mutableStateOf(uiState.mediaItems.size) }
     LaunchedEffect(uiState.mediaItems.size) {
         if (uiState.mediaItems.size > mediaCount.value) {

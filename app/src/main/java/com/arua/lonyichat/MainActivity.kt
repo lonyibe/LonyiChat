@@ -55,7 +55,7 @@ import java.util.*
 private const val TAG = "MainActivity"
 
 // ---------------------------------------------------------------------------------
-// 👤 PROFILE STATE MANAGEMENT 👤
+// 側 PROFILE STATE MANAGEMENT 側
 // ---------------------------------------------------------------------------------
 
 data class UserProfileState(
@@ -176,23 +176,25 @@ fun LonyiChatApp(
                 )
             }
         },
-        // ✨ ADDED: FloatingActionButton for the Media screen
         floatingActionButton = {
             if (selectedItem is Screen.Media) {
-                val createMediaLauncher = rememberLauncherForActivityResult(
+                // Reworked FAB to redirect to the unified content creation screen
+                val createPostLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.StartActivityForResult()
                 ) { result ->
                     if (result.resultCode == Activity.RESULT_OK) {
+                        // Refresh media and home feeds after successful upload from CreatePostActivity
                         mediaViewModel.fetchMedia()
+                        homeFeedViewModel.fetchPosts()
                     }
                 }
                 FloatingActionButton(
                     onClick = {
-                        val intent = Intent(context, CreateMediaActivity::class.java)
-                        createMediaLauncher.launch(intent)
+                        val intent = Intent(context, CreatePostActivity::class.java)
+                        createPostLauncher.launch(intent)
                     }
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = "Upload Media")
+                    Icon(Icons.Default.Add, contentDescription = "Create Content")
                 }
             }
         }
@@ -302,7 +304,6 @@ fun ScreenContent(
     }
 }
 
-// ... The rest of the file is correct and remains unchanged...
 @Composable
 fun ProfileScreen(viewModel: ProfileViewModel, onProfileUpdated: () -> Unit) {
     val context = LocalContext.current
@@ -854,19 +855,19 @@ fun PostCard(post: com.arua.lonyichat.data.Post, viewModel: HomeFeedViewModel, o
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 ReactionButton(
-                    text = "Amen 🙏",
+                    text = "Amen 剌",
                     count = post.reactions.amen,
                     isReacted = post.userReactions.amen,
                     onClick = { viewModel.reactToPost(post.id, "amen") }
                 )
                 ReactionButton(
-                    text = "Hallelujah 🙌",
+                    text = "Hallelujah 剏",
                     count = post.reactions.hallelujah,
                     isReacted = post.userReactions.hallelujah,
                     onClick = { viewModel.reactToPost(post.id, "hallelujah") }
                 )
                 ReactionButton(
-                    text = "Praise God 🎉",
+                    text = "Praise God 脂",
                     count = post.reactions.praiseGod,
                     isReacted = post.userReactions.praiseGod,
                     onClick = { viewModel.reactToPost(post.id, "praiseGod") }

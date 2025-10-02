@@ -3,6 +3,7 @@ package com.arua.lonyichat
 import android.app.Activity
 import android.net.Uri
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -73,15 +74,19 @@ fun CreatePostScreen(
     onNavigateUp: () -> Unit
 ) {
     var postContent by remember { mutableStateOf("") }
+    // REVERTED: Now only handles the selected image URI
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current as Activity
 
+    // Launcher only for selecting an image (no video/audio logic)
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         selectedImageUri = uri
     }
+
+    // REMOVED: mediaPickerLauncher for video/audio is gone.
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -90,19 +95,20 @@ fun CreatePostScreen(
                 title = { Text("Create Post") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateUp) {
-                        // ✨ FIX: Use the recommended AutoMirrored icon
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
                     Button(
                         onClick = {
+                            // SIMPLIFIED LOGIC: Only handles photo upload or text post
                             if (selectedImageUri != null) {
                                 viewModel.createPhotoPost(postContent, selectedImageUri!!, context)
                             } else {
                                 viewModel.createPost(postContent, "post")
                             }
                         },
+                        // SIMPLIFIED ENABLEMENT: Only checks for text or selected image URI
                         enabled = (postContent.isNotBlank() || selectedImageUri != null) && !uiState.isUploading
                     ) {
                         if (uiState.isUploading) {
@@ -127,13 +133,21 @@ fun CreatePostScreen(
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { imagePickerLauncher.launch("image/*") }) {
+                    // Photo Icon (Original functionality)
+                    IconButton(onClick = {
+                        selectedImageUri = null // Clear old selection if any
+                        imagePickerLauncher.launch("image/*")
+                    }) {
                         Icon(
                             Icons.Default.PhotoLibrary,
                             contentDescription = "Add Photo",
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
+
+                    // REMOVED: Video Icon is gone.
+
+                    // REMOVED: Music Icon is gone.
                 }
             }
         }
@@ -152,7 +166,6 @@ fun CreatePostScreen(
                     modifier = Modifier
                         .size(48.dp)
                         .clip(CircleShape),
-                    // ✨ FIX: Import and use painterResource
                     placeholder = painterResource(id = R.drawable.ic_person_placeholder),
                     error = painterResource(id = R.drawable.ic_person_placeholder)
                 )
@@ -170,6 +183,7 @@ fun CreatePostScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .defaultMinSize(minHeight = 150.dp),
+                // Reverting hint to simple prompt
                 placeholder = { Text("What is on your heart?") },
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent,
@@ -180,6 +194,7 @@ fun CreatePostScreen(
                 )
             )
 
+            // SIMPLIFIED PREVIEW LOGIC: Only shows image preview
             if (selectedImageUri != null) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Box(contentAlignment = Alignment.TopEnd) {
@@ -196,7 +211,6 @@ fun CreatePostScreen(
                             Icons.Default.Close,
                             contentDescription = "Remove Image",
                             tint = Color.White,
-                            // ✨ FIX: Import and use the background modifier
                             modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), CircleShape)
                         )
                     }
