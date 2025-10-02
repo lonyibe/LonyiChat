@@ -56,6 +56,7 @@ private const val TAG = "MainActivity"
 
 data class UserProfileState(
     val userName: String = "Loading...",
+    val photoUrl: String? = null, // ✨ ADDED photoUrl
     val isLoading: Boolean = true
 )
 
@@ -78,9 +79,13 @@ fun rememberProfileState(): UserProfileState {
 
         ApiService.getProfile()
             .onSuccess { profile ->
-                val name = profile.name
-                currentState.value = currentState.value.copy(userName = name, isLoading = false)
-                Log.d(TAG, "Profile fetched successfully for $name")
+                // ✨ UPDATED to include photoUrl
+                currentState.value = currentState.value.copy(
+                    userName = profile.name,
+                    photoUrl = profile.photoUrl,
+                    isLoading = false
+                )
+                Log.d(TAG, "Profile fetched successfully for ${profile.name}")
             }
             .onFailure { e ->
                 Log.e(TAG, "Error fetching profile: $e")
@@ -598,8 +603,7 @@ fun HomeFeedScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
         PostCreationBar(
-            userName = profileState.userName,
-            isLoading = profileState.isLoading,
+            profileState = profileState, // ✨ UPDATED Pass the whole state
             onTextClicked = { showTextPostDialog = true },
             onPhotoClicked = { imagePickerLauncher.launch("image/*") }
         )
@@ -679,14 +683,13 @@ fun HomeFeedScreen(
 
 @Composable
 fun PostCreationBar(
-    userName: String,
-    isLoading: Boolean,
+    profileState: UserProfileState, // ✨ UPDATED to take the whole state
     onTextClicked: () -> Unit,
     onPhotoClicked: () -> Unit
 ) {
     val prompt = when {
-        isLoading -> "Loading user profile..."
-        else -> "What is on your heart, $userName?"
+        profileState.isLoading -> "Loading user profile..."
+        else -> "What is on your heart, ${profileState.userName}?"
     }
     Card(
         modifier = Modifier
@@ -703,18 +706,25 @@ fun PostCreationBar(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
+            // ✨ UPDATED to use AsyncImage for the profile picture
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(profileState.photoUrl)
+                    .crossfade(true)
+                    .placeholder(R.drawable.ic_person_placeholder)
+                    .error(R.drawable.ic_person_placeholder)
+                    .build(),
+                contentDescription = "Your Profile Photo",
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.secondaryContainer)
             )
             Spacer(modifier = Modifier.size(8.dp))
             Text(
                 text = prompt,
-                color = if (isLoading) Color.LightGray else Color.Gray,
+                color = if (profileState.isLoading) Color.LightGray else Color.Gray,
                 modifier = Modifier
-                    .fillMaxWidth(0.9f)
+                    .weight(1f)
                     .clickable { onTextClicked() }
             )
         }
@@ -797,11 +807,18 @@ fun PostCard(post: com.arua.lonyichat.data.Post, viewModel: HomeFeedViewModel, o
             Column(modifier = Modifier.padding(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
+                        // ✨ UPDATED to use AsyncImage for the author's profile picture
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(post.authorPhotoUrl)
+                                .crossfade(true)
+                                .placeholder(R.drawable.ic_person_placeholder)
+                                .error(R.drawable.ic_person_placeholder)
+                                .build(),
+                            contentDescription = "Author's Profile Photo",
                             modifier = Modifier
                                 .size(40.dp)
                                 .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.secondaryContainer)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
@@ -935,17 +952,18 @@ fun PostCreationDialog(
         text = {
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(profileState.photoUrl)
+                            .crossfade(true)
+                            .placeholder(R.drawable.ic_person_placeholder)
+                            .error(R.drawable.ic_person_placeholder)
+                            .build(),
+                        contentDescription = "Your Profile Photo",
                         modifier = Modifier
                             .size(40.dp)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.secondaryContainer),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (!profileState.isLoading) {
-                            Text(profileState.userName.firstOrNull()?.toString() ?: "", style = MaterialTheme.typography.titleLarge)
-                        }
-                    }
+                    )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = profileState.userName,
