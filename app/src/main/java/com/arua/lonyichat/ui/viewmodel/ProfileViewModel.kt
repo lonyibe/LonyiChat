@@ -85,11 +85,11 @@ class ProfileViewModel : ViewModel() {
         _uiState.update { it.copy(isSaving = true, error = null) }
 
         viewModelScope.launch {
-            // Step 1: Upload the file to Cloudinary
+            // Step 1: Upload the file to your backend
             ApiService.uploadProfilePhoto(uri, context)
                 .onSuccess { newPhotoUrl ->
-                    Log.d(TAG, "Cloudinary upload successful. Updating backend.")
-                    // Step 2: Update the backend (Vercel) with the final URL
+                    Log.d(TAG, "Backend upload successful. Updating profile.")
+                    // Step 2: Update the user's profile with the new URL
                     updateProfile(
                         name = currentProfile.name,
                         phone = currentProfile.phone ?: "",
@@ -99,7 +99,7 @@ class ProfileViewModel : ViewModel() {
                     )
                 }
                 .onFailure { error ->
-                    Log.e(TAG, "Cloudinary upload failed: ${error.localizedMessage}")
+                    Log.e(TAG, "Backend upload failed: ${error.localizedMessage}")
                     _uiState.update { it.copy(error = "Photo Upload Failed: ${error.localizedMessage}", isSaving = false) }
                 }
         }
