@@ -55,6 +55,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.view.WindowInsetsControllerCompat
@@ -341,6 +342,7 @@ fun ScreenContent(
 ) {
     when (screen) {
         Screen.Home -> HomeFeedScreen(profileState, homeFeedViewModel, scrollBehavior)
+        // ✨ FIX: Removed unused scrollBehavior from calls to other screens
         Screen.Groups -> GroupsChurchScreen(churchesViewModel)
         Screen.Bible -> BibleStudyScreen(bibleViewModel)
         Screen.Chat -> ChatScreen(chatListViewModel)
@@ -689,6 +691,10 @@ fun HomeFeedScreen(
     }
     // ✨ PULL-TO-REFRESH IMPLEMENTATION END ✨
 
+    // ✨ NEW: State to track which post's reaction selector is currently open (for modal dismissal)
+    var openReactionPostId by remember { mutableStateOf<String?>(null) }
+
+
     when {
         // Only show full-screen loading if list is empty and initial load is in progress
         uiState.isLoading && uiState.posts.isEmpty() -> {
@@ -709,6 +715,33 @@ fun HomeFeedScreen(
             }
         }
         else -> {
+            // ✨ NEW: Full-screen clickable overlay for modal dismissal
+            if (openReactionPostId != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .zIndex(1f) // Sit above the LazyColumn content
+                        .background(Color.Black.copy(alpha = 0.001f)) // Near-transparent to enable clicks
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = { openReactionPostId = null } // Dismiss on any click
+                        )
+                        // Crucial for blocking scroll
+                        .pointerInput(Unit) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    // Consume scroll events to stop the LazyColumn from moving while the menu is up
+                                    if (event.changes.any { it.scrollDelta.y != 0f }) {
+                                        event.changes.forEach { it.consume() }
+                                    }
+                                }
+                            }
+                        }
+                )
+            }
+
             // 3. Wrap content in SwipeRefresh
             SwipeRefresh(
                 state = swipeRefreshState,
@@ -738,6 +771,7 @@ fun HomeFeedScreen(
                     }
 
                     items(uiState.posts, key = { it.id }) { post ->
+                        // ✨ MODIFIED: Pass new parameters to PostCard
                         PostCard(
                             post = post,
                             viewModel = viewModel,
@@ -745,7 +779,11 @@ fun HomeFeedScreen(
                                 val intent = Intent(context, CommentsActivity::class.java)
                                 intent.putExtra("POST_ID", post.id)
                                 context.startActivity(intent)
-                            }
+                            },
+                            // Pass modal state handlers
+                            showReactionSelector = openReactionPostId == post.id,
+                            onSelectorOpen = { openReactionPostId = it },
+                            onSelectorDismiss = { openReactionPostId = null }
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                     }
@@ -822,18 +860,24 @@ fun PostActionButton(icon: ImageVector, text: String, onClick: () -> Unit) {
     }
 }
 
+// ✨ MODIFIED: PostCard is now a composite component managing the selector logic
 @Composable
-fun PostCard(post: com.arua.lonyichat.data.Post, viewModel: HomeFeedViewModel, onCommentClicked: () -> Unit) {
+fun PostCard(
+    post: com.arua.lonyichat.data.Post,
+    viewModel: HomeFeedViewModel,
+    onCommentClicked: () -> Unit,
+    // ✨ ADDED: New arguments to control modal behavior
+    showReactionSelector: Boolean,
+    onSelectorOpen: (String) -> Unit,
+    onSelectorDismiss: () -> Unit
+) {
     var showMenu by remember { mutableStateOf(false) }
     val currentUserId = ApiService.getCurrentUserId()
     val isAuthor = post.authorId == currentUserId
     var showEditDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
 
-    // ✨ NEW: State for the Reaction Selector Pop-up
-    var showReactionSelector by remember { mutableStateOf(false) }
-
-    // ✨ NEW: State to hold the URL of the image to be previewed
+    // State to hold the URL of the image to be previewed
     var fullScreenImageUrl by remember { mutableStateOf<String?>(null) }
 
 
@@ -871,7 +915,7 @@ fun PostCard(post: com.arua.lonyichat.data.Post, viewModel: HomeFeedViewModel, o
         )
     }
 
-    // ✨ NEW: Full Screen Image Viewer Dialog
+    // Full Screen Image Viewer Dialog
     fullScreenImageUrl?.let { imageUrl ->
         FullScreenImageDialog(
             imageUrl = imageUrl,
@@ -889,6 +933,7 @@ fun PostCard(post: com.arua.lonyichat.data.Post, viewModel: HomeFeedViewModel, o
             containerColor = Color.White.copy(alpha = 0.1f)
         )
     ) {
+        // Removed the clickable dismissal logic from here
         Column {
             Column(modifier = Modifier.padding(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
@@ -954,7 +999,7 @@ fun PostCard(post: com.arua.lonyichat.data.Post, viewModel: HomeFeedViewModel, o
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(MaterialTheme.shapes.medium)
-                            .clickable { fullScreenImageUrl = post.imageUrl }, // ✨ FIX: Set state to show dialog
+                            .clickable { fullScreenImageUrl = post.imageUrl }, // Set state to show dialog
                         contentScale = ContentScale.Crop
                     )
                 }
@@ -969,39 +1014,9 @@ fun PostCard(post: com.arua.lonyichat.data.Post, viewModel: HomeFeedViewModel, o
             )
 
             // --- Interaction Bar and Selector ---
-            // ✨ MODIFIED BLOCK: This Box now manages dismissal of the selector and prevents interaction/scroll underneath the hidden overlay.
             Box(
                 modifier = Modifier.fillMaxWidth()
             ) {
-
-                // 1. Full-size clickable overlay for instant dismissal and scroll blocking
-                if (showReactionSelector) {
-                    Box(
-                        // Intercept all clicks within the bounds of this Box (the entire post card)
-                        modifier = Modifier
-                            .matchParentSize()
-                            .zIndex(1f) // Render on top of the interaction bar but under the menu
-                            .background(Color.Transparent) // Transparent to not obscure the view
-                            .clickable(
-                                // Use MutableInteractionSource and null indication to prevent any visual ripple
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onClick = { showReactionSelector = false } // Dismiss on click outside menu area
-                            )
-                            // Crucial for blocking scroll: consumes all scroll events if placed in scrollable parent
-                            .pointerInput(Unit) {
-                                awaitPointerEventScope {
-                                    while (true) {
-                                        val event = awaitPointerEvent()
-                                        // Consume scroll events to stop the LazyColumn from moving while the menu is up
-                                        if (event.changes.any { it.scrollDelta.y != 0f }) {
-                                            event.changes.forEach { it.consume() }
-                                        }
-                                    }
-                                }
-                            }
-                    )
-                }
 
                 // 2. Post Interaction Bar (Always visible)
                 PostInteractionBar(
@@ -1009,7 +1024,9 @@ fun PostCard(post: com.arua.lonyichat.data.Post, viewModel: HomeFeedViewModel, o
                     viewModel = viewModel,
                     onCommentClicked = onCommentClicked,
                     onLikeClicked = { viewModel.reactToPost(post.id, "amen") },
-                    onLikeLongPressed = { showReactionSelector = true },
+                    // ✨ MODIFIED: Long press calls the global open function
+                    onLikeLongPressed = { onSelectorOpen(post.id) },
+                    // Pass selector visibility for visual state (color change)
                     isSelectorVisible = showReactionSelector
                 )
 
@@ -1017,15 +1034,17 @@ fun PostCard(post: com.arua.lonyichat.data.Post, viewModel: HomeFeedViewModel, o
                 if (showReactionSelector) {
                     Box(
                         modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .offset(x = 16.dp, y = (-56).dp)
-                            .zIndex(2f) // Ensure menu is on top of everything including the overlay
+                            .align(Alignment.BottomStart)
+                            // Offset from the bottom of the Card to float above the Interaction Bar
+                            .offset(x = 16.dp, y = (-72).dp)
+                            .zIndex(2f) // Ensure menu is on top of everything
                     ) {
+                        // The ReactionSelectorMenu itself consumes inner taps
                         ReactionSelectorMenu(
-                            onDismiss = { showReactionSelector = false },
+                            onDismiss = onSelectorDismiss, // Use the passed dismissal lambda
                             onReactionSelected = { reactionType ->
                                 viewModel.reactToPost(post.id, reactionType)
-                                showReactionSelector = false
+                                onSelectorDismiss() // Dismiss selector after selection
                             }
                         )
                     }
@@ -1034,6 +1053,7 @@ fun PostCard(post: com.arua.lonyichat.data.Post, viewModel: HomeFeedViewModel, o
         }
     }
 }
+
 
 // ✨ NEW: Composable for the Full-Screen Image Dialog ✨
 @Composable
@@ -1167,7 +1187,7 @@ fun PostInteractionBar(
     onCommentClicked: () -> Unit,
     onLikeClicked: () -> Unit,
     onLikeLongPressed: () -> Unit,
-    isSelectorVisible: Boolean // <<< ADDED
+    isSelectorVisible: Boolean
 ) {
     val currentReaction = when {
         post.userReactions.amen -> "amen"
@@ -1189,8 +1209,7 @@ fun PostInteractionBar(
         label = "reactionColor"
     )
 
-    // 1. DISABLE BUTTON when selector is visible
-    val interactionEnabled = !isSelectorVisible // <<< USED
+    // The button is always enabled here. The full-screen overlay handles blocking interaction.
 
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
@@ -1203,9 +1222,9 @@ fun PostInteractionBar(
             modifier = Modifier
                 .weight(1f)
                 .combinedClickable(
-                    enabled = interactionEnabled, // <<< USED
+                    // Enabled is always true.
                     onClick = onLikeClicked,
-                    onLongClick = onLikeLongPressed
+                    onLongClick = onLikeLongPressed // Use the passed lambda
                 )
                 .padding(vertical = 8.dp, horizontal = 16.dp),
             horizontalArrangement = Arrangement.Center
@@ -1294,7 +1313,7 @@ fun ReactionSelectorMenu(
                                     focusedReactionIndex = newIndex
                                 }
 
-                                // ✨ FIX: Check event.type (action) instead of change.type (device type)
+                                // Check for Release (tap/click)
                                 if (event.type == PointerEventType.Release && !change.isConsumed) {
                                     focusedReactionIndex?.let { index ->
                                         onReactionSelected(LonyiReactions[index].type)
@@ -1343,7 +1362,7 @@ fun ReactionSelectorMenu(
     }
 }
 
-// ✨ NEW: ReactorListDialog (Displays list of users who reacted) (kept the same) ✨
+// ✨ FIX: Restored reference
 @Composable
 fun ReactorListDialog(
     uiState: ReactorUiState,
@@ -1463,62 +1482,7 @@ fun ReactorItem(reactor: Reactor) {
 
 
 @Composable
-fun EditPostDialog(
-    postContent: String,
-    onDismiss: () -> Unit,
-    onPost: (String) -> Unit
-) {
-    var updatedContent by remember { mutableStateOf(postContent) }
-    val isPostButtonEnabled = updatedContent.isNotBlank()
-
-    // ✨ ADDED: Consistent, modern OutlinedTextField colors
-    val textFieldColors = OutlinedTextFieldDefaults.colors(
-        focusedContainerColor = MaterialTheme.colorScheme.surface,
-        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-        focusedBorderColor = MaterialTheme.colorScheme.primary,
-        unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-        disabledBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-    )
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = "Edit Post",
-                style = MaterialTheme.typography.titleLarge
-            )
-        },
-        text = {
-            OutlinedTextField( // ✨ MODIFIED: Using OutlinedTextField for a visible border
-                value = updatedContent,
-                onValueChange = { updatedContent = it },
-                label = { Text("Update your thought...") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 100.dp),
-                colors = textFieldColors // ✨ APPLIED: Custom colors
-            )
-        },
-        confirmButton = {
-            Button(
-                onClick = { onPost(updatedContent) },
-                enabled = isPostButtonEnabled
-            ) {
-                Text("Save")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        },
-        containerColor = MaterialTheme.colorScheme.background,
-        textContentColor = MaterialTheme.colorScheme.onBackground
-    )
-}
-
-@Composable
-fun GroupsChurchScreen(viewModel: ChurchesViewModel) {
+fun GroupsChurchScreen(viewModel: ChurchesViewModel) { // ✨ FIX: Restored reference
     val uiState by viewModel.uiState.collectAsState()
     val coroutineScope = rememberCoroutineScope() // ✨ FIX: Added coroutineScope for nested launch/delay calls
 
@@ -1623,7 +1587,7 @@ fun ChurchCard(church: Church, onFollowClicked: () -> Unit) {
 }
 
 @Composable
-fun ChatScreen(viewModel: ChatListViewModel) {
+fun ChatScreen(viewModel: ChatListViewModel) { // ✨ FIX: Restored reference
     val uiState by viewModel.uiState.collectAsState()
     val currentUserId = ApiService.getCurrentUserId()
     val coroutineScope = rememberCoroutineScope() // ✨ FIX: Added coroutineScope for nested launch/delay calls
@@ -1763,7 +1727,7 @@ fun ChatThreadItem(chatName: String, lastMessage: String, timestamp: Date?) {
 }
 
 @Composable
-fun BibleStudyScreen(viewModel: BibleViewModel) {
+fun BibleStudyScreen(viewModel: BibleViewModel) { // ✨ FIX: Restored reference
     val uiState by viewModel.uiState.collectAsState()
 
     Column(
@@ -1864,7 +1828,7 @@ fun BibleStudyScreen(viewModel: BibleViewModel) {
 }
 
 @Composable
-fun MediaScreen(viewModel: MediaViewModel) {
+fun MediaScreen(viewModel: MediaViewModel) { // ✨ FIX: Restored reference
     val uiState by viewModel.uiState.collectAsState()
     val coroutineScope = rememberCoroutineScope() // ✨ FIX: Added coroutineScope for nested launch/delay calls
 
@@ -1963,6 +1927,7 @@ fun MediaItemCard(mediaItem: MediaItem) {
     }
 }
 
+// ✨ FIX: Restored extension function
 fun Date.toFormattedString(): String {
     val simpleDateFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
     return simpleDateFormat.format(this)
