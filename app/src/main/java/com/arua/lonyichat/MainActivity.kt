@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow // ✨ ADDED: Import for TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -944,7 +945,13 @@ fun InteractionButton(icon: ImageVector, text: String, onClick: () -> Unit, modi
     ) {
         Icon(icon, contentDescription = text, tint = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.width(8.dp))
-        Text(text, color = MaterialTheme.colorScheme.primary)
+        // FIX: Ensure the text is on a single line and handles overflow
+        Text(
+            text,
+            color = MaterialTheme.colorScheme.primary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -1048,7 +1055,7 @@ fun PostInteractionBar(
         ) {
             Icon(icon, contentDescription = text, tint = contentColor)
             Spacer(Modifier.width(8.dp))
-            Text(text, color = contentColor)
+            Text(text, color = contentColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
 
         // --- Comment Button ---
