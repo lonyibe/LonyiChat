@@ -51,50 +51,14 @@ import coil.request.CachePolicy
 private const val TAG = "MainActivity"
 
 // ---------------------------------------------------------------------------------
-// 👤 PROFILE STATE MANAGEMENT (DETACHED FROM FIREBASE) 👤
+// 👤 PROFILE STATE MANAGEMENT 👤
 // ---------------------------------------------------------------------------------
 
 data class UserProfileState(
     val userName: String = "Loading...",
-    val photoUrl: String? = null, // ✨ ADDED photoUrl
+    val photoUrl: String? = null,
     val isLoading: Boolean = true
 )
-
-@Composable
-fun rememberProfileState(): UserProfileState {
-    val context = LocalContext.current
-    val currentState = remember { mutableStateOf(UserProfileState()) }
-
-    LaunchedEffect(Unit) {
-        val userId = ApiService.getCurrentUserId()
-        if (userId == null) {
-            Log.e(TAG, "User not authenticated. Navigating to Login.")
-            currentState.value = currentState.value.copy(userName = "Guest", isLoading = false)
-
-            (context as? Activity)?.startActivity(Intent(context, LoginActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            })
-            return@LaunchedEffect
-        }
-
-        ApiService.getProfile()
-            .onSuccess { profile ->
-                // ✨ UPDATED to include photoUrl
-                currentState.value = currentState.value.copy(
-                    userName = profile.name,
-                    photoUrl = profile.photoUrl,
-                    isLoading = false
-                )
-                Log.d(TAG, "Profile fetched successfully for ${profile.name}")
-            }
-            .onFailure { e ->
-                Log.e(TAG, "Error fetching profile: $e")
-                currentState.value = currentState.value.copy(userName = "Error", isLoading = false)
-            }
-    }
-
-    return currentState.value
-}
 
 // Define the Screens (Tabs)
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
@@ -155,7 +119,14 @@ fun LonyiChatApp(
     mediaViewModel: MediaViewModel,
     profileViewModel: ProfileViewModel
 ) {
-    val profileState = rememberProfileState()
+    val profileUiState by profileViewModel.uiState.collectAsState()
+
+    val profileState = UserProfileState(
+        userName = profileUiState.profile?.name ?: "Loading...",
+        photoUrl = profileUiState.profile?.photoUrl,
+        isLoading = profileUiState.isLoading
+    )
+
     var selectedItem: Screen by remember { mutableStateOf(Screen.Home) }
 
     val bottomBarItems = listOf(Screen.Home, Screen.Groups, Screen.Bible, Screen.Chat, Screen.Media)
@@ -164,6 +135,15 @@ fun LonyiChatApp(
     val onBackClicked = { selectedItem = Screen.Home }
 
     val context = LocalContext.current
+
+    LaunchedEffect(ApiService.getCurrentUserId()) {
+        if (ApiService.getCurrentUserId() == null) {
+            val intent = Intent(context, LoginActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            }
+            context.startActivity(intent)
+        }
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -282,17 +262,21 @@ fun ScreenContent(
         Screen.Groups -> GroupsChurchScreen(churchesViewModel)
         Screen.Bible -> BibleStudyScreen(bibleViewModel)
         Screen.Chat -> ChatScreen(chatListViewModel)
-        Screen.Media -> MediaScreen(mediaViewModel)
-        Screen.Profile -> ProfileScreen(profileViewModel)
+        Screen.Media -> MediaScreen(mediaViewModel,
+        )
+        // ✨ PASS a callback to the ProfileScreen that refreshes the home feed.
+        Screen.Profile -> ProfileScreen(profileViewModel) {
+            homeFeedViewModel.fetchPosts()
+        }
     }
 }
 
 // ---------------------------------------------------------------------------------
-// 👤 PROFILE SCREEN IMPLEMENTATION (Updated for Logout) 👤
+// 👤 PROFILE SCREEN IMPLEMENTATION 👤
 // ---------------------------------------------------------------------------------
 
 @Composable
-fun ProfileScreen(viewModel: ProfileViewModel) {
+fun ProfileScreen(viewModel: ProfileViewModel, onProfileUpdated: () -> Unit) { // ✨ ADDED onProfileUpdated callback
     val context = LocalContext.current
     val activity = context as Activity
     val uiState by viewModel.uiState.collectAsState()
@@ -302,7 +286,7 @@ fun ProfileScreen(viewModel: ProfileViewModel) {
         contract = ActivityResultContracts.GetContent(),
         onResult = { uri: Uri? ->
             if (uri != null) {
-                viewModel.updateProfilePhoto(uri, activity)
+                viewModel.updateProfilePhoto(uri, activity, onSuccess = onProfileUpdated) // ✨ PASS callback
                 Toast.makeText(context, "Uploading photo...", Toast.LENGTH_SHORT).show()
             }
         }
@@ -451,13 +435,14 @@ fun ProfileScreen(viewModel: ProfileViewModel) {
             profile = uiState.profile,
             onDismiss = { showEditDialog = false },
             onSave = { name, phone, age, country ->
-                viewModel.updateProfile(name, phone, age, country)
+                viewModel.updateProfile(name, phone, age, country, onSuccess = onProfileUpdated) // ✨ PASS callback
                 showEditDialog = false
             }
         )
     }
 }
 
+// ... (The rest of your MainActivity.kt file remains unchanged)
 @Composable
 fun ProfileStat(count: Int, label: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -490,10 +475,6 @@ fun ProfileDetail(icon: ImageVector, label: String, value: String) {
         }
     }
 }
-
-// ---------------------------------------------------------------------------------
-// ✏️ EDIT PROFILE DIALOG ✏️
-// ---------------------------------------------------------------------------------
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -567,10 +548,6 @@ fun EditProfileDialog(
     )
 }
 
-// ---------------------------------------------------------------------------------
-// 🌟 HOME FEED IMPLEMENTATION 🌟
-// ---------------------------------------------------------------------------------
-
 @Composable
 fun HomeFeedScreen(
     profileState: UserProfileState,
@@ -583,7 +560,6 @@ fun HomeFeedScreen(
     var showPhotoPostDialog by remember { mutableStateOf(false) }
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
 
-    // State for the comment dialog
     var showCommentDialogForPostId by remember { mutableStateOf<String?>(null) }
 
 
@@ -603,7 +579,7 @@ fun HomeFeedScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
         PostCreationBar(
-            profileState = profileState, // ✨ UPDATED Pass the whole state
+            profileState = profileState,
             onTextClicked = { showTextPostDialog = true },
             onPhotoClicked = { imagePickerLauncher.launch("image/*") }
         )
@@ -668,7 +644,6 @@ fun HomeFeedScreen(
         )
     }
 
-    // ✨ ADDED: Show Comment Dialog
     if (showCommentDialogForPostId != null) {
         val postId = showCommentDialogForPostId!!
         CommentCreationDialog(
@@ -683,7 +658,7 @@ fun HomeFeedScreen(
 
 @Composable
 fun PostCreationBar(
-    profileState: UserProfileState, // ✨ UPDATED to take the whole state
+    profileState: UserProfileState,
     onTextClicked: () -> Unit,
     onPhotoClicked: () -> Unit
 ) {
@@ -706,7 +681,6 @@ fun PostCreationBar(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // ✨ UPDATED to use AsyncImage for the profile picture
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(profileState.photoUrl)
@@ -807,7 +781,6 @@ fun PostCard(post: com.arua.lonyichat.data.Post, viewModel: HomeFeedViewModel, o
             Column(modifier = Modifier.padding(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        // ✨ UPDATED to use AsyncImage for the author's profile picture
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
                                 .data(post.authorPhotoUrl)
@@ -928,8 +901,6 @@ fun InteractionButton(icon: ImageVector, text: String, onClick: () -> Unit) {
         Text(text, color = MaterialTheme.colorScheme.primary)
     }
 }
-
-// ... (Rest of your MainActivity file, including Dialogs, Other Screens, etc.)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1108,7 +1079,6 @@ fun PhotoPostCreationDialog(
     )
 }
 
-// ✨ ADDED: Dialog for creating a comment
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CommentCreationDialog(
@@ -1143,10 +1113,6 @@ fun CommentCreationDialog(
         }
     )
 }
-
-// ---------------------------------------------------------------------------------
-// ⛪️ CHURCHES / GROUPS SCREEN ⛪️
-// ---------------------------------------------------------------------------------
 
 @Composable
 fun GroupsChurchScreen(viewModel: ChurchesViewModel) {
@@ -1226,10 +1192,6 @@ fun ChurchCard(church: Church, onFollowClicked: () -> Unit) {
         }
     }
 }
-
-// ---------------------------------------------------------------------------------
-// 💬 CHAT SCREEN 💬
-// ---------------------------------------------------------------------------------
 
 @Composable
 fun ChatScreen(viewModel: ChatListViewModel) {
@@ -1345,10 +1307,6 @@ fun ChatThreadItem(chatName: String, lastMessage: String, timestamp: Date?) {
     Divider(color = Color.Gray.copy(alpha = 0.3f))
 }
 
-// ---------------------------------------------------------------------------------
-// 📚 BIBLE SCREEN 📚
-// ---------------------------------------------------------------------------------
-
 @Composable
 fun BibleStudyScreen(viewModel: BibleViewModel) {
     val uiState by viewModel.uiState.collectAsState()
@@ -1450,10 +1408,6 @@ fun BibleStudyScreen(viewModel: BibleViewModel) {
     }
 }
 
-// ---------------------------------------------------------------------------------
-// 🎬 MEDIA SCREEN 🎬
-// ---------------------------------------------------------------------------------
-
 @Composable
 fun MediaScreen(viewModel: MediaViewModel) {
     val uiState by viewModel.uiState.collectAsState()
@@ -1528,9 +1482,6 @@ fun MediaItemCard(mediaItem: MediaItem) {
     }
 }
 
-// ---------------------------------------------------------------------------------
-// UTILITY FUNCTIONS
-// ---------------------------------------------------------------------------------
 fun Date.toFormattedString(): String {
     val simpleDateFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
     return simpleDateFormat.format(this)

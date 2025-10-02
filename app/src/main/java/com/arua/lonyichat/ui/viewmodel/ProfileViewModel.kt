@@ -46,23 +46,23 @@ class ProfileViewModel : ViewModel() {
         phone: String,
         age: String,
         country: String,
-        photoUrl: String? = null
+        photoUrl: String? = null,
+        onSuccess: () -> Unit // ✨ ADDED: Callback to run on successful update
     ) {
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, error = null) }
             ApiService.updateProfile(name, phone, age, country, photoUrl)
                 .onSuccess {
-                    // --- MODIFIED START ---
-                    // Instead of refetching the whole profile, just update the local state
                     val updatedProfile = _uiState.value.profile?.copy(
                         name = name,
                         phone = phone,
                         age = age.toIntOrNull() ?: _uiState.value.profile?.age,
                         country = country,
+                        // Use the new photoUrl if provided, otherwise keep the existing one
                         photoUrl = photoUrl ?: _uiState.value.profile?.photoUrl
                     )
                     _uiState.update { it.copy(profile = updatedProfile, isSaving = false) }
-                    // --- MODIFIED END ---
+                    onSuccess() // ✨ TRIGGER: Execute the callback
                 }
                 .onFailure { error ->
                     Log.e(TAG, "Error updating profile: ${error.localizedMessage}")
@@ -71,7 +71,11 @@ class ProfileViewModel : ViewModel() {
         }
     }
 
-    fun updateProfilePhoto(uri: Uri, context: Activity) {
+    fun updateProfilePhoto(
+        uri: Uri,
+        context: Activity,
+        onSuccess: () -> Unit // ✨ ADDED: Callback to run on successful update
+    ) {
         val currentProfile = _uiState.value.profile ?: run {
             _uiState.update { it.copy(error = "Cannot update photo: Profile not loaded.") }
             return
@@ -88,7 +92,8 @@ class ProfileViewModel : ViewModel() {
                         phone = currentProfile.phone ?: "",
                         age = currentProfile.age?.toString() ?: "",
                         country = currentProfile.country ?: "",
-                        photoUrl = newPhotoUrl
+                        photoUrl = newPhotoUrl,
+                        onSuccess = onSuccess // ✨ PASS: Pass the callback down
                     )
                 }
                 .onFailure { error ->
