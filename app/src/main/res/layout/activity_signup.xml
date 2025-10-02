@@ -39,7 +39,7 @@
         android:layout_marginTop="16dp"
         android:fillViewport="true"
         app:layout_constraintTop_toBottomOf="@id/textViewTitle"
-        app:layout_constraintBottom_toTopOf="@id/buttonLoginLink"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent">
 
@@ -280,19 +280,20 @@
 
             </LinearLayout>
 
+            <TextView
+                android:id="@+id/buttonLoginLink"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="32dp"
+                android:layout_marginBottom="8dp"
+                android:padding="8dp"
+                android:text="Already have an account? Login"
+                android:textColor="@android:color/white"
+                android:textSize="14sp"
+                android:layout_gravity="center_horizontal"
+                />
+
         </LinearLayout>
     </ScrollView>
 
-    <TextView
-        android:id="@+id/buttonLoginLink"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="8dp"
-        android:padding="8dp"
-        android:text="Already have an account? Login"
-        android:textColor="@android:color/white"
-        android:textSize="14sp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        /> </androidx.constraintlayout.widget.ConstraintLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>
