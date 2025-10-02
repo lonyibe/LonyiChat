@@ -16,7 +16,7 @@ private const val TAG = "HomeFeedViewModel"
 data class HomeFeedUiState(
     val posts: List<Post> = emptyList(),
     val isLoading: Boolean = false,
-    val isUploading: Boolean = false, // ✨ ADDED for upload indicator
+    val isUploading: Boolean = false,
     val error: String? = null
 )
 
@@ -30,19 +30,17 @@ class HomeFeedViewModel : ViewModel() {
 
     fun fetchPosts() {
         viewModelScope.launch {
-            _uiState.value = HomeFeedUiState(isLoading = true)
-            val result = ApiService.getPosts()
-            result.onSuccess { posts ->
-                _uiState.value = HomeFeedUiState(posts = posts)
+            _uiState.value = _uiState.value.copy(isLoading = true)
+            ApiService.getPosts().onSuccess { posts ->
+                _uiState.value = _uiState.value.copy(posts = posts, isLoading = false)
             }.onFailure { error ->
                 Log.e(TAG, "Error fetching posts: ${error.localizedMessage}", error)
-                _uiState.value = HomeFeedUiState(error = error.localizedMessage)
+                _uiState.value = _uiState.value.copy(error = error.localizedMessage, isLoading = false)
             }
         }
     }
 
     fun createPost(content: String, type: String) {
-        Log.d(TAG, "Attempting to create post of type: $type with content: $content")
         viewModelScope.launch {
             ApiService.createPost(content, type)
                 .onSuccess {
@@ -59,18 +57,15 @@ class HomeFeedViewModel : ViewModel() {
         }
     }
 
-    // ✨ ADDED: New function for creating posts with a photo
     fun createPhotoPost(caption: String, imageUri: Uri, activity: Activity) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isUploading = true)
-            // Step 1: Upload the image
             ApiService.uploadPostPhoto(imageUri, activity)
                 .onSuccess { imageUrl ->
-                    // Step 2: Create the post with the returned image URL
                     ApiService.createPost(content = caption, imageUrl = imageUrl)
                         .onSuccess {
                             Log.d(TAG, "Photo post created successfully. Refreshing feed.")
-                            fetchPosts() // Refresh the feed
+                            fetchPosts()
                             _uiState.value = _uiState.value.copy(isUploading = false)
                         }
                         .onFailure { error -> handleUploadFailure(error) }
@@ -83,5 +78,48 @@ class HomeFeedViewModel : ViewModel() {
         val userErrorMessage = error.localizedMessage ?: "Unknown error"
         Log.e(TAG, "Failed to create photo post: $userErrorMessage", error)
         _uiState.value = _uiState.value.copy(error = userErrorMessage, isUploading = false)
+    }
+
+    // ✨ ADDED: Functions for post interactions
+    fun reactToPost(postId: String, reactionType: String) {
+        viewModelScope.launch {
+            ApiService.reactToPost(postId, reactionType).onSuccess {
+                // Optimistically update the UI before refetching
+                val updatedPosts = _uiState.value.posts.map { post ->
+                    if (post.id == postId) {
+                        val reactions = post.reactions
+                        val updatedReactions = when (reactionType) {
+                            "amen" -> reactions.copy(amen = reactions.amen + 1)
+                            "hallelujah" -> reactions.copy(hallelujah = reactions.hallelujah + 1)
+                            "praiseGod" -> reactions.copy(praiseGod = reactions.praiseGod + 1)
+                            else -> reactions
+                        }
+                        post.copy(reactions = updatedReactions)
+                    } else {
+                        post
+                    }
+                }
+                _uiState.value = _uiState.value.copy(posts = updatedPosts)
+
+                // Refresh from server to get the definitive state
+                fetchPosts()
+            }
+        }
+    }
+
+    fun addComment(postId: String, content: String) {
+        viewModelScope.launch {
+            ApiService.addComment(postId, content).onSuccess {
+                fetchPosts() // Refresh to show new comment count
+            }
+        }
+    }
+
+    fun sharePost(postId: String) {
+        viewModelScope.launch {
+            ApiService.sharePost(postId).onSuccess {
+                fetchPosts() // Refresh to show new share count
+            }
+        }
     }
 }

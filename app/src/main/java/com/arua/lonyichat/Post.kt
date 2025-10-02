@@ -10,18 +10,28 @@ data class Post(
     val authorName: String,
     val authorPhotoUrl: String?,
     val content: String,
-    val imageUrl: String?, // ✨ ADDED THIS LINE
+    val imageUrl: String?,
     val type: String, // 'post' or 'status'
     val reactions: Reactions,
     val commentCount: Int,
-    // Using SerializedName to match the JSON key from the backend
+    val shareCount: Int, // ✨ ADDED
     @SerializedName("createdAt") val createdAt: Timestamp
 )
 
+// ✨ UPDATED: Now holds counts of reactions
 data class Reactions(
     val amen: Int = 0,
     val hallelujah: Int = 0,
     val praiseGod: Int = 0
+)
+
+// ✨ ADDED: Data class for comments
+data class Comment(
+    val authorId: String,
+    val authorName: String,
+    val authorPhotoUrl: String?,
+    val content: String,
+    val createdAt: Timestamp
 )
 
 // Helper class to parse Firestore's timestamp object

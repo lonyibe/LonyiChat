@@ -37,6 +37,8 @@ object ApiService {
 
     data class AuthResponse(val success: Boolean, val token: String, val userId: String, val message: String?)
     data class ChatConversationsResponse(val success: Boolean, val chats: List<Chat>)
+    data class CommentsResponse(val success: Boolean, val comments: List<Comment>)
+
 
     private fun getErrorMessage(responseBody: String?): String {
         return try {
@@ -241,6 +243,92 @@ object ApiService {
             }
         } catch (e: Exception) {
             return Result.failure(e)
+        }
+    }
+
+    // ✨ ADDED: Functions for post interactions
+    suspend fun reactToPost(postId: String, reactionType: String): Result<Unit> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val json = gson.toJson(mapOf("reactionType" to reactionType))
+            val body = json.toRequestBody(JSON)
+            val request = Request.Builder()
+                .url("$BASE_URL/posts/$postId/react")
+                .addHeader("Authorization", "Bearer $token")
+                .post(body)
+                .build()
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) throw ApiException("Failed to react to post")
+                }
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun addComment(postId: String, content: String): Result<Unit> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val json = gson.toJson(mapOf("content" to content))
+            val body = json.toRequestBody(JSON)
+            val request = Request.Builder()
+                .url("$BASE_URL/posts/$postId/comment")
+                .addHeader("Authorization", "Bearer $token")
+                .post(body)
+                .build()
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) throw ApiException("Failed to add comment")
+                }
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun sharePost(postId: String): Result<Unit> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val body = "".toRequestBody(JSON) // Empty body for this POST request
+            val request = Request.Builder()
+                .url("$BASE_URL/posts/$postId/share")
+                .addHeader("Authorization", "Bearer $token")
+                .post(body)
+                .build()
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) throw ApiException("Failed to share post")
+                }
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getCommentsForPost(postId: String): Result<List<Comment>> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val request = Request.Builder()
+                .url("$BASE_URL/posts/$postId/comments")
+                .addHeader("Authorization", "Bearer $token")
+                .get()
+                .build()
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        throw ApiException("Failed to fetch comments")
+                    }
+                    val responseBody = response.body?.string()
+                    val commentsResponse = gson.fromJson(responseBody, CommentsResponse::class.java)
+                    Result.success(commentsResponse.comments)
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 

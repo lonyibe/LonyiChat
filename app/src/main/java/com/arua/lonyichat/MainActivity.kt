@@ -43,7 +43,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import android.widget.Toast
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.ui.layout.ContentScale
 import coil.request.CachePolicy
@@ -576,9 +575,12 @@ fun HomeFeedScreen(
     val context = LocalContext.current as Activity
 
     var showTextPostDialog by remember { mutableStateOf(false) }
-
     var showPhotoPostDialog by remember { mutableStateOf(false) }
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+
+    // State for the comment dialog
+    var showCommentDialogForPostId by remember { mutableStateOf<String?>(null) }
+
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
@@ -627,7 +629,11 @@ fun HomeFeedScreen(
                     contentPadding = PaddingValues(bottom = 8.dp)
                 ) {
                     items(uiState.posts) { post ->
-                        PostCard(post = post)
+                        PostCard(
+                            post = post,
+                            viewModel = viewModel,
+                            onCommentClicked = { showCommentDialogForPostId = post.id }
+                        )
                         Spacer(modifier = Modifier.height(8.dp))
                     }
                 }
@@ -654,6 +660,18 @@ fun HomeFeedScreen(
             onPost = { caption ->
                 viewModel.createPhotoPost(caption, selectedImageUri!!, context)
                 showPhotoPostDialog = false
+            }
+        )
+    }
+
+    // ✨ ADDED: Show Comment Dialog
+    if (showCommentDialogForPostId != null) {
+        val postId = showCommentDialogForPostId!!
+        CommentCreationDialog(
+            onDismiss = { showCommentDialogForPostId = null },
+            onComment = { content ->
+                viewModel.addComment(postId, content)
+                showCommentDialogForPostId = null
             }
         )
     }
@@ -723,7 +741,7 @@ fun PostActionButton(icon: ImageVector, text: String, onClick: () -> Unit) {
 }
 
 @Composable
-fun PostCard(post: com.arua.lonyichat.data.Post) {
+fun PostCard(post: com.arua.lonyichat.data.Post, viewModel: HomeFeedViewModel, onCommentClicked: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -733,48 +751,98 @@ fun PostCard(post: com.arua.lonyichat.data.Post) {
             containerColor = Color.White.copy(alpha = 0.1f)
         )
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.secondaryContainer)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Column {
-                    Text(post.authorName, fontWeight = FontWeight.Bold)
-                    Text(
-                        post.createdAt.toDate().toFormattedString(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.Gray
+        Column {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.secondaryContainer)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(post.authorName, fontWeight = FontWeight.Bold)
+                        Text(
+                            post.createdAt.toDate().toFormattedString(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.Gray
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(post.content, style = MaterialTheme.typography.bodyMedium)
+
+                if (post.imageUrl != null) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    AsyncImage(
+                        model = post.imageUrl,
+                        contentDescription = "Post image",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(MaterialTheme.shapes.medium),
+                        contentScale = ContentScale.Crop
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(post.content, style = MaterialTheme.typography.bodyMedium)
 
-            if (post.imageUrl != null) {
-                Spacer(modifier = Modifier.height(10.dp))
-                AsyncImage(
-                    model = post.imageUrl,
-                    contentDescription = "Post image",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(MaterialTheme.shapes.medium),
-                    contentScale = ContentScale.Crop
+            Divider()
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.SpaceAround,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ReactionButton(
+                    text = "Amen 🙏",
+                    count = post.reactions.amen,
+                    onClick = { viewModel.reactToPost(post.id, "amen") }
+                )
+                ReactionButton(
+                    text = "Hallelujah 🙌",
+                    count = post.reactions.hallelujah,
+                    onClick = { viewModel.reactToPost(post.id, "hallelujah") }
+                )
+                ReactionButton(
+                    text = "Praise God 🎉",
+                    count = post.reactions.praiseGod,
+                    onClick = { viewModel.reactToPost(post.id, "praiseGod") }
                 )
             }
-
-            Spacer(modifier = Modifier.height(10.dp))
-            Divider(color = Color.Gray.copy(alpha = 0.3f))
+            Divider()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceAround
+            ) {
+                InteractionButton(icon = Icons.Default.ThumbUp, text = "Like", onClick = { viewModel.reactToPost(post.id, "amen") })
+                InteractionButton(icon = Icons.Default.Comment, text = "Comment", onClick = onCommentClicked)
+                InteractionButton(icon = Icons.Default.Share, text = "Share", onClick = { viewModel.sharePost(post.id) })
+            }
         }
     }
 }
 
-// ---------------------------------------------------------------------------------
-// 🌟 ADDED: POST CREATION DIALOG 🌟
-// ---------------------------------------------------------------------------------
+@Composable
+fun ReactionButton(text: String, count: Int, onClick: () -> Unit) {
+    TextButton(onClick = onClick) {
+        Text("$text ($count)")
+    }
+}
+
+@Composable
+fun InteractionButton(icon: ImageVector, text: String, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp, horizontal = 16.dp)
+    ) {
+        Icon(icon, contentDescription = text, tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.width(8.dp))
+        Text(text, color = MaterialTheme.colorScheme.primary)
+    }
+}
+
+// ... (Rest of your MainActivity file, including Dialogs, Other Screens, etc.)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -892,6 +960,42 @@ fun PhotoPostCreationDialog(
                 } else {
                     Text("Post")
                 }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+// ✨ ADDED: Dialog for creating a comment
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CommentCreationDialog(
+    onDismiss: () -> Unit,
+    onComment: (String) -> Unit
+) {
+    var commentContent by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add a comment") },
+        text = {
+            OutlinedTextField(
+                value = commentContent,
+                onValueChange = { commentContent = it },
+                label = { Text("Your comment...") },
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = { onComment(commentContent) },
+                enabled = commentContent.isNotBlank()
+            ) {
+                Text("Post")
             }
         },
         dismissButton = {
