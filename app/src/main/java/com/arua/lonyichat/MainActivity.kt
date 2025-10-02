@@ -1023,8 +1023,6 @@ fun PostCard(
                     post = post,
                     viewModel = viewModel,
                     onCommentClicked = onCommentClicked,
-                    onLikeClicked = { viewModel.reactToPost(post.id, "amen") },
-                    // ✨ MODIFIED: Long press calls the global open function
                     onLikeLongPressed = { onSelectorOpen(post.id) },
                     // Pass selector visibility for visual state (color change)
                     isSelectorVisible = showReactionSelector
@@ -1054,6 +1052,61 @@ fun PostCard(
     }
 }
 
+// ✨ NEW: Composable for the Post Editing Dialog (FIXES UNRESOLVED REFERENCE) ✨
+@Composable
+fun EditPostDialog(
+    postContent: String,
+    onDismiss: () -> Unit,
+    onPost: (newContent: String) -> Unit
+) {
+    var newContent by remember { mutableStateOf(postContent) }
+    // Enable save only if content is not blank and is actually different from original
+    val isSaveEnabled = newContent.isNotBlank() && newContent != postContent
+
+    // Same colors as used in EditProfileDialog for consistency
+    val textFieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = MaterialTheme.colorScheme.primary,
+        unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
+        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+        focusedContainerColor = MaterialTheme.colorScheme.surface,
+        cursorColor = MaterialTheme.colorScheme.primary,
+        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Post") },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
+                OutlinedTextField(
+                    value = newContent,
+                    onValueChange = { newContent = it },
+                    label = { Text("Post Content") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = 100.dp),
+                    colors = textFieldColors
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onPost(newContent) },
+                enabled = isSaveEnabled
+            ) {
+                Text("Save Changes")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+        containerColor = MaterialTheme.colorScheme.background,
+        textContentColor = MaterialTheme.colorScheme.onBackground
+    )
+}
 
 // ✨ NEW: Composable for the Full-Screen Image Dialog ✨
 @Composable
@@ -1179,13 +1232,12 @@ fun PostReactionSummary(post: com.arua.lonyichat.data.Post, onSummaryClicked: ()
 }
 
 
-// ✨ NEW: PostInteractionBar (Handles Like button with Long-Press) ✨
+// ✨ MODIFIED: PostInteractionBar (Handles short press dynamically) ✨
 @Composable
 fun PostInteractionBar(
     post: com.arua.lonyichat.data.Post,
     viewModel: HomeFeedViewModel,
     onCommentClicked: () -> Unit,
-    onLikeClicked: () -> Unit,
     onLikeLongPressed: () -> Unit,
     isSelectorVisible: Boolean
 ) {
@@ -1209,7 +1261,10 @@ fun PostInteractionBar(
         label = "reactionColor"
     )
 
-    // The button is always enabled here. The full-screen overlay handles blocking interaction.
+    // ✨ FIX: Determine the reaction type for a short click:
+    // If a reaction is active, send that type to toggle it OFF (un-react).
+    // If no reaction is active, send "amen" to toggle it ON (default quick like).
+    val reactionTypeForShortClick = currentReaction ?: "amen"
 
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
@@ -1222,8 +1277,10 @@ fun PostInteractionBar(
             modifier = Modifier
                 .weight(1f)
                 .combinedClickable(
-                    // Enabled is always true.
-                    onClick = onLikeClicked,
+                    // FIX: Execute reactToPost with the correct type for toggle
+                    onClick = {
+                        viewModel.reactToPost(post.id, reactionTypeForShortClick)
+                    },
                     onLongClick = onLikeLongPressed // Use the passed lambda
                 )
                 .padding(vertical = 8.dp, horizontal = 16.dp),
@@ -1294,7 +1351,7 @@ fun ReactionSelectorMenu(
             Row(
                 modifier = Modifier
                     .onSizeChanged { reactionRowWidth.value = it.width }
-                    // CRITICAL: Use pointerInput to detect drag/hover movement over the options
+                    // CRITICAL FIX: The pointerInput is now ONLY for hover effect, the click is handled by the individual Box.
                     .pointerInput(Unit) {
                         // Calculate the ideal width of each reaction slot for easy mapping
                         val itemWidth = reactionRowWidth.value / reactionCount
@@ -1308,21 +1365,12 @@ fun ReactionSelectorMenu(
                                 val xPos = change.position.x.toInt()
                                 val newIndex = (xPos / itemWidth).coerceIn(0, reactionCount - 1)
 
-                                // Update focus on move/down
+                                // Update focus on move/down (Keep hover logic)
                                 if (change.pressed) {
                                     focusedReactionIndex = newIndex
                                 }
 
-                                // Check for Release (tap/click)
-                                if (event.type == PointerEventType.Release && !change.isConsumed) {
-                                    focusedReactionIndex?.let { index ->
-                                        onReactionSelected(LonyiReactions[index].type)
-                                    }
-                                    focusedReactionIndex = null
-                                    onDismiss()
-                                    // Consume the event to prevent upstream components from reacting after selection
-                                    change.consume()
-                                }
+                                // REMOVED: Unreliable Release/Dismissal logic from here. The clickable in the box and the parent lambda handle it.
 
                                 // Clear focus on dismiss/outside interaction (simple check: if pointer moves outside the horizontal bounds)
                                 if (xPos < 0 || xPos > reactionRowWidth.value) {
@@ -1347,6 +1395,12 @@ fun ReactionSelectorMenu(
                             .size(40.dp) // Fixed size for touch target
                             .scale(scale)
                             .clip(CircleShape)
+                            // ✨ FIX: Add explicit and reliable clickable for selection ✨
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { onReactionSelected(reaction.type) } // This triggers the ViewModel update and the immediate dismissal (onSelectorDismiss)
+                            )
                             .background(if (isFocused) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent), // Subtle background when focused
                         contentAlignment = Alignment.Center
                     ) {
