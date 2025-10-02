@@ -5,9 +5,12 @@ import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
@@ -27,29 +30,24 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowInsetsControllerCompat
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.arua.lonyichat.data.ApiService
 import com.arua.lonyichat.data.Church
 import com.arua.lonyichat.data.MediaItem
 import com.arua.lonyichat.data.Profile
-import com.arua.lonyichat.data.ApiService
 import com.arua.lonyichat.ui.theme.LonyiChatTheme
 import com.arua.lonyichat.ui.viewmodel.*
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
-import android.widget.Toast
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.ui.layout.ContentScale
-import coil.request.CachePolicy
-import kotlinx.coroutines.launch
 
 
 private const val TAG = "MainActivity"
@@ -141,7 +139,6 @@ fun LonyiChatApp(
 
     val context = LocalContext.current
 
-    // ✨ 1. Create a scroll behavior for the TopAppBar
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
 
     LaunchedEffect(ApiService.getCurrentUserId()) {
@@ -154,7 +151,6 @@ fun LonyiChatApp(
     }
 
     Scaffold(
-        // ✨ 2. Connect the scroll behavior to the Scaffold
         modifier = Modifier
             .fillMaxSize()
             .nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -166,7 +162,7 @@ fun LonyiChatApp(
                 showBackButton = showBackButton,
                 onBackClicked = onBackClicked,
                 onProfileClicked = { selectedItem = Screen.Profile },
-                scrollBehavior = scrollBehavior // ✨ 3. Pass the scroll behavior to the TopBar
+                scrollBehavior = scrollBehavior
             )
         },
         bottomBar = {
@@ -193,7 +189,7 @@ fun LonyiChatApp(
                 bibleViewModel = bibleViewModel,
                 mediaViewModel = mediaViewModel,
                 profileViewModel = profileViewModel,
-                scrollBehavior = scrollBehavior // ✨ 4. Pass the scroll behavior down to the content
+                scrollBehavior = scrollBehavior
             )
         }
     }
@@ -206,7 +202,7 @@ fun LonyiChatTopBar(
     showBackButton: Boolean,
     onBackClicked: () -> Unit,
     onProfileClicked: () -> Unit,
-    scrollBehavior: TopAppBarScrollBehavior // ✨ Accept the scroll behavior
+    scrollBehavior: TopAppBarScrollBehavior
 ) {
     TopAppBar(
         title = { Text(title) },
@@ -234,151 +230,10 @@ fun LonyiChatTopBar(
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        scrollBehavior = scrollBehavior // ✨ Apply the scroll behavior
+        scrollBehavior = scrollBehavior
     )
 }
 
-// ... (LonyiChatBottomBar remains unchanged)
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ScreenContent(
-    screen: Screen,
-    profileState: UserProfileState,
-    homeFeedViewModel: HomeFeedViewModel,
-    churchesViewModel: ChurchesViewModel,
-    chatListViewModel: ChatListViewModel,
-    bibleViewModel: BibleViewModel,
-    mediaViewModel: MediaViewModel,
-    profileViewModel: ProfileViewModel,
-    scrollBehavior: TopAppBarScrollBehavior // ✨ Accept the scroll behavior
-) {
-    when (screen) {
-        // ✨ Pass the scroll behavior to the HomeFeedScreen
-        Screen.Home -> HomeFeedScreen(profileState, homeFeedViewModel, scrollBehavior)
-        Screen.Groups -> GroupsChurchScreen(churchesViewModel)
-        Screen.Bible -> BibleStudyScreen(bibleViewModel)
-        Screen.Chat -> ChatScreen(chatListViewModel)
-        Screen.Media -> MediaScreen(mediaViewModel)
-        Screen.Profile -> ProfileScreen(profileViewModel) {
-            homeFeedViewModel.fetchPosts()
-        }
-    }
-}
-
-// ... (ProfileScreen and its related composables remain unchanged)
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun HomeFeedScreen(
-    profileState: UserProfileState,
-    viewModel: HomeFeedViewModel,
-    scrollBehavior: TopAppBarScrollBehavior // ✨ Accept the scroll behavior
-) {
-    val uiState by viewModel.uiState.collectAsState()
-    val context = LocalContext.current as Activity
-
-    var showTextPostDialog by remember { mutableStateOf(false) }
-    var showPhotoPostDialog by remember { mutableStateOf(false) }
-    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
-
-    val lazyListState = rememberLazyListState()
-    val coroutineScope = rememberCoroutineScope()
-
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent(),
-        onResult = { uri: Uri? ->
-            if (uri != null) {
-                selectedImageUri = uri
-                showPhotoPostDialog = true
-            }
-        }
-    )
-
-    LaunchedEffect(uiState.posts.firstOrNull()?.id) {
-        if (uiState.posts.isNotEmpty()) {
-            coroutineScope.launch {
-                lazyListState.animateScrollToItem(0)
-            }
-        }
-    }
-
-    when {
-        uiState.isLoading && uiState.posts.isEmpty() -> {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        }
-        uiState.error != null -> {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp), contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "Error: ${uiState.error}",
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
-        }
-        else -> {
-            LazyColumn(
-                state = lazyListState,
-                // ✨ 5. Connect the scroll behavior to the LazyColumn
-                modifier = Modifier
-                    .fillMaxSize()
-                    .nestedScroll(scrollBehavior.nestedScrollConnection),
-                contentPadding = PaddingValues(bottom = 8.dp)
-            ) {
-                item {
-                    PostCreationBar(
-                        profileState = profileState,
-                        onTextClicked = { showTextPostDialog = true },
-                        onPhotoClicked = { imagePickerLauncher.launch("image/*") }
-                    )
-                    Divider(color = Color.Gray.copy(alpha = 0.5f), thickness = 1.dp)
-                }
-
-                items(uiState.posts, key = { it.id }) { post ->
-                    PostCard(
-                        post = post,
-                        viewModel = viewModel,
-                        onCommentClicked = {
-                            val intent = Intent(context, CommentsActivity::class.java)
-                            intent.putExtra("POST_ID", post.id)
-                            context.startActivity(intent)
-                        }
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-            }
-        }
-    }
-
-    if (showTextPostDialog) {
-        PostCreationDialog(
-            profileState = profileState,
-            onDismiss = { showTextPostDialog = false },
-            onPost = { content ->
-                viewModel.createPost(content, "post")
-                showTextPostDialog = false
-            }
-        )
-    }
-
-    if (showPhotoPostDialog && selectedImageUri != null) {
-        PhotoPostCreationDialog(
-            imageUri = selectedImageUri!!,
-            isUploading = uiState.isUploading,
-            onDismiss = { showPhotoPostDialog = false },
-            onPost = { caption ->
-                viewModel.createPhotoPost(caption, selectedImageUri!!, context)
-                showPhotoPostDialog = false
-            }
-        )
-    }
-}
-// ... (The rest of MainActivity.kt remains unchanged)
 @Composable
 fun LonyiChatBottomBar(
     items: List<Screen>,
@@ -399,6 +254,35 @@ fun LonyiChatBottomBar(
         }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ScreenContent(
+    screen: Screen,
+    profileState: UserProfileState,
+    homeFeedViewModel: HomeFeedViewModel,
+    churchesViewModel: ChurchesViewModel,
+    chatListViewModel: ChatListViewModel,
+    bibleViewModel: BibleViewModel,
+    mediaViewModel: MediaViewModel,
+    profileViewModel: ProfileViewModel,
+    scrollBehavior: TopAppBarScrollBehavior
+) {
+    when (screen) {
+        Screen.Home -> HomeFeedScreen(profileState, homeFeedViewModel, scrollBehavior)
+        Screen.Groups -> GroupsChurchScreen(churchesViewModel)
+        Screen.Bible -> BibleStudyScreen(bibleViewModel)
+        Screen.Chat -> ChatScreen(chatListViewModel)
+        Screen.Media -> MediaScreen(mediaViewModel)
+        Screen.Profile -> ProfileScreen(profileViewModel) {
+            homeFeedViewModel.fetchPosts()
+        }
+    }
+}
+
+// ... The rest of the file is correct ...
+// I am including the full file for completeness
+
 @Composable
 fun ProfileScreen(viewModel: ProfileViewModel, onProfileUpdated: () -> Unit) {
     val context = LocalContext.current
@@ -667,6 +551,93 @@ fun EditProfileDialog(
         textContentColor = MaterialTheme.colorScheme.onBackground
     )
 }
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HomeFeedScreen(
+    profileState: UserProfileState,
+    viewModel: HomeFeedViewModel,
+    scrollBehavior: TopAppBarScrollBehavior
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+
+    val createPostLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            viewModel.fetchPosts()
+        }
+    }
+
+    val lazyListState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(uiState.posts.firstOrNull()?.id) {
+        if (uiState.posts.isNotEmpty()) {
+            coroutineScope.launch {
+                lazyListState.animateScrollToItem(0)
+            }
+        }
+    }
+
+    when {
+        uiState.isLoading && uiState.posts.isEmpty() -> {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        }
+        uiState.error != null -> {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp), contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "Error: ${uiState.error}",
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+        else -> {
+            LazyColumn(
+                state = lazyListState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .nestedScroll(scrollBehavior.nestedScrollConnection),
+                contentPadding = PaddingValues(bottom = 8.dp)
+            ) {
+                item {
+                    PostCreationBar(
+                        profileState = profileState,
+                        onTextClicked = {
+                            val intent = Intent(context, CreatePostActivity::class.java)
+                            createPostLauncher.launch(intent)
+                        },
+                        onPhotoClicked = {
+                            val intent = Intent(context, CreatePostActivity::class.java)
+                            createPostLauncher.launch(intent)
+                        }
+                    )
+                    Divider(color = Color.Gray.copy(alpha = 0.5f), thickness = 1.dp)
+                }
+
+                items(uiState.posts, key = { it.id }) { post ->
+                    PostCard(
+                        post = post,
+                        viewModel = viewModel,
+                        onCommentClicked = {
+                            val intent = Intent(context, CommentsActivity::class.java)
+                            intent.putExtra("POST_ID", post.id)
+                            context.startActivity(intent)
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun PostCreationBar(
     profileState: UserProfileState,
@@ -725,7 +696,6 @@ fun PostCreationBar(
         }
     }
 }
-
 @Composable
 fun PostActionButton(icon: ImageVector, text: String, onClick: () -> Unit) {
     TextButton(onClick = onClick) {
@@ -926,80 +896,6 @@ fun InteractionButton(icon: ImageVector, text: String, onClick: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PostCreationDialog(
-    profileState: UserProfileState,
-    onDismiss: () -> Unit,
-    onPost: (String) -> Unit
-) {
-    var postContent by remember { mutableStateOf("") }
-    val isPostButtonEnabled = postContent.isNotBlank()
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = "New Post",
-                style = MaterialTheme.typography.titleLarge
-            )
-        },
-        text = {
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(profileState.photoUrl)
-                            .crossfade(true)
-                            .placeholder(R.drawable.ic_person_placeholder)
-                            .error(R.drawable.ic_person_placeholder)
-                            .build(),
-                        contentDescription = "Your Profile Photo",
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = profileState.userName,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-                OutlinedTextField(
-                    value = postContent,
-                    onValueChange = { postContent = it },
-                    label = { Text("Share your thought...") },
-                    placeholder = { Text("What is on your heart today?") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 100.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surface,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
-                    )
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onPost(postContent) },
-                enabled = isPostButtonEnabled
-            ) {
-                Text("Post")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-
-        },
-        containerColor = MaterialTheme.colorScheme.background,
-        textContentColor = MaterialTheme.colorScheme.onBackground
-    )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
 fun EditPostDialog(
     postContent: String,
     onDismiss: () -> Unit,
@@ -1047,60 +943,6 @@ fun EditPostDialog(
         textContentColor = MaterialTheme.colorScheme.onBackground
     )
 }
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun PhotoPostCreationDialog(
-    imageUri: Uri,
-    isUploading: Boolean,
-    onDismiss: () -> Unit,
-    onPost: (String) -> Unit
-) {
-    var caption by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Create Photo Post") },
-        text = {
-            Column {
-                AsyncImage(
-                    model = imageUri,
-                    contentDescription = "Selected image",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(1f)
-                        .clip(MaterialTheme.shapes.medium),
-                    contentScale = ContentScale.Crop
-                )
-                Spacer(Modifier.height(16.dp))
-                OutlinedTextField(
-                    value = caption,
-                    onValueChange = { caption = it },
-                    label = { Text("Write a caption...") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onPost(caption) },
-                enabled = !isUploading
-            ) {
-                if (isUploading) {
-                    CircularProgressIndicator(Modifier.size(24.dp))
-                } else {
-                    Text("Post")
-                }
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    )
-}
-
 @Composable
 fun GroupsChurchScreen(viewModel: ChurchesViewModel) {
     val uiState by viewModel.uiState.collectAsState()
