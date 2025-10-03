@@ -1,12 +1,12 @@
-@file:OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class) // ✨ FIX: ADDED ExperimentalMaterial3Api to file level
+@file:OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 
 package com.arua.lonyichat
 
 import android.app.Activity
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
-import android.net.Uri
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -15,15 +15,15 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.interaction.MutableInteractionSource // ✨ FIX: ADDED MISSING IMPORT
-import androidx.compose.foundation.interaction.collectIsFocusedAsState // ✨ NEW: Import for focus state
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -42,23 +42,20 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-// -----------------------------------------------------------
-// ✨ CRITICAL FIX: Use wildcard and explicit PointerEventType import
-import androidx.compose.ui.input.pointer.*
-// -----------------------------------------------------------
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.Popup
 import androidx.core.view.WindowInsetsControllerCompat
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -71,9 +68,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
-import androidx.compose.ui.zIndex // Already imported in last step, keeping for clarity.
+import androidx.compose.ui.zIndex
 
-// ✨ NEW: Reaction Data Model and List ✨
 data class AppReaction(val type: String, val emoji: String, val label: String)
 
 val LonyiReactions = listOf(
@@ -81,17 +77,9 @@ val LonyiReactions = listOf(
     AppReaction("hallelujah", "🥳", "Hallelujah"),
     AppReaction("praiseGod", "🙌", "Praise God")
 )
-// ---------------------------------------------------------------------------------
 
-
-// ✨ NEW: Constant for minimum duration of the pull-to-refresh animation
 private const val MIN_REFRESH_DURATION = 500L
-
 private const val TAG = "MainActivity"
-
-// ---------------------------------------------------------------------------------
-// 側 PROFILE STATE MANAGEMENT 側
-// ---------------------------------------------------------------------------------
 
 data class UserProfileState(
     val userName: String = "Loading...",
@@ -99,7 +87,6 @@ data class UserProfileState(
     val isLoading: Boolean = true
 )
 
-// Define the Screens (Tabs)
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     data object Home : Screen("home", "Feed", Icons.Filled.Home)
     data object Groups : Screen("groups", "Churches", Icons.Filled.Group)
@@ -149,7 +136,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// REMOVED @OptIn(ExperimentalMaterial3Api::class) - moved to file level
 @Composable
 fun LonyiChatApp(
     homeFeedViewModel: HomeFeedViewModel,
@@ -213,12 +199,11 @@ fun LonyiChatApp(
             }
         },
         floatingActionButton = {
-            if (selectedItem is Screen.Home) { // Changed FAB to Home screen for general content creation
+            if (selectedItem is Screen.Home) {
                 val createPostLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.StartActivityForResult()
                 ) { result ->
                     if (result.resultCode == Activity.RESULT_OK) {
-                        // Refresh home feed after successful upload
                         homeFeedViewModel.fetchPosts()
                     }
                 }
@@ -235,7 +220,6 @@ fun LonyiChatApp(
                     contract = ActivityResultContracts.StartActivityForResult()
                 ) { result ->
                     if (result.resultCode == Activity.RESULT_OK) {
-                        // Refresh media feed after successful upload
                         mediaViewModel.fetchMedia()
                     }
                 }
@@ -269,8 +253,8 @@ fun LonyiChatApp(
         }
     }
 }
-// End LonyiChatApp
-@Composable // REMOVED @OptIn(ExperimentalMaterial3Api::class) - moved to file level
+
+@Composable
 fun LonyiChatTopBar(
     title: String,
     showBackButton: Boolean,
@@ -343,7 +327,6 @@ fun ScreenContent(
 ) {
     when (screen) {
         Screen.Home -> HomeFeedScreen(profileState, homeFeedViewModel, scrollBehavior)
-        // ✨ FIX: Removed unused scrollBehavior from calls to other screens
         Screen.Groups -> GroupsChurchScreen(churchesViewModel)
         Screen.Bible -> BibleStudyScreen(bibleViewModel)
         Screen.Chat -> ChatScreen(chatListViewModel)
@@ -556,14 +539,12 @@ fun EditProfileDialog(
 
     val isSaveEnabled = name.isNotBlank() && phone.isNotBlank() && age.isNotBlank() && country.isNotBlank()
 
-    // ✨ ADDED: Consistent, modern OutlinedTextField colors
     val textFieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = MaterialTheme.colorScheme.primary, // LonyiOrange for focus
-        unfocusedBorderColor = Color.White.copy(alpha = 0.5f), // Subtle white border
+        focusedBorderColor = MaterialTheme.colorScheme.primary,
+        unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
         unfocusedContainerColor = MaterialTheme.colorScheme.surface,
         focusedContainerColor = MaterialTheme.colorScheme.surface,
         cursorColor = MaterialTheme.colorScheme.primary,
-        // Ensure text is readable against the container background
         focusedTextColor = MaterialTheme.colorScheme.onSurface,
         unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
     )
@@ -580,7 +561,7 @@ fun EditProfileDialog(
                     label = { Text("Name") },
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                     singleLine = true,
-                    colors = textFieldColors // ✨ APPLIED: Custom colors
+                    colors = textFieldColors
                 )
                 OutlinedTextField(
                     value = phone,
@@ -588,7 +569,7 @@ fun EditProfileDialog(
                     label = { Text("Phone Number") },
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                     singleLine = true,
-                    colors = textFieldColors // ✨ APPLIED: Custom colors
+                    colors = textFieldColors
                 )
                 OutlinedTextField(
                     value = age,
@@ -596,7 +577,7 @@ fun EditProfileDialog(
                     label = { Text("Age") },
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                     singleLine = true,
-                    colors = textFieldColors // ✨ APPLIED: Custom colors
+                    colors = textFieldColors
                 )
                 OutlinedTextField(
                     value = country,
@@ -604,7 +585,7 @@ fun EditProfileDialog(
                     label = { Text("Country") },
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                     singleLine = true,
-                    colors = textFieldColors // ✨ APPLIED: Custom colors
+                    colors = textFieldColors
                 )
             }
         },
@@ -626,7 +607,6 @@ fun EditProfileDialog(
     )
 }
 
-// REMOVED @OptIn(ExperimentalMaterial3Api::class) - moved to file level
 @Composable
 fun HomeFeedScreen(
     profileState: UserProfileState,
@@ -635,7 +615,7 @@ fun HomeFeedScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope() // ✨ FIX: Added coroutineScope for nested launch/delay calls
+    val coroutineScope = rememberCoroutineScope()
 
     val createPostLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -645,19 +625,16 @@ fun HomeFeedScreen(
         }
     }
 
-    // NEW: Reactor List Dialog logic
     val reactorUiState by viewModel.reactorUiState.collectAsState()
 
-    // Show Reactor List Dialog if data is loading or loaded
     if (reactorUiState.reactors.amen.isNotEmpty() || reactorUiState.reactors.hallelujah.isNotEmpty() || reactorUiState.reactors.praiseGod.isNotEmpty() || reactorUiState.isLoading) {
         ReactorListDialog(
             uiState = reactorUiState,
-            onDismiss = { viewModel.clearReactorState() } // Clear state on dismiss
+            onDismiss = { viewModel.clearReactorState() }
         )
     }
 
     if (reactorUiState.error != null) {
-        // Show Toast for error in loading reactors (if a previous one exists, the one below it will clear it)
         Toast.makeText(LocalContext.current, "Error loading reactors: ${reactorUiState.error}", Toast.LENGTH_LONG).show()
         viewModel.clearReactorState()
     }
@@ -673,12 +650,9 @@ fun HomeFeedScreen(
         }
     }
 
-    // ✨ PULL-TO-REFRESH IMPLEMENTATION START (HomeFeedScreen) - USING ACCOMPANIST ✨
-    // 1. Remember Accompanist state
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = uiState.isLoading)
 
-    // 2. Define refresh action
-    val onRefresh = { // ✨ FIX: Removed implicit return type, allowing lambda to return Unit.
+    val onRefresh = {
         coroutineScope.launch {
             val startTime = System.currentTimeMillis()
             viewModel.fetchPosts()
@@ -688,16 +662,13 @@ fun HomeFeedScreen(
                 delay(MIN_REFRESH_DURATION - duration)
             }
         }
-        Unit // ✨ CRITICAL FIX: Explicitly return Unit to resolve Argument Type Mismatch
+        Unit
     }
-    // ✨ PULL-TO-REFRESH IMPLEMENTATION END ✨
 
-    // ✨ NEW: State to track which post's reaction selector is currently open (for modal dismissal)
     var openReactionPostId by remember { mutableStateOf<String?>(null) }
 
 
     when {
-        // Only show full-screen loading if list is empty and initial load is in progress
         uiState.isLoading && uiState.posts.isEmpty() -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
@@ -716,43 +687,17 @@ fun HomeFeedScreen(
             }
         }
         else -> {
-            // ✨ NEW: Full-screen clickable overlay for modal dismissal
-            if (openReactionPostId != null) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .zIndex(1f) // Sit above the LazyColumn content
-                        .background(Color.Black.copy(alpha = 0.001f)) // Near-transparent to enable clicks
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = { openReactionPostId = null } // Dismiss on any click
-                        )
-                        // Crucial for blocking scroll
-                        .pointerInput(Unit) {
-                            awaitPointerEventScope {
-                                while (true) {
-                                    val event = awaitPointerEvent()
-                                    // Consume scroll events to stop the LazyColumn from moving while the menu is up
-                                    if (event.changes.any { it.scrollDelta.y != 0f }) {
-                                        event.changes.forEach { it.consume() }
-                                    }
-                                }
-                            }
-                        }
-                )
-            }
+            // ✨ REMOVED: The manual full-screen overlay is no longer needed.
+            // The Popup composable will handle dismissal automatically.
 
-            // 3. Wrap content in SwipeRefresh
             SwipeRefresh(
                 state = swipeRefreshState,
                 onRefresh = onRefresh,
-                // The LazyColumn already handles scrolling and nested scroll connection
                 modifier = Modifier.fillMaxSize()
             ) {
                 LazyColumn(
                     state = lazyListState,
-                    modifier = Modifier // Removed .nestedScroll(scrollBehavior.nestedScrollConnection) here, keeping it only on Scaffold
+                    modifier = Modifier
                         .fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 8.dp)
                 ) {
@@ -772,7 +717,6 @@ fun HomeFeedScreen(
                     }
 
                     items(uiState.posts, key = { it.id }) { post ->
-                        // ✨ MODIFIED: Pass new parameters to PostCard
                         PostCard(
                             post = post,
                             viewModel = viewModel,
@@ -781,7 +725,6 @@ fun HomeFeedScreen(
                                 intent.putExtra("POST_ID", post.id)
                                 context.startActivity(intent)
                             },
-                            // Pass modal state handlers
                             showReactionSelector = openReactionPostId == post.id,
                             onSelectorOpen = { openReactionPostId = it },
                             onSelectorDismiss = { openReactionPostId = null }
@@ -861,13 +804,11 @@ fun PostActionButton(icon: ImageVector, text: String, onClick: () -> Unit) {
     }
 }
 
-// ✨ MODIFIED: PostCard is now a composite component managing the selector logic
 @Composable
 fun PostCard(
     post: com.arua.lonyichat.data.Post,
     viewModel: HomeFeedViewModel,
     onCommentClicked: () -> Unit,
-    // ✨ ADDED: New arguments to control modal behavior
     showReactionSelector: Boolean,
     onSelectorOpen: (String) -> Unit,
     onSelectorDismiss: () -> Unit
@@ -877,8 +818,6 @@ fun PostCard(
     val isAuthor = post.authorId == currentUserId
     var showEditDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
-
-    // State to hold the URL of the image to be previewed
     var fullScreenImageUrl by remember { mutableStateOf<String?>(null) }
 
 
@@ -916,7 +855,6 @@ fun PostCard(
         )
     }
 
-    // Full Screen Image Viewer Dialog
     fullScreenImageUrl?.let { imageUrl ->
         FullScreenImageDialog(
             imageUrl = imageUrl,
@@ -934,7 +872,6 @@ fun PostCard(
             containerColor = Color.White.copy(alpha = 0.1f)
         )
     ) {
-        // Removed the clickable dismissal logic from here
         Column {
             Column(modifier = Modifier.padding(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
@@ -996,17 +933,15 @@ fun PostCard(
                     AsyncImage(
                         model = post.imageUrl,
                         contentDescription = "Post image",
-                        // ✨ MODIFIED: Add clickable modifier to open the full screen dialog
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(MaterialTheme.shapes.medium)
-                            .clickable { fullScreenImageUrl = post.imageUrl }, // Set state to show dialog
+                            .clickable { fullScreenImageUrl = post.imageUrl },
                         contentScale = ContentScale.Crop
                     )
                 }
             }
 
-            // --- Reaction Summary Bar ---
             PostReactionSummary(
                 post = post,
                 onSummaryClicked = {
@@ -1014,36 +949,34 @@ fun PostCard(
                 }
             )
 
-            // --- Interaction Bar and Selector ---
             Box(
                 modifier = Modifier.fillMaxWidth()
             ) {
 
-                // 2. Post Interaction Bar (Always visible)
                 PostInteractionBar(
                     post = post,
                     viewModel = viewModel,
                     onCommentClicked = onCommentClicked,
                     onLikeLongPressed = { onSelectorOpen(post.id) },
-                    // Pass selector visibility for visual state (color change)
                     isSelectorVisible = showReactionSelector
                 )
 
-                // 3. Reaction Selector Menu (Floating on top)
+                // ✨ CRITICAL FIX: Use a Popup for the reaction selector ✨
                 if (showReactionSelector) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            // Offset from the bottom of the Card to float above the Interaction Bar
-                            .offset(x = 16.dp, y = (-72).dp)
-                            .zIndex(2f) // Ensure menu is on top of everything
+                    val density = LocalDensity.current
+                    Popup(
+                        alignment = Alignment.BottomStart,
+                        // Position the popup relative to the PostInteractionBar
+                        offset = with(density) {
+                            IntOffset(16.dp.roundToPx(), -72.dp.roundToPx())
+                        },
+                        // onDismissRequest handles clicks outside the popup area
+                        onDismissRequest = onSelectorDismiss
                     ) {
-                        // The ReactionSelectorMenu itself consumes inner taps
                         ReactionSelectorMenu(
-                            onDismiss = onSelectorDismiss, // Use the passed dismissal lambda
                             onReactionSelected = { reactionType ->
                                 viewModel.reactToPost(post.id, reactionType)
-                                onSelectorDismiss() // Dismiss selector after selection
+                                onSelectorDismiss() // Dismiss after selection
                             }
                         )
                     }
@@ -1053,7 +986,6 @@ fun PostCard(
     }
 }
 
-// ✨ NEW: Composable for the Post Editing Dialog (FIXES UNRESOLVED REFERENCE) ✨
 @Composable
 fun EditPostDialog(
     postContent: String,
@@ -1061,10 +993,8 @@ fun EditPostDialog(
     onPost: (newContent: String) -> Unit
 ) {
     var newContent by remember { mutableStateOf(postContent) }
-    // Enable save only if content is not blank and is actually different from original
     val isSaveEnabled = newContent.isNotBlank() && newContent != postContent
 
-    // Same colors as used in EditProfileDialog for consistency
     val textFieldColors = OutlinedTextFieldDefaults.colors(
         focusedBorderColor = MaterialTheme.colorScheme.primary,
         unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
@@ -1109,39 +1039,34 @@ fun EditPostDialog(
     )
 }
 
-// ✨ NEW: Composable for the Full-Screen Image Dialog ✨
 @Composable
 fun FullScreenImageDialog(
     imageUrl: String,
     onDismiss: () -> Unit
 ) {
-    // Use Dialog with usePlatformDefaultWidth = false and fillMaxSize() to create a full-screen effect.
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
-            // Draw behind status and navigation bars for a true full-screen experience
             decorFitsSystemWindows = true
         )
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black), // Black background for image viewing
+                .background(Color.Black),
             contentAlignment = Alignment.Center
         ) {
-            // AsyncImage loads the image URL passed from the post
             AsyncImage(
                 model = imageUrl,
                 contentDescription = "Full-screen post image",
                 modifier = Modifier
                     .fillMaxWidth()
                     .wrapContentHeight()
-                    .clickable(onClick = onDismiss), // Dismiss on click
-                contentScale = ContentScale.Fit // Fit the image within the screen bounds
+                    .clickable(onClick = onDismiss),
+                contentScale = ContentScale.Fit
             )
 
-            // Close button in the top right corner
             IconButton(
                 onClick = onDismiss,
                 modifier = Modifier
@@ -1171,7 +1096,6 @@ fun InteractionButton(icon: ImageVector, text: String, onClick: () -> Unit, modi
     ) {
         Icon(icon, contentDescription = text, tint = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.width(8.dp))
-        // FIX: Ensure the text is on a single line and handles overflow
         Text(
             text,
             color = MaterialTheme.colorScheme.primary,
@@ -1181,12 +1105,10 @@ fun InteractionButton(icon: ImageVector, text: String, onClick: () -> Unit, modi
     }
 }
 
-// ✨ NEW: PostReactionSummary (Display total count and trigger dialog) ✨
 @Composable
 fun PostReactionSummary(post: com.arua.lonyichat.data.Post, onSummaryClicked: () -> Unit) {
     val totalReactions = post.reactions.amen + post.reactions.hallelujah + post.reactions.praiseGod
 
-    // Divider is always shown, but the summary is only shown if there are reactions
     Divider(color = Color.Gray.copy(alpha = 0.3f), thickness = 1.dp)
 
     if (totalReactions > 0) {
@@ -1199,7 +1121,6 @@ fun PostReactionSummary(post: com.arua.lonyichat.data.Post, onSummaryClicked: ()
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Reaction icons placeholder (Facebook-like)
                 if (post.reactions.amen > 0) {
                     Text("🙏", fontSize = 16.sp)
                     Spacer(Modifier.width(4.dp))
@@ -1221,7 +1142,6 @@ fun PostReactionSummary(post: com.arua.lonyichat.data.Post, onSummaryClicked: ()
                 )
             }
 
-            // Show comment and share counts on the right
             Text(
                 text = "${post.commentCount} Comments · ${post.shareCount} Shares",
                 style = MaterialTheme.typography.labelMedium,
@@ -1233,7 +1153,6 @@ fun PostReactionSummary(post: com.arua.lonyichat.data.Post, onSummaryClicked: ()
 }
 
 
-// ✨ MODIFIED: PostInteractionBar (Handles short press dynamically) ✨
 @Composable
 fun PostInteractionBar(
     post: com.arua.lonyichat.data.Post,
@@ -1249,7 +1168,6 @@ fun PostInteractionBar(
         else -> null
     }
 
-    // Determine the icon and text based on the user's current reaction
     val (icon, text) = when (currentReaction) {
         "amen" -> Pair(Icons.Default.ThumbUp, "Amen")
         "hallelujah" -> Pair(Icons.Default.Star, "Hallelujah")
@@ -1262,9 +1180,6 @@ fun PostInteractionBar(
         label = "reactionColor"
     )
 
-    // ✨ FIX: Determine the reaction type for a short click:
-    // If a reaction is active, send that type to toggle it OFF (un-react).
-    // If no reaction is active, send "amen" to toggle it ON (default quick like).
     val reactionTypeForShortClick = currentReaction ?: "amen"
 
     Row(
@@ -1272,17 +1187,15 @@ fun PostInteractionBar(
         horizontalArrangement = Arrangement.SpaceAround,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // --- Reaction Button (Long Press for Selector) ---
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .weight(1f)
                 .combinedClickable(
-                    // FIX: Execute reactToPost with the correct type for toggle
                     onClick = {
                         viewModel.reactToPost(post.id, reactionTypeForShortClick)
                     },
-                    onLongClick = onLikeLongPressed // Use the passed lambda
+                    onLongClick = onLikeLongPressed
                 )
                 .padding(vertical = 8.dp, horizontal = 16.dp),
             horizontalArrangement = Arrangement.Center
@@ -1292,7 +1205,6 @@ fun PostInteractionBar(
             Text(text, color = contentColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
 
-        // --- Comment Button ---
         InteractionButton(
             icon = Icons.Default.Comment,
             text = "Comment",
@@ -1300,7 +1212,6 @@ fun PostInteractionBar(
             modifier = Modifier.weight(1f)
         )
 
-        // --- Share Button ---
         InteractionButton(
             icon = Icons.Default.Share,
             text = "Share",
@@ -1310,17 +1221,22 @@ fun PostInteractionBar(
     }
 }
 
-// ✨ MODIFIED & FIXED: ReactionSelectorMenu now inlines logic to correctly handle clicks/focus. ✨
+// ✨ FINAL, SIMPLIFIED, AND CORRECT IMPLEMENTATION ✨
 @Composable
 fun ReactionSelectorMenu(
-    onDismiss: () -> Unit,
     onReactionSelected: (reactionType: String) -> Unit
 ) {
-    // State to track which reaction index is currently being focused (for visual feedback)
     var focusedReactionIndex by remember { mutableStateOf<Int?>(null) }
-    // State to keep track of the Row size for calculation in pointerInput
-    val reactionRowSize = remember { mutableStateOf(IntSize.Zero) }
+    var rowSize by remember { mutableStateOf(IntSize.Zero) }
     val reactionCount = LonyiReactions.size
+
+    // Helper to calculate which emoji is being hovered over
+    val indexFromPosition: (x: Float) -> Int? = { x ->
+        if (rowSize.width == 0) null else {
+            val itemWidth = rowSize.width.toFloat() / reactionCount
+            (x / itemWidth).toInt().coerceIn(0, reactionCount - 1)
+        }
+    }
 
     Card(
         elevation = CardDefaults.cardElevation(8.dp),
@@ -1328,7 +1244,7 @@ fun ReactionSelectorMenu(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            // 1. Hover Text Label (appears when a reaction is focused)
+            // Label that appears on hover
             focusedReactionIndex?.let { index ->
                 val reaction = LonyiReactions[index]
                 Text(
@@ -1339,7 +1255,7 @@ fun ReactionSelectorMenu(
                     modifier = Modifier
                         .padding(top = 8.dp)
                         .background(
-                            MaterialTheme.colorScheme.primary, // Orange background for text label
+                            MaterialTheme.colorScheme.primary,
                             RoundedCornerShape(4.dp)
                         )
                         .padding(horizontal = 6.dp, vertical = 2.dp)
@@ -1347,74 +1263,44 @@ fun ReactionSelectorMenu(
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
-            // 2. Reaction Icons Row
+            // The Row containing the reactions
             Row(
                 modifier = Modifier
-                    .onSizeChanged { reactionRowSize.value = it }
-                    // CRITICAL FIX: The pointerInput is maintained for hover/focus state tracking (visuals only).
-                    .pointerInput(reactionRowSize.value) {
-                        val itemWidth = reactionRowSize.value.width.toFloat() / reactionCount
-                        awaitPointerEventScope {
-                            while (true) {
-                                // Wait for the first down event or move event
-                                val event = awaitPointerEvent()
-                                val change = event.changes.first()
-
-                                val xPos = change.position.x
-
-                                // Determine current focused index
-                                val newIndex = if (xPos < 0 || xPos > reactionRowSize.value.width) {
-                                    null // Outside bounds
-                                } else {
-                                    (xPos / itemWidth).toInt().coerceIn(0, reactionCount - 1)
-                                }
-
-                                focusedReactionIndex = newIndex
-
-                                // Loop to track movement until the pointer is lifted
-                                if (event.changes.any { it.pressed }) {
-                                    do {
-                                        val moveEvent = awaitPointerEvent()
-                                        val moveChange = moveEvent.changes.first()
-
-                                        val moveXPos = moveChange.position.x
-                                        val movedIndex = if (moveXPos < 0 || moveXPos > reactionRowSize.value.width) {
-                                            null
-                                        } else {
-                                            (moveXPos / itemWidth).toInt().coerceIn(0, reactionCount - 1)
-                                        }
-                                        focusedReactionIndex = movedIndex
-                                    } while (moveChange.pressed)
-                                }
-
-                                focusedReactionIndex = null // Clear focus when pointer is lifted
+                    .onSizeChanged { rowSize = it }
+                    // This pointerInput is ONLY for the visual hover/scale effect
+                    .pointerInput(Unit) {
+                        detectDragGestures(
+                            onDragStart = { offset -> focusedReactionIndex = indexFromPosition(offset.x) },
+                            onDragEnd = { focusedReactionIndex = null },
+                            onDragCancel = { focusedReactionIndex = null },
+                            onDrag = { change, _ ->
+                                focusedReactionIndex = indexFromPosition(change.position.x)
+                                change.consume()
                             }
-                        }
+                        )
                     }
                     .padding(horizontal = 8.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // Display each reaction icon
                 LonyiReactions.forEachIndexed { index, reaction ->
                     val isFocused = index == focusedReactionIndex
                     val scale by animateFloatAsState(
                         targetValue = if (isFocused) 1.5f else 1.0f,
                         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-                        label = "reactionScale${reaction.type}"
+                        label = "reactionScale"
                     )
-
-                    // Inlining the logic (from the previously deleted ReactionIcon) ensures the onClick lambda
-                    // correctly captures the unique 'reaction.type' for each iteration, solving the core bug.
-                    // The clickable handles the actual tap event independently from the pointerInput for hover/focus.
                     Box(
                         modifier = Modifier
-                            .size(40.dp) // Fixed size for touch target
-                            .scale(scale)
-                            .clip(CircleShape)
+                            // ✨ THIS IS THE FIX: A direct, unambiguous clickable on each item ✨
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
                                 onClick = { onReactionSelected(reaction.type) }
                             )
+                            .size(40.dp)
+                            .scale(scale)
+                            .clip(CircleShape)
                             .background(if (isFocused) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent),
                         contentAlignment = Alignment.Center
                     ) {
@@ -1430,15 +1316,11 @@ fun ReactionSelectorMenu(
     }
 }
 
-// ✨ DELETED: The `ReactionIcon` composable previously located here (Lines 1191-1215) was removed to fix the closure bug.
-
-// ✨ FIX: Restored reference
 @Composable
 fun ReactorListDialog(
     uiState: ReactorUiState,
     onDismiss: () -> Unit
 ) {
-    // Determine the content to display based on the current loading/data state
     val content: @Composable () -> Unit = {
         if (uiState.isLoading) {
             Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
@@ -1451,13 +1333,11 @@ fun ReactorListDialog(
             val hallelujahReactors = uiState.reactors.hallelujah
             val praiseGodReactors = uiState.reactors.praiseGod
 
-            // Get all unique reactors for the "All" tab
             val allReactors = (amenReactors + hallelujahReactors + praiseGodReactors)
                 .distinctBy { it.userId }
                 .toMutableList()
 
             Column(modifier = Modifier.fillMaxWidth()) {
-                // Tab Row for Reaction Types (All, Amen, Hallelujah, Praise God)
                 var selectedTab by remember { mutableStateOf(0) }
                 val tabs = listOf(
                     Triple("All", allReactors.size, null),
@@ -1552,15 +1432,13 @@ fun ReactorItem(reactor: Reactor) {
 
 
 @Composable
-fun GroupsChurchScreen(viewModel: ChurchesViewModel) { // ✨ FIX: Restored reference
+fun GroupsChurchScreen(viewModel: ChurchesViewModel) {
     val uiState by viewModel.uiState.collectAsState()
-    val coroutineScope = rememberCoroutineScope() // ✨ FIX: Added coroutineScope for nested launch/delay calls
+    val coroutineScope = rememberCoroutineScope()
 
-    // ✨ PULL-TO-REFRESH IMPLEMENTATION START (GroupsChurchScreen) - USING ACCOMPANIST ✨
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = uiState.isLoading)
 
-    // 2. Define refresh action
-    val onRefresh = { // ✨ FIX: Removed implicit return type, allowing lambda to return Unit.
+    val onRefresh = {
         coroutineScope.launch {
             val startTime = System.currentTimeMillis()
             viewModel.fetchChurches()
@@ -1570,9 +1448,8 @@ fun GroupsChurchScreen(viewModel: ChurchesViewModel) { // ✨ FIX: Restored refe
                 delay(MIN_REFRESH_DURATION - duration)
             }
         }
-        Unit // ✨ CRITICAL FIX: Explicitly return Unit to resolve Argument Type Mismatch
+        Unit
     }
-    // ✨ PULL-TO-REFRESH IMPLEMENTATION END ✨
 
     Column(
         modifier = Modifier
@@ -1598,7 +1475,6 @@ fun GroupsChurchScreen(viewModel: ChurchesViewModel) { // ✨ FIX: Restored refe
                 }
             }
             else -> {
-                // 3. Wrap content in SwipeRefresh
                 SwipeRefresh(
                     state = swipeRefreshState,
                     onRefresh = onRefresh,
@@ -1657,16 +1533,14 @@ fun ChurchCard(church: Church, onFollowClicked: () -> Unit) {
 }
 
 @Composable
-fun ChatScreen(viewModel: ChatListViewModel) { // ✨ FIX: Restored reference
+fun ChatScreen(viewModel: ChatListViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     val currentUserId = ApiService.getCurrentUserId()
-    val coroutineScope = rememberCoroutineScope() // ✨ FIX: Added coroutineScope for nested launch/delay calls
+    val coroutineScope = rememberCoroutineScope()
 
-    // ✨ PULL-TO-REFRESH IMPLEMENTATION START (ChatScreen) - USING ACCOMPANIST ✨
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = uiState.isLoading)
 
-    // 2. Define refresh action
-    val onRefresh = { // ✨ FIX: Removed implicit return type, allowing lambda to return Unit.
+    val onRefresh = {
         coroutineScope.launch {
             val startTime = System.currentTimeMillis()
             viewModel.fetchConversations()
@@ -1676,9 +1550,8 @@ fun ChatScreen(viewModel: ChatListViewModel) { // ✨ FIX: Restored reference
                 delay(MIN_REFRESH_DURATION - duration)
             }
         }
-        Unit // ✨ CRITICAL FIX: Explicitly return Unit to resolve Argument Type Mismatch
+        Unit
     }
-    // ✨ PULL-TO-REFRESH IMPLEMENTATION END ✨
 
     Column(
         modifier = Modifier
@@ -1734,7 +1607,6 @@ fun ChatScreen(viewModel: ChatListViewModel) { // ✨ FIX: Restored reference
                 }
             }
             else -> {
-                // 3. Wrap content in SwipeRefresh
                 SwipeRefresh(
                     state = swipeRefreshState,
                     onRefresh = onRefresh,
@@ -1797,7 +1669,7 @@ fun ChatThreadItem(chatName: String, lastMessage: String, timestamp: Date?) {
 }
 
 @Composable
-fun BibleStudyScreen(viewModel: BibleViewModel) { // ✨ FIX: Restored reference
+fun BibleStudyScreen(viewModel: BibleViewModel) {
     val uiState by viewModel.uiState.collectAsState()
 
     Column(
@@ -1898,15 +1770,13 @@ fun BibleStudyScreen(viewModel: BibleViewModel) { // ✨ FIX: Restored reference
 }
 
 @Composable
-fun MediaScreen(viewModel: MediaViewModel) { // ✨ FIX: Restored reference
+fun MediaScreen(viewModel: MediaViewModel) {
     val uiState by viewModel.uiState.collectAsState()
-    val coroutineScope = rememberCoroutineScope() // ✨ FIX: Added coroutineScope for nested launch/delay calls
+    val coroutineScope = rememberCoroutineScope()
 
-    // ✨ PULL-TO-REFRESH IMPLEMENTATION START (MediaScreen) - USING ACCOMPANIST ✨
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = uiState.isLoading)
 
-    // 2. Define refresh action
-    val onRefresh = { // ✨ FIX: Removed implicit return type, allowing lambda to return Unit.
+    val onRefresh = {
         coroutineScope.launch {
             val startTime = System.currentTimeMillis()
             viewModel.fetchMedia()
@@ -1916,9 +1786,8 @@ fun MediaScreen(viewModel: MediaViewModel) { // ✨ FIX: Restored reference
                 delay(MIN_REFRESH_DURATION - duration)
             }
         }
-        Unit // ✨ CRITICAL FIX: Explicitly return Unit to resolve Argument Type Mismatch
+        Unit
     }
-    // ✨ PULL-TO-REFRESH IMPLEMENTATION END ✨
 
     Column(
         modifier = Modifier
@@ -1944,7 +1813,6 @@ fun MediaScreen(viewModel: MediaViewModel) { // ✨ FIX: Restored reference
                 }
             }
             else -> {
-                // 3. Wrap content in SwipeRefresh
                 SwipeRefresh(
                     state = swipeRefreshState,
                     onRefresh = onRefresh,
@@ -1997,7 +1865,6 @@ fun MediaItemCard(mediaItem: MediaItem) {
     }
 }
 
-// ✨ FIX: Restored extension function
 fun Date.toFormattedString(): String {
     val simpleDateFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
     return simpleDateFormat.format(this)

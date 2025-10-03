@@ -232,9 +232,13 @@ class HomeFeedViewModel : ViewModel() {
                 currentState.copy(posts = updatedPosts)
             }
 
-            ApiService.reactToPost(postId, reactionType).onFailure {
+            ApiService.reactToPost(postId, reactionType).onFailure { error ->
                 // If API fails, revert the optimistic update
                 _uiState.update { it.copy(posts = originalPosts) }
+                // Log the error to see what's going wrong
+                Log.e("HomeFeedViewModel", "Failed to react to post: ${error.localizedMessage}")
+                // Optional: Show an error to the user
+                _uiState.update { it.copy(error = "Failed to save reaction. Please try again.") }
             }
         }
     }
