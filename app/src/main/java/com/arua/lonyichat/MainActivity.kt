@@ -24,6 +24,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -39,8 +40,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
@@ -57,7 +58,7 @@ import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Popup
-import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.WindowCompat
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.arua.lonyichat.data.*
@@ -109,15 +110,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             LonyiChatTheme {
-                val view = LocalView.current
-                if (!view.isInEditMode) {
-                    SideEffect {
-                        val window = (view.context as Activity).window
-                        val insetsController = WindowInsetsControllerCompat(window, view)
-                        insetsController.isAppearanceLightStatusBars = false
-                        insetsController.isAppearanceLightNavigationBars = false
-                    }
-                }
+                // The main theme setup remains the same
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -211,10 +204,9 @@ fun LonyiChatApp(
                     onClick = {
                         val intent = Intent(context, CreatePostActivity::class.java)
                         createPostLauncher.launch(intent)
-                    },
-                    containerColor = MaterialTheme.colorScheme.primary
+                    }
                 ) {
-                    Icon(Icons.Default.Edit, contentDescription = "Create Post", tint = Color.White)
+                    Icon(Icons.Default.Edit, contentDescription = "Create Post")
                 }
             } else if (selectedItem is Screen.Media) {
                 val createMediaLauncher = rememberLauncherForActivityResult(
@@ -228,10 +220,9 @@ fun LonyiChatApp(
                     onClick = {
                         val intent = Intent(context, CreateMediaActivity::class.java)
                         createMediaLauncher.launch(intent)
-                    },
-                    containerColor = MaterialTheme.colorScheme.primary
+                    }
                 ) {
-                    Icon(Icons.Default.VideoCall, contentDescription = "Upload Media", tint = Color.White)
+                    Icon(Icons.Default.VideoCall, contentDescription = "Upload Media")
                 }
             }
         }
@@ -240,14 +231,6 @@ fun LonyiChatApp(
             modifier = Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.background,
-                            MaterialTheme.colorScheme.surface
-                        )
-                    )
-                )
         ) {
             ScreenContent(
                 screen = selectedItem,
@@ -264,6 +247,7 @@ fun LonyiChatApp(
     }
 }
 
+// ✨ THIS IS THE PRIMARY FIX ✨
 @Composable
 fun LonyiChatTopBar(
     title: String,
@@ -272,8 +256,30 @@ fun LonyiChatTopBar(
     onProfileClicked: () -> Unit,
     scrollBehavior: TopAppBarScrollBehavior
 ) {
+    val isDarkTheme = isSystemInDarkTheme()
+    val view = LocalView.current
+
+    // Determine the color for the header based on the theme
+    val headerColor = if (isDarkTheme) {
+        // Use a specific dark color for an immersive feel
+        MaterialTheme.colorScheme.surface
+    } else {
+        // Use the theme's primary color in light mode
+        MaterialTheme.colorScheme.primary
+    }
+
+    // This SideEffect will run when headerColor changes, ensuring the status bar always matches
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as Activity).window
+            window.statusBarColor = headerColor.toArgb()
+            // Set status bar icons to be light or dark based on the header's background
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !isDarkTheme
+        }
+    }
+
     TopAppBar(
-        title = { Text(title, fontWeight = FontWeight.Bold) },
+        title = { Text(title) },
         navigationIcon = {
             if (showBackButton) {
                 IconButton(onClick = onBackClicked) {
@@ -296,14 +302,16 @@ fun LonyiChatTopBar(
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.primary,
-            titleContentColor = Color.White,
-            actionIconContentColor = Color.White,
-            navigationIconContentColor = Color.White
+            containerColor = headerColor,
+            // Adjust text/icon color for contrast
+            titleContentColor = if (isDarkTheme) MaterialTheme.colorScheme.onSurface else Color.White,
+            actionIconContentColor = if (isDarkTheme) MaterialTheme.colorScheme.onSurface else Color.White,
+            navigationIconContentColor = if (isDarkTheme) MaterialTheme.colorScheme.onSurface else Color.White
         ),
         scrollBehavior = scrollBehavior
     )
 }
+
 
 @Composable
 fun LonyiChatBottomBar(
@@ -313,22 +321,14 @@ fun LonyiChatBottomBar(
 ) {
     NavigationBar(
         modifier = Modifier.navigationBarsPadding(),
-        containerColor = MaterialTheme.colorScheme.surface,
-        contentColor = MaterialTheme.colorScheme.onSurface
+        containerColor = MaterialTheme.colorScheme.surface
     ) {
         items.forEach { screen ->
             NavigationBarItem(
                 icon = { Icon(screen.icon, contentDescription = screen.title) },
                 label = { Text(screen.title) },
                 selected = selectedItem == screen,
-                onClick = { onItemSelected(screen) },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = MaterialTheme.colorScheme.primary,
-                    unselectedIconColor = Color.Gray,
-                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                    unselectedTextColor = Color.Gray,
-                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                )
+                onClick = { onItemSelected(screen) }
             )
         }
     }
@@ -509,7 +509,6 @@ fun ProfileScreen(viewModel: ProfileViewModel, onProfileUpdated: () -> Unit) {
         )
     }
 }
-
 @Composable
 fun ProfileStat(count: Int, label: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -770,7 +769,7 @@ fun PostCreationBar(
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp),
-        elevation = CardDefaults.cardElevation(4.dp),
+        elevation = CardDefaults.cardElevation(2.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         )
@@ -886,7 +885,7 @@ fun PostCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp),
-        elevation = CardDefaults.cardElevation(4.dp),
+        elevation = CardDefaults.cardElevation(2.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         )
