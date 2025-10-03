@@ -14,6 +14,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,6 +26,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.arua.lonyichat.data.ApiService
 import com.arua.lonyichat.ui.theme.LonyiChatTheme
@@ -56,9 +60,7 @@ fun SignupScreen(
     onSignupSuccess: () -> Unit,
     onNavigateToLogin: () -> Unit
 ) {
-    // ✨ THIS IS THE FIX: State to manage the current page ✨
     var currentPage by remember { mutableStateOf(1) }
-
     var username by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
@@ -67,6 +69,11 @@ fun SignupScreen(
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
+
+    // ✨ ADDED: Separate visibility states for each password field
+    var passwordVisible by remember { mutableStateOf(false) }
+    var confirmPasswordVisible by remember { mutableStateOf(false) }
+
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -78,7 +85,8 @@ fun SignupScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .safeContentPadding()
-                .padding(horizontal = 24.dp),
+                .padding(horizontal = 24.dp)
+                .verticalScroll(rememberScrollState()), // Added scroll for smaller screens
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Image(
@@ -120,13 +128,46 @@ fun SignupScreen(
                 Column {
                     OutlinedTextField(value = country, onValueChange = { country = it }, label = { Text("Country") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                     Spacer(modifier = Modifier.height(16.dp))
-                    OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("Password") }, modifier = Modifier.fillMaxWidth(), visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password), singleLine = true)
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = { Text("Password") },
+                        modifier = Modifier.fillMaxWidth(),
+                        // ✨ MODIFIED: Toggle visual transformation for password
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        singleLine = true,
+                        // ✨ ADDED: Trailing icon for password
+                        trailingIcon = {
+                            val image = if (passwordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(imageVector = image, if (passwordVisible) "Hide password" else "Show password")
+                            }
+                        }
+                    )
                     Spacer(modifier = Modifier.height(16.dp))
-                    OutlinedTextField(value = confirmPassword, onValueChange = { confirmPassword = it }, label = { Text("Confirm Password") }, modifier = Modifier.fillMaxWidth(), visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password), singleLine = true)
+                    OutlinedTextField(
+                        value = confirmPassword,
+                        onValueChange = { confirmPassword = it },
+                        label = { Text("Confirm Password") },
+                        modifier = Modifier.fillMaxWidth(),
+                        // ✨ MODIFIED: Toggle visual transformation for confirm password
+                        visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        singleLine = true,
+                        // ✨ ADDED: Trailing icon for confirm password
+                        trailingIcon = {
+                            val image = if (confirmPasswordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
+                            IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
+                                Icon(imageVector = image, if (confirmPasswordVisible) "Hide password" else "Show password")
+                            }
+                        }
+                    )
                 }
             }
 
-            Spacer(Modifier.weight(1f)) // Pushes buttons to the bottom
+            // This Spacer will be small on scrollable content, which is fine
+            Spacer(Modifier.weight(1f, fill = false))
 
             // Navigation and Action Buttons
             if (currentPage == 1) {
@@ -138,13 +179,13 @@ fun SignupScreen(
                             currentPage = 2
                         }
                     },
-                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    modifier = Modifier.fillMaxWidth().height(50.dp).padding(top = 16.dp),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Text("NEXT", fontWeight = FontWeight.Bold)
                 }
             } else {
-                Column {
+                Column(modifier = Modifier.padding(top = 16.dp)) {
                     Button(
                         onClick = {
                             when {
