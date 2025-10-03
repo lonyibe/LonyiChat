@@ -39,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -68,7 +69,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
-import androidx.compose.ui.zIndex
 
 data class AppReaction(val type: String, val emoji: String, val label: String)
 
@@ -211,9 +211,10 @@ fun LonyiChatApp(
                     onClick = {
                         val intent = Intent(context, CreatePostActivity::class.java)
                         createPostLauncher.launch(intent)
-                    }
+                    },
+                    containerColor = MaterialTheme.colorScheme.primary
                 ) {
-                    Icon(Icons.Default.Edit, contentDescription = "Create Post")
+                    Icon(Icons.Default.Edit, contentDescription = "Create Post", tint = Color.White)
                 }
             } else if (selectedItem is Screen.Media) {
                 val createMediaLauncher = rememberLauncherForActivityResult(
@@ -227,9 +228,10 @@ fun LonyiChatApp(
                     onClick = {
                         val intent = Intent(context, CreateMediaActivity::class.java)
                         createMediaLauncher.launch(intent)
-                    }
+                    },
+                    containerColor = MaterialTheme.colorScheme.primary
                 ) {
-                    Icon(Icons.Default.VideoCall, contentDescription = "Upload Media")
+                    Icon(Icons.Default.VideoCall, contentDescription = "Upload Media", tint = Color.White)
                 }
             }
         }
@@ -238,6 +240,14 @@ fun LonyiChatApp(
             modifier = Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.background,
+                            MaterialTheme.colorScheme.surface
+                        )
+                    )
+                )
         ) {
             ScreenContent(
                 screen = selectedItem,
@@ -263,7 +273,7 @@ fun LonyiChatTopBar(
     scrollBehavior: TopAppBarScrollBehavior
 ) {
     TopAppBar(
-        title = { Text(title) },
+        title = { Text(title, fontWeight = FontWeight.Bold) },
         navigationIcon = {
             if (showBackButton) {
                 IconButton(onClick = onBackClicked) {
@@ -286,7 +296,10 @@ fun LonyiChatTopBar(
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = MaterialTheme.colorScheme.primary,
+            titleContentColor = Color.White,
+            actionIconContentColor = Color.White,
+            navigationIconContentColor = Color.White
         ),
         scrollBehavior = scrollBehavior
     )
@@ -300,14 +313,22 @@ fun LonyiChatBottomBar(
 ) {
     NavigationBar(
         modifier = Modifier.navigationBarsPadding(),
-        containerColor = MaterialTheme.colorScheme.surface
+        containerColor = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface
     ) {
         items.forEach { screen ->
             NavigationBarItem(
                 icon = { Icon(screen.icon, contentDescription = screen.title) },
                 label = { Text(screen.title) },
                 selected = selectedItem == screen,
-                onClick = { onItemSelected(screen) }
+                onClick = { onItemSelected(screen) },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                    unselectedIconColor = Color.Gray,
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    unselectedTextColor = Color.Gray,
+                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                )
             )
         }
     }
@@ -488,6 +509,7 @@ fun ProfileScreen(viewModel: ProfileViewModel, onProfileUpdated: () -> Unit) {
         )
     }
 }
+
 @Composable
 fun ProfileStat(count: Int, label: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -687,9 +709,6 @@ fun HomeFeedScreen(
             }
         }
         else -> {
-            // ✨ REMOVED: The manual full-screen overlay is no longer needed.
-            // The Popup composable will handle dismissal automatically.
-
             SwipeRefresh(
                 state = swipeRefreshState,
                 onRefresh = onRefresh,
@@ -751,9 +770,9 @@ fun PostCreationBar(
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp),
-        elevation = CardDefaults.cardElevation(2.dp),
+        elevation = CardDefaults.cardElevation(4.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color.White.copy(alpha = 0.1f)
+            containerColor = MaterialTheme.colorScheme.surface
         )
     ) {
         Row(
@@ -867,9 +886,9 @@ fun PostCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp),
-        elevation = CardDefaults.cardElevation(2.dp),
+        elevation = CardDefaults.cardElevation(4.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color.White.copy(alpha = 0.1f)
+            containerColor = MaterialTheme.colorScheme.surface
         )
     ) {
         Column {
@@ -961,22 +980,19 @@ fun PostCard(
                     isSelectorVisible = showReactionSelector
                 )
 
-                // ✨ CRITICAL FIX: Use a Popup for the reaction selector ✨
                 if (showReactionSelector) {
                     val density = LocalDensity.current
                     Popup(
                         alignment = Alignment.BottomStart,
-                        // Position the popup relative to the PostInteractionBar
                         offset = with(density) {
                             IntOffset(16.dp.roundToPx(), -72.dp.roundToPx())
                         },
-                        // onDismissRequest handles clicks outside the popup area
                         onDismissRequest = onSelectorDismiss
                     ) {
                         ReactionSelectorMenu(
                             onReactionSelected = { reactionType ->
                                 viewModel.reactToPost(post.id, reactionType)
-                                onSelectorDismiss() // Dismiss after selection
+                                onSelectorDismiss()
                             }
                         )
                     }
@@ -1221,7 +1237,6 @@ fun PostInteractionBar(
     }
 }
 
-// ✨ FINAL, SIMPLIFIED, AND CORRECT IMPLEMENTATION ✨
 @Composable
 fun ReactionSelectorMenu(
     onReactionSelected: (reactionType: String) -> Unit
@@ -1230,7 +1245,6 @@ fun ReactionSelectorMenu(
     var rowSize by remember { mutableStateOf(IntSize.Zero) }
     val reactionCount = LonyiReactions.size
 
-    // Helper to calculate which emoji is being hovered over
     val indexFromPosition: (x: Float) -> Int? = { x ->
         if (rowSize.width == 0) null else {
             val itemWidth = rowSize.width.toFloat() / reactionCount
@@ -1244,7 +1258,6 @@ fun ReactionSelectorMenu(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            // Label that appears on hover
             focusedReactionIndex?.let { index ->
                 val reaction = LonyiReactions[index]
                 Text(
@@ -1263,11 +1276,9 @@ fun ReactionSelectorMenu(
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
-            // The Row containing the reactions
             Row(
                 modifier = Modifier
                     .onSizeChanged { rowSize = it }
-                    // This pointerInput is ONLY for the visual hover/scale effect
                     .pointerInput(Unit) {
                         detectDragGestures(
                             onDragStart = { offset -> focusedReactionIndex = indexFromPosition(offset.x) },
@@ -1282,7 +1293,6 @@ fun ReactionSelectorMenu(
                     .padding(horizontal = 8.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Display each reaction icon
                 LonyiReactions.forEachIndexed { index, reaction ->
                     val isFocused = index == focusedReactionIndex
                     val scale by animateFloatAsState(
@@ -1292,7 +1302,6 @@ fun ReactionSelectorMenu(
                     )
                     Box(
                         modifier = Modifier
-                            // ✨ THIS IS THE FIX: A direct, unambiguous clickable on each item ✨
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
