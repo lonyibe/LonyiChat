@@ -13,7 +13,8 @@ data class ChurchMessage(
     // ✨ ADDED for new features
     val repliedToMessageId: String? = null,
     val repliedToMessageContent: String? = null,
-    val reactions: Map<String, List<String>> = emptyMap() // Map of reaction emoji -> list of userIds
+    // ✨ FIX: Made nullable to prevent NullPointerException when map is omitted in JSON response
+    val reactions: Map<String, List<String>>? = null // Map of reaction emoji -> list of userIds
 )
 
 data class ChurchMessagesResponse(

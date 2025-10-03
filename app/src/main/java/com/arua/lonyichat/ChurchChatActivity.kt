@@ -390,7 +390,8 @@ fun ChatMessageItem(
             }
 
             // ✨ NEW: Reaction Chips
-            if (message.reactions.isNotEmpty()) {
+            // ✨ FIX: Use isNullOrEmpty() for null-safe check
+            if (!message.reactions.isNullOrEmpty()) {
                 ReactionChips(message.reactions) { emoji -> onReactionClick(emoji) }
             }
 
@@ -416,12 +417,17 @@ fun ChatMessageItem(
 }
 
 @Composable
-fun ReactionChips(reactions: Map<String, List<String>>, onReactionClick: (String) -> Unit) {
+fun ReactionChips(reactions: Map<String, List<String>>?, onReactionClick: (String) -> Unit) {
     val currentUserId = ApiService.getCurrentUserId()
+
+    // Safety check: if reactions is null or empty, don't display anything.
+    if (reactions.isNullOrEmpty()) return
+
     Row(
         modifier = Modifier.padding(top = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
+        // Use the reactions map which is guaranteed non-null and not empty here
         reactions.filterValues { it.isNotEmpty() }.forEach { (emoji, userIds) ->
             val isReactedByMe = userIds.contains(currentUserId)
 
