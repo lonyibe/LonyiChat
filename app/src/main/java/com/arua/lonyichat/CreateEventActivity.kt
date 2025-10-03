@@ -38,7 +38,9 @@ import com.arua.lonyichat.ui.viewmodel.EventViewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
-import androidx.compose.foundation.background // ✨ FIX: Added missing import for 'background'
+import androidx.compose.foundation.background // Added missing import
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 
 class CreateEventActivity : ComponentActivity() {
 
@@ -79,9 +81,14 @@ fun CreateEventScreen(
 
     val dateFormatter = remember { SimpleDateFormat("MMM dd, yyyy h:mm a", Locale.getDefault()) }
 
-    val datePickerDialogState = remember { mutableStateOf(false) }
-    val timePickerDialogState = remember { mutableStateOf(false) }
-    var dateSelection by remember { mutableStateOf(Calendar.getInstance()) }
+    // State to control visibility of pickers
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
+
+    // M3 Date and Time Picker States
+    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = selectedDate?.time)
+    val timePickerState = rememberTimePickerState(initialHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY), initialMinute = Calendar.getInstance().get(Calendar.MINUTE))
+    var selectedDateMillis by remember { mutableStateOf<Long?>(null) } // Stores date only (millis at midnight)
 
     // --- Image Picker ---
     val imagePickerLauncher = rememberLauncherForActivityResult(
@@ -105,6 +112,67 @@ fun CreateEventScreen(
         }
     }
     // --------------------
+
+    // --- Date/Time Picker Dialogs ---
+    if (showDatePicker) {
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        // Store the selected date (time part is midnight UTC)
+                        selectedDateMillis = datePickerState.selectedDateMillis
+                        showDatePicker = false
+                        showTimePicker = true // Move to time selection
+                    },
+                    // Ensure a date is selected before moving to time picker
+                    enabled = datePickerState.selectedDateMillis != null
+                ) {
+                    Text("NEXT (Select Time)")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text("Cancel")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    if (showTimePicker) {
+        TimePickerDialog(
+            onDismissRequest = { showTimePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (selectedDateMillis != null) {
+                        // Combine selected date (millis) with selected time (hour, minute)
+                        val selectedDateTime = Calendar.getInstance().apply {
+                            timeInMillis = selectedDateMillis!!
+                            // Set the time from the TimePickerState
+                            set(Calendar.HOUR_OF_DAY, timePickerState.hour)
+                            set(Calendar.MINUTE, timePickerState.minute)
+                            set(Calendar.SECOND, 0)
+                            set(Calendar.MILLISECOND, 0)
+                        }.time
+                        selectedDate = selectedDateTime
+                    }
+                    showTimePicker = false
+                }) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTimePicker = false }) {
+                    Text("Cancel")
+                }
+            }
+        ) {
+            TimePicker(state = timePickerState)
+        }
+    }
+    // --- End Date/Time Picker Dialogs ---
 
     Scaffold(
         topBar = {
@@ -134,7 +202,7 @@ fun CreateEventScreen(
                     .height(200.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .clickable { imagePickerLauncher.launch("image/*") }
-                    .background(if (selectedImageUri == null) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent), // ✨ FIXED: Corrected background usage
+                    .background(if (selectedImageUri == null) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent),
                 contentAlignment = Alignment.Center
             ) {
                 if (selectedImageUri != null) {
@@ -186,62 +254,30 @@ fun CreateEventScreen(
                 label = { Text("Date & Time") },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { datePickerDialogState.value = true },
+                    .clickable { showDatePicker = true }, // Opens the M3 Date Picker
                 readOnly = true,
                 trailingIcon = {
-                    IconButton(onClick = { datePickerDialogState.value = true }) {
+                    IconButton(onClick = { showDatePicker = true }) {
                         Icon(Icons.Default.CalendarMonth, contentDescription = "Select Date")
                     }
                 }
             )
 
-            // --- Date Picker Dialogs ---
-            if (datePickerDialogState.value) {
-                // Mock/Simplified DatePickerDialog
-                AlertDialog(
-                    onDismissRequest = { datePickerDialogState.value = false },
-                    title = { Text("Select Date") },
-                    text = { Text("Assuming DatePicker component handles selection.") },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            datePickerDialogState.value = false
-                            timePickerDialogState.value = true
-                            dateSelection.time = Date() // Mock date selection here
-                        }) { Text("OK") }
-                    }
-                )
-            }
-
-            if (timePickerDialogState.value) {
-                // Mock/Simplified TimePickerDialog
-                AlertDialog(
-                    onDismissRequest = { timePickerDialogState.value = false },
-                    title = { Text("Select Time") },
-                    text = { Text("Assuming TimePicker component handles selection.") },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            timePickerDialogState.value = false
-                            selectedDate = Date() // Mock final date selection
-                        }) { Text("OK") }
-                    }
-                )
-            }
-
             // --- Submit Button ---
             Spacer(modifier = Modifier.height(16.dp))
             Button(
                 onClick = {
-                    if (selectedImageUri != null) {
+                    if (selectedImageUri != null && selectedDate != null) {
                         viewModel.createEventWithPhoto(
                             title,
                             description,
                             selectedImageUri!!,
-                            selectedDate?.time ?: 0L,
+                            selectedDate!!.time, // Safely use the timeInMillis
                             location,
                             context
                         )
                     } else {
-                        Toast.makeText(context, "Please select an event photo.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Please complete all required fields and select a photo.", Toast.LENGTH_SHORT).show()
                     }
                 },
                 enabled = title.isNotBlank() && description.isNotBlank() && location.isNotBlank() && selectedDate != null && selectedImageUri != null && !uiState.isLoading,
@@ -251,6 +287,43 @@ fun CreateEventScreen(
                     CircularProgressIndicator(modifier = Modifier.size(24.dp))
                 } else {
                     Text("Publish Event")
+                }
+            }
+        }
+    }
+}
+
+// Helper composable for the TimePickerDialog structure
+@Composable
+fun TimePickerDialog(
+    onDismissRequest: () -> Unit,
+    confirmButton: @Composable (() -> Unit),
+    dismissButton: @Composable (() -> Unit)? = null,
+    content: @Composable () -> Unit,
+) {
+    Dialog(
+        onDismissRequest = onDismissRequest,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            tonalElevation = 6.dp,
+            modifier = Modifier
+                .width(IntrinsicSize.Min)
+                .background(MaterialTheme.colorScheme.surface)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                content()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    dismissButton?.invoke()
+                    Spacer(Modifier.width(8.dp))
+                    confirmButton()
                 }
             }
         }
