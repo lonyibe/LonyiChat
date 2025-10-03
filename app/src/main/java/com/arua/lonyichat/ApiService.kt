@@ -16,6 +16,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.io.InputStream
+import java.util.*
 
 class ApiException(message: String) : IOException(message)
 
@@ -46,7 +47,9 @@ object ApiService {
     data class CommentsResponse(val success: Boolean, val comments: List<Comment>)
     data class SingleCommentResponse(val success: Boolean, val comment: Comment)
     data class PollVoteResponse(val success: Boolean, val poll: Poll)
-    data class ChurchMessageReactionResponse(val success: Boolean, val message: ChurchMessage) // ✨ ADDED
+    data class ChurchMessageReactionResponse(val success: Boolean, val message: ChurchMessage)
+    data class EventResponse(val success: Boolean, val events: List<Event>) // ✨ ADDED
+    data class SingleEventResponse(val success: Boolean, val event: Event) // ✨ ADDED
 
     private fun getErrorMessage(responseBody: String?): String {
         return try {
@@ -249,7 +252,7 @@ object ApiService {
         }
     }
 
-    suspend fun createPost(content: String, type: String = "post", imageUrl: String? = null, pollOptions: List<String>? = null): Result<Post> {
+    suspend fun createPost(content: String, type: String, imageUrl: String? = null, pollOptions: List<String>? = null): Result<Post> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
 
         return try {
@@ -315,28 +318,7 @@ object ApiService {
         }
     }
 
-    suspend fun getTrendingPosts(): Result<List<Post>> {
-        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
-        return try {
-            val request = Request.Builder()
-                .url("$BASE_URL/posts/trending")
-                .addHeader("Authorization", "Bearer $token")
-                .build()
-
-            withContext(Dispatchers.IO) {
-                client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) {
-                        throw ApiException("Failed to fetch trending posts (${response.code})")
-                    }
-                    val responseBody = response.body!!.string()
-                    val postResponse = gson.fromJson(responseBody, PostResponse::class.java)
-                    Result.success(postResponse.posts)
-                }
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    // REMOVED: suspend fun getTrendingPosts() was here
 
     suspend fun updatePost(postId: String, content: String): Result<Unit> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
@@ -688,7 +670,6 @@ object ApiService {
         }
     }
 
-    // ✨ UPDATED: postChurchMessage to support replies
     suspend fun postChurchMessage(
         churchId: String,
         content: String,
@@ -830,17 +811,14 @@ object ApiService {
     }
 
     // =========================================================================================
-    // ✨ UPDATED CHAT API METHODS (for Message Interactions) ✨
+    // CHAT & CHURCH API METHODS (Existing)
     // =========================================================================================
 
-    /**
-     * Deletes a message using a simplified global endpoint based on message ID.
-     */
     suspend fun deleteChurchMessage(churchId: String, messageId: String): Result<Unit> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {
             val request = Request.Builder()
-                .url("$BASE_URL/messages/$messageId") // ✨ FIX: Simplified URL path for delete
+                .url("$BASE_URL/messages/$messageId")
                 .addHeader("Authorization", "Bearer $token")
                 .delete()
                 .build()
@@ -859,9 +837,6 @@ object ApiService {
         }
     }
 
-    /**
-     * Reacts to a message using a simplified global endpoint based on message ID.
-     */
     suspend fun reactToChurchMessage(churchId: String, messageId: String, reactionEmoji: String): Result<ChurchMessage> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {
@@ -869,7 +844,7 @@ object ApiService {
             val body = json.toRequestBody(JSON)
 
             val request = Request.Builder()
-                .url("$BASE_URL/messages/$messageId/react") // ✨ FIX: Simplified URL path for react
+                .url("$BASE_URL/messages/$messageId/react")
                 .addHeader("Authorization", "Bearer $token")
                 .post(body)
                 .build()
@@ -878,7 +853,6 @@ object ApiService {
                 client.newCall(request).execute().use { response ->
                     val responseBody = response.body?.string()
                     if (!response.isSuccessful) {
-                        // FIX: Explicitly include HTTP status code and try to parse the error body
                         throw ApiException("Failed to react to message (${response.code}): ${getErrorMessage(responseBody)}")
                     }
                     val reactionResponse = gson.fromJson(responseBody, ChurchMessageReactionResponse::class.java)
@@ -889,10 +863,6 @@ object ApiService {
             Result.failure(e)
         }
     }
-
-    // =========================================================================================
-    // CHURCH API METHODS (Implemented for Group Management)
-    // =========================================================================================
 
     suspend fun uploadChurchPhoto(churchId: String, uri: Uri, context: Activity): Result<String> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
@@ -910,7 +880,6 @@ object ApiService {
 
                 val multipartBody = MultipartBody.Builder()
                     .setType(MultipartBody.FORM)
-                    // Server expects 'churchImage' as the field name
                     .addFormDataPart("churchImage", "church-photo.jpg", requestBody)
                     .build()
 
@@ -944,7 +913,7 @@ object ApiService {
             val request = Request.Builder()
                 .url("$BASE_URL/churches/$churchId")
                 .addHeader("Authorization", "Bearer $token")
-                .delete() // Use the DELETE HTTP method
+                .delete()
                 .build()
 
             withContext(Dispatchers.IO) {
@@ -986,6 +955,108 @@ object ApiService {
             }
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    // =========================================================================================
+    // ✨ NEW: EVENT API METHODS ✨
+    // =========================================================================================
+
+    suspend fun uploadEventPhoto(uri: Uri, context: Activity): Result<String> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+
+        return withContext(Dispatchers.IO) {
+            try {
+                val inputStream: InputStream? = context.contentResolver.openInputStream(uri)
+                val mimeType = context.contentResolver.getType(uri)
+                if (inputStream == null || mimeType == null) {
+                    return@withContext Result.failure(ApiException("Failed to open image file."))
+                }
+
+                val fileBytes = inputStream.use { it.readBytes() }
+                val requestBody = fileBytes.toRequestBody(mimeType.toMediaTypeOrNull())
+
+                val multipartBody = MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart("eventImage", "event-image.jpg", requestBody) // Match backend field name
+                    .build()
+
+                val request = Request.Builder()
+                    .url("$BASE_URL/upload/event-image")
+                    .addHeader("Authorization", "Bearer $token")
+                    .post(multipartBody)
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    val responseBody = response.body?.string()
+                    if (!response.isSuccessful) {
+                        throw ApiException("Event image upload failed (${response.code}): ${getErrorMessage(responseBody)}")
+                    }
+                    val jsonResponse = gson.fromJson(responseBody, Map::class.java)
+                    val secureUrl = jsonResponse["secure_url"] as? String
+                    if (secureUrl.isNullOrBlank()) {
+                        return@withContext Result.failure(ApiException("Backend returned success but no URL."))
+                    }
+                    return@withContext Result.success(secureUrl)
+                }
+            } catch (e: Exception) {
+                return@withContext Result.failure(ApiException("File operation failed: ${e.localizedMessage}"))
+            }
+        }
+    }
+
+    suspend fun createEvent(title: String, description: String, imageUrl: String?, date: Long, location: String): Result<Event> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val bodyMap = mutableMapOf<String, Any?>(
+                "title" to title,
+                "description" to description,
+                "imageUrl" to imageUrl,
+                "date" to date, // Milliseconds since epoch
+                "location" to location
+            )
+
+            val json = gson.toJson(bodyMap)
+            val body = json.toRequestBody(JSON)
+            val request = Request.Builder()
+                .url("$BASE_URL/events")
+                .addHeader("Authorization", "Bearer $token")
+                .post(body)
+                .build()
+
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    val responseBody = response.body?.string()
+                    if (!response.isSuccessful) {
+                        throw ApiException("Failed to create event (${response.code}): ${getErrorMessage(responseBody)}")
+                    }
+                    val singleEventResponse = gson.fromJson(responseBody, SingleEventResponse::class.java)
+                    Result.success(singleEventResponse.event)
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getEvents(): Result<List<Event>> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val request = Request.Builder()
+                .url("$BASE_URL/events")
+                .addHeader("Authorization", "Bearer $token")
+                .build()
+
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) throw ApiException("Failed to fetch events (${response.code})")
+                    val body = response.body!!.string()
+                    val eventResponse = gson.fromJson(body, EventResponse::class.java)
+                    Result.success(eventResponse.events)
+                }
+            }
+        } catch (e: Exception) {
+            return Result.failure(e)
         }
     }
 }

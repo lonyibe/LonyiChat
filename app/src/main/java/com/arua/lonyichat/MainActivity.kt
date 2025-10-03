@@ -88,7 +88,8 @@ data class UserProfileState(
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     object Home : Screen("home", "Feed", Icons.Filled.Home)
-    object Trending : Screen("trending", "Trending", Icons.Filled.Whatshot)
+    // ✨ UPDATED: Replaced Trending with Events
+    object Events : Screen("events", "Events", Icons.Filled.Event)
     object Groups : Screen("groups", "Churches", Icons.Filled.Group)
     object Bible : Screen("bible", "Bible", Icons.Filled.Book)
     object Chat : Screen("chat", "Chat", Icons.Filled.Message)
@@ -102,6 +103,8 @@ class MainActivity : ComponentActivity() {
     private val bibleViewModel: BibleViewModel by viewModels()
     private val mediaViewModel: MediaViewModel by viewModels()
     private val profileViewModel: ProfileViewModel by viewModels()
+    // ✨ ADDED: EventViewModel
+    private val eventViewModel: EventViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -118,7 +121,8 @@ class MainActivity : ComponentActivity() {
                         chatListViewModel,
                         bibleViewModel,
                         mediaViewModel,
-                        profileViewModel
+                        profileViewModel,
+                        eventViewModel // ✨ ADDED
                     )
                 }
             }
@@ -130,7 +134,7 @@ class MainActivity : ComponentActivity() {
         ApiService.getCurrentUserId()?.let {
             profileViewModel.fetchProfile(it)
         }
-        // ✨ Refresh the churches list when the activity is resumed ✨
+        // Refresh the churches list when the activity is resumed
         churchesViewModel.fetchChurches()
     }
 }
@@ -142,7 +146,8 @@ fun LonyiChatApp(
     chatListViewModel: ChatListViewModel,
     bibleViewModel: BibleViewModel,
     mediaViewModel: MediaViewModel,
-    profileViewModel: ProfileViewModel
+    profileViewModel: ProfileViewModel,
+    eventViewModel: EventViewModel // ✨ ADDED
 ) {
     val profileUiState by profileViewModel.uiState.collectAsState()
     val profileState = UserProfileState(
@@ -151,7 +156,8 @@ fun LonyiChatApp(
         isLoading = profileUiState.isLoading
     )
     var selectedItem: Screen by remember { mutableStateOf(Screen.Home) }
-    val bottomBarItems = listOf(Screen.Home, Screen.Trending, Screen.Groups, Screen.Bible, Screen.Chat, Screen.Media)
+    // ✨ UPDATED: Replaced Screen.Trending with Screen.Events
+    val bottomBarItems = listOf(Screen.Home, Screen.Events, Screen.Groups, Screen.Bible, Screen.Chat, Screen.Media)
     val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
 
@@ -202,7 +208,8 @@ fun LonyiChatApp(
                 churchesViewModel = churchesViewModel,
                 chatListViewModel = chatListViewModel,
                 bibleViewModel = bibleViewModel,
-                mediaViewModel = mediaViewModel
+                mediaViewModel = mediaViewModel,
+                eventViewModel = eventViewModel // ✨ ADDED
             )
         }
     }
@@ -265,6 +272,7 @@ fun LonyiChatBottomBar(items: List<Screen>, selectedItem: Screen, onItemSelected
     }
 }
 
+// ✨ UPDATED: ScreenContent signature
 @Composable
 fun ScreenContent(
     screen: Screen,
@@ -273,11 +281,12 @@ fun ScreenContent(
     churchesViewModel: ChurchesViewModel,
     chatListViewModel: ChatListViewModel,
     bibleViewModel: BibleViewModel,
-    mediaViewModel: MediaViewModel
+    mediaViewModel: MediaViewModel,
+    eventViewModel: EventViewModel // ✨ ADDED
 ) {
     when (screen) {
         Screen.Home -> HomeFeedScreen(profileState, homeFeedViewModel)
-        Screen.Trending -> TrendingFeedScreen(homeFeedViewModel)
+        Screen.Events -> EventsScreen(eventViewModel) // ✨ UPDATED: Pointed Events to new screen
         Screen.Groups -> GroupsChurchScreen(churchesViewModel)
         Screen.Bible -> BibleStudyScreen(bibleViewModel)
         Screen.Chat -> ChatScreen(chatListViewModel)
@@ -362,34 +371,123 @@ fun HomeFeedScreen(profileState: UserProfileState, viewModel: HomeFeedViewModel)
     }
 }
 
-@Composable
-fun TrendingFeedScreen(viewModel: HomeFeedViewModel) {
-    val uiState by viewModel.uiState.collectAsState()
-    val context = LocalContext.current
-    val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = uiState.isLoading)
-    val onRefresh = { viewModel.fetchTrendingPosts() }
+// REMOVED: TrendingFeedScreen (replaced by EventsScreen)
 
-    SwipeRefresh(state = swipeRefreshState, onRefresh = onRefresh) {
-        LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(uiState.trendingPosts, key = { it.id }) { post ->
-                PostCard(
-                    post = post,
-                    viewModel = viewModel,
-                    onCommentClicked = {
-                        val intent = Intent(context, CommentsActivity::class.java)
-                        intent.putExtra("POST_ID", post.id)
-                        context.startActivity(intent)
-                    },
-                    showReactionSelector = false,
-                    onSelectorOpen = {},
-                    onSelectorDismiss = {},
-                    onProfileClicked = { authorId ->
-                        val intent = Intent(context, ProfileActivity::class.java).apply {
-                            putExtra("USER_ID", authorId)
-                        }
-                        context.startActivity(intent)
+// ✨ NEW: EventsScreen Composable
+@Composable
+fun EventsScreen(viewModel: EventViewModel) {
+    val uiState by viewModel.uiState.collectAsState()
+    val onRefresh = { viewModel.fetchEvents() }
+    val context = LocalContext.current
+    val createEventLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            viewModel.fetchEvents()
+        }
+        viewModel.resetSuccessState()
+    }
+
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("Church Events", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            TextButton(onClick = {
+                val intent = Intent(context, CreateEventActivity::class.java)
+                createEventLauncher.launch(intent)
+            }) {
+                Icon(Icons.Default.Add, contentDescription = "Create Event"); Spacer(modifier = Modifier.width(4.dp)); Text("Post Event")
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+
+        when {
+            uiState.isLoading && uiState.events.isEmpty() -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            uiState.error != null -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Error: ${uiState.error}", color = MaterialTheme.colorScheme.error) }
+            uiState.events.isEmpty() -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Icon(imageVector = Icons.Default.Event, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                        Text("No upcoming events.", style = MaterialTheme.typography.titleLarge)
+                        Button(onClick = {
+                            val intent = Intent(context, CreateEventActivity::class.java)
+                            createEventLauncher.launch(intent)
+                        }) { Text("Create First Event") }
                     }
+                }
+            }
+            else -> {
+                SwipeRefresh(state = rememberSwipeRefreshState(isRefreshing = uiState.isLoading), onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(uiState.events, key = { it.id }) { event ->
+                            EventCard(event = event)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ✨ NEW: EventCard Composable
+@Composable
+fun EventCard(event: Event) {
+    Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(4.dp)) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Event Image
+            event.imageUrl?.let { url ->
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current).data(url).build(),
+                    contentDescription = "Event Image for ${event.title}",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    contentScale = ContentScale.Crop
                 )
+            } ?: Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(120.dp)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Event, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            }
+
+            Column(modifier = Modifier.padding(16.dp)) {
+                // Date & Time
+                Text(
+                    text = SimpleDateFormat("EEEE, MMM dd, yyyy \u2022 h:mm a", Locale.getDefault()).format(event.date.toDate()),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                // Title
+                Text(event.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
+                Spacer(modifier = Modifier.height(8.dp))
+                // Location
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.LocationOn, contentDescription = "Location", modifier = Modifier.size(16.dp), tint = Color.Gray)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(event.location, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                // Description
+                Text(event.description, style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
+
+                Divider(Modifier.padding(vertical = 12.dp))
+
+                // Creator Info
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AsyncImage(
+                        model = event.authorPhotoUrl,
+                        contentDescription = "Event Creator",
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Posted by ${event.authorName}", style = MaterialTheme.typography.labelMedium)
+                }
             }
         }
     }
@@ -457,7 +555,8 @@ fun PostCard(post: Post, viewModel: HomeFeedViewModel, onCommentClicked: () -> U
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(post.authorName, fontWeight = FontWeight.Bold)
-                            Text(post.createdAt.toDate().toFormattedString(), style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                            // UPDATED: Use relative time formatter for posts on feed/trending
+                            Text(post.createdAt.toDate().toRelativeTimeString(), style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                         }
                     }
                     if (isAuthor) {
@@ -813,7 +912,7 @@ fun ChurchCard(church: Church, onJoinClicked: () -> Unit, onCardClicked: () -> U
     Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onCardClicked), elevation = CardDefaults.cardElevation(2.dp)) {
         Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
 
-            // ✨ NEW: Display Church Photo ✨
+            // Display Church Photo
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(church.photoUrl)
@@ -983,6 +1082,27 @@ fun MediaItemCard(mediaItem: MediaItem) {
     }
 }
 
+// NEW: Utility function for relative time display on posts and profile feed
+fun Date.toRelativeTimeString(): String {
+    val now = System.currentTimeMillis()
+    val diff = now - this.time
+    val seconds = diff / 1000
+    val minutes = seconds / 60
+    val hours = minutes / 60
+    val days = hours / 24
+
+    return when {
+        seconds < 60 -> "Just now"
+        minutes < 60 -> "$minutes min ago"
+        hours < 24 && days < 1 -> "$hours hours ago"
+        days == 1L -> "1 day ago"
+        days < 7 -> "$days days ago"
+        // If more than 7 days, fall back to simple date format
+        else -> SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(this)
+    }
+}
+
+// Retained simple time format function for chat previews
 fun Date.toFormattedString(): String {
     val simpleDateFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
     return simpleDateFormat.format(this)
@@ -992,6 +1112,6 @@ fun Date.toFormattedString(): String {
 @Composable
 fun LonyiChatPreview() {
     LonyiChatTheme {
-        LonyiChatApp(HomeFeedViewModel(), ChurchesViewModel(), ChatListViewModel(), BibleViewModel(), MediaViewModel(), ProfileViewModel())
+        LonyiChatApp(HomeFeedViewModel(), ChurchesViewModel(), ChatListViewModel(), BibleViewModel(), MediaViewModel(), ProfileViewModel(), EventViewModel())
     }
 }
