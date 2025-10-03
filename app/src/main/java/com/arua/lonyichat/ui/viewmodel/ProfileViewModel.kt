@@ -1,5 +1,7 @@
 package com.arua.lonyichat.ui.viewmodel
 
+import android.app.Activity
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -10,8 +12,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import android.app.Activity
-import android.net.Uri
 
 private const val TAG = "ProfileViewModel"
 
@@ -27,7 +27,6 @@ class ProfileViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(ProfileUiState())
     val uiState: StateFlow<ProfileUiState> = _uiState
 
-    // ✨ THIS IS THE FIX: Added the init block back to fetch the current user's profile on launch ✨
     init {
         fetchCurrentUserProfile()
     }
@@ -88,6 +87,7 @@ class ProfileViewModel : ViewModel() {
         }
     }
 
+    // ✨ THIS IS THE FIX: Optimistically updates the UI before calling the full updateProfile ✨
     fun updateProfilePhoto(
         uri: Uri,
         context: Activity,
@@ -103,7 +103,13 @@ class ProfileViewModel : ViewModel() {
         viewModelScope.launch {
             ApiService.uploadProfilePhoto(uri, context)
                 .onSuccess { newPhotoUrl ->
-                    Log.d(TAG, "Backend upload successful. Updating profile.")
+                    Log.d(TAG, "Backend upload successful. Updating UI optimistically.")
+
+                    // 1. Optimistic UI Update: Update the state immediately
+                    val optimisticallyUpdatedProfile = currentProfile.copy(photoUrl = newPhotoUrl)
+                    _uiState.update { it.copy(profile = optimisticallyUpdatedProfile, isSaving = false) }
+
+                    // 2. Persist the change to the backend in the background
                     updateProfile(
                         name = currentProfile.name,
                         phone = currentProfile.phone ?: "",

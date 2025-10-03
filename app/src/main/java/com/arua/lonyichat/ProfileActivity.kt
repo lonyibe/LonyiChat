@@ -10,6 +10,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -112,8 +114,7 @@ fun UserProfileScreen(
         onResult = { uri: Uri? ->
             if (uri != null) {
                 profileViewModel.updateProfilePhoto(uri, activity, onSuccess = {
-                    // Refresh the profile to show the new picture
-                    profileViewModel.fetchProfile(profile.userId)
+                    Toast.makeText(context, "Profile photo updated!", Toast.LENGTH_SHORT).show()
                 })
                 Toast.makeText(context, "Uploading photo...", Toast.LENGTH_SHORT).show()
             }
@@ -273,20 +274,22 @@ fun ProfileHeader(
             contentAlignment = Alignment.Center,
             modifier = Modifier.clickable(enabled = isCurrentUser, onClick = onProfilePicClick)
         ) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(profile.photoUrl)
-                    .crossfade(true)
-                    .placeholder(R.drawable.ic_person_placeholder)
-                    .error(R.drawable.ic_person_placeholder)
-                    .build(),
-                contentDescription = "Profile Photo",
-                modifier = Modifier
-                    .size(100.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentScale = ContentScale.Crop
-            )
+            Crossfade(targetState = profile.photoUrl, animationSpec = tween(durationMillis = 500)) { imageUrl ->
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(imageUrl)
+                        .crossfade(true)
+                        .placeholder(R.drawable.ic_person_placeholder)
+                        .error(R.drawable.ic_person_placeholder)
+                        .build(),
+                    contentDescription = "Profile Photo",
+                    modifier = Modifier
+                        .size(100.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentScale = ContentScale.Crop
+                )
+            }
             if (isCurrentUser) {
                 Icon(
                     imageVector = Icons.Default.AddAPhoto,
@@ -364,7 +367,6 @@ fun ProfileStat(count: Int, label: String) {
     }
 }
 
-// ✨ ADDED: Reusable EditProfileDialog from MainActivity
 @Composable
 fun EditProfileDialog(
     profile: Profile?,
