@@ -35,7 +35,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModelProvider
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.arua.lonyichat.data.ApiService
@@ -49,9 +48,9 @@ import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 
 class ProfileActivity : ComponentActivity() {
 
-    private val profileViewModel: ProfileViewModel by lazy {
-        ViewModelProvider(this, LonyiChatApp.getViewModelFactory(application)).get(ProfileViewModel::class.java)
-    }
+    // ✨ FIX: Use the standard `by viewModels()` delegate.
+    // This correctly scopes the ViewModel to this Activity's lifecycle.
+    private val profileViewModel: ProfileViewModel by viewModels()
     private val homeFeedViewModel: HomeFeedViewModel by viewModels()
     private var userId: String? = null
 
@@ -97,7 +96,7 @@ class ProfileActivity : ComponentActivity() {
         }
     }
 
-    // ✨ THIS IS THE FIX: Refresh the profile every time the activity comes into view ✨
+    // ✨ THIS REMAINS CRITICAL: Refresh the profile every time the activity comes into view.
     override fun onResume() {
         super.onResume()
         userId?.let {
@@ -106,6 +105,7 @@ class ProfileActivity : ComponentActivity() {
     }
 }
 
+// No changes are needed below this line in ProfileActivity.kt
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun UserProfileScreen(

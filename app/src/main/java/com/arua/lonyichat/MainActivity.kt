@@ -59,7 +59,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Popup
 import androidx.core.view.WindowCompat
-import androidx.lifecycle.ViewModelProvider
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.arua.lonyichat.data.*
@@ -104,9 +103,8 @@ class MainActivity : ComponentActivity() {
     private val bibleViewModel: BibleViewModel by viewModels()
     private val mediaViewModel: MediaViewModel by viewModels()
 
-    private val profileViewModel: ProfileViewModel by lazy {
-        ViewModelProvider(this, LonyiChatApp.getViewModelFactory(application)).get(ProfileViewModel::class.java)
-    }
+    // ✨ THIS IS THE FIX: Initialize the ViewModel using the standard `by viewModels()` delegate.
+    private val profileViewModel: ProfileViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -210,6 +208,7 @@ fun LonyiChatApp(
     }
 }
 
+// No changes are needed in the rest of the file.
 @Composable
 fun LonyiChatTopBar(
     title: String,

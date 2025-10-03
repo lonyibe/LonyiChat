@@ -102,11 +102,7 @@ class ProfileViewModel : ViewModel() {
         viewModelScope.launch {
             ApiService.uploadProfilePhoto(uri, context)
                 .onSuccess { newPhotoUrl ->
-                    // ✨ THIS IS THE FIX: Append a timestamp to the URL to bust the cache ✨
-                    val cacheBustedUrl = "$newPhotoUrl?t=${System.currentTimeMillis()}"
-                    Log.d(TAG, "Cache-busted URL: $cacheBustedUrl")
-
-                    val optimisticallyUpdatedProfile = currentProfile.copy(photoUrl = cacheBustedUrl)
+                    val optimisticallyUpdatedProfile = currentProfile.copy(photoUrl = newPhotoUrl)
                     _uiState.update {
                         it.copy(profile = optimisticallyUpdatedProfile, isSaving = false)
                     }
@@ -116,7 +112,7 @@ class ProfileViewModel : ViewModel() {
                         phone = currentProfile.phone ?: "",
                         age = currentProfile.age?.toString() ?: "",
                         country = currentProfile.country ?: "",
-                        photoUrl = cacheBustedUrl, // Persist the cache-busted URL
+                        photoUrl = newPhotoUrl,
                         onSuccess = onSuccess
                     )
                 }
