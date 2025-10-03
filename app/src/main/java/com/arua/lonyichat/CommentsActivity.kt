@@ -19,8 +19,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color // ✨ ADDED THIS IMPORT
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -68,6 +70,9 @@ fun CommentsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var commentText by remember { mutableStateOf("") }
+    // ✨ ADDED: Controllers for keyboard and focus
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
 
     // Fetch comments when the screen is first composed
     LaunchedEffect(postId) {
@@ -90,12 +95,10 @@ fun CommentsScreen(
             )
         },
         bottomBar = {
-            // This layout handles the comment input field at the bottom
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shadowElevation = 8.dp
             ) {
-                // ✨ ADDED: OutlinedTextField colors for modern appeal
                 val textFieldColors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
                     unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
@@ -111,19 +114,20 @@ fun CommentsScreen(
                         .padding(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // ✨ MODIFIED: Changed TextField to OutlinedTextField for a visible border
                     OutlinedTextField(
                         value = commentText,
                         onValueChange = { commentText = it },
                         modifier = Modifier.weight(1f),
                         placeholder = { Text("Add a comment...") },
-                        // ✨ APPLIED: Custom colors to OutlinedTextField
                         colors = textFieldColors
                     )
                     IconButton(
                         onClick = {
                             if (commentText.isNotBlank()) {
                                 viewModel.addComment(postId, commentText)
+                                // ✨ THIS IS THE FIX: Hide keyboard and clear focus after sending
+                                keyboardController?.hide()
+                                focusManager.clearFocus()
                                 commentText = "" // Clear the input field
                             }
                         },

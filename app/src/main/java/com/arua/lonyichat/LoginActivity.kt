@@ -33,20 +33,33 @@ class LoginActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent {
-            LonyiChatTheme {
-                LoginScreen(
-                    onLoginSuccess = {
-                        val intent = Intent(this, MainActivity::class.java).apply {
-                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+
+        // ✨ THIS IS THE FIX: Check for an existing token on startup ✨
+        if (ApiService.getCurrentUserId() != null) {
+            // If a token exists, the user is already logged in.
+            // Navigate directly to the main screen.
+            val intent = Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            }
+            startActivity(intent)
+            finish() // Close LoginActivity so the user can't go back to it
+        } else {
+            // No token found, show the login screen.
+            setContent {
+                LonyiChatTheme {
+                    LoginScreen(
+                        onLoginSuccess = {
+                            val intent = Intent(this, MainActivity::class.java).apply {
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                            }
+                            startActivity(intent)
+                            finish()
+                        },
+                        onNavigateToSignup = {
+                            startActivity(Intent(this, SignupActivity::class.java))
                         }
-                        startActivity(intent)
-                        finish()
-                    },
-                    onNavigateToSignup = {
-                        startActivity(Intent(this, SignupActivity::class.java))
-                    }
-                )
+                    )
+                }
             }
         }
     }
@@ -60,7 +73,6 @@ fun LoginScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
-    // ✨ ADDED: State to toggle password visibility
     var passwordVisible by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -114,11 +126,9 @@ fun LoginScreen(
                 onValueChange = { password = it },
                 label = { Text("Password") },
                 modifier = Modifier.fillMaxWidth(),
-                // ✨ MODIFIED: Toggle visual transformation based on state
                 visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 singleLine = true,
-                // ✨ ADDED: Trailing icon to show/hide password
                 trailingIcon = {
                     val image = if (passwordVisible)
                         Icons.Filled.Visibility

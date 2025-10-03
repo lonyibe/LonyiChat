@@ -22,6 +22,7 @@ class ApiException(message: String) : IOException(message)
 object ApiService {
     private val client = OkHttpClient()
     private val gson = Gson()
+    // ✨ THIS IS THE FIX: Pointing the BASE_URL to your hosted Ubuntu server ✨
     const val BASE_URL = "http://104.225.141.13:3000"
     private val JSON = "application/json; charset=utf-8".toMediaType()
 
