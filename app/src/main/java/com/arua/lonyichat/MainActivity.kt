@@ -94,7 +94,6 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     data object Bible : Screen("bible", "Bible", Icons.Filled.Book)
     data object Chat : Screen("chat", "Chat", Icons.Filled.Message)
     data object Media : Screen("media", "Media", Icons.Filled.LiveTv)
-    data object Profile : Screen("profile", "Profile", Icons.Filled.Person)
 }
 
 class MainActivity : ComponentActivity() {
@@ -110,7 +109,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             LonyiChatTheme {
-                // The main theme setup remains the same
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -151,9 +149,6 @@ fun LonyiChatApp(
 
     val bottomBarItems = listOf(Screen.Home, Screen.Groups, Screen.Bible, Screen.Chat, Screen.Media)
 
-    val showBackButton = selectedItem is Screen.Profile
-    val onBackClicked = { selectedItem = Screen.Home }
-
     val context = LocalContext.current
 
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
@@ -174,23 +169,24 @@ fun LonyiChatApp(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             LonyiChatTopBar(
-                title = if (selectedItem is Screen.Profile) "Profile" else "LonyiChat",
-                showBackButton = showBackButton,
-                onBackClicked = onBackClicked,
-                onProfileClicked = { selectedItem = Screen.Profile },
+                title = "LonyiChat",
+                onProfileClicked = {
+                    val intent = Intent(context, ProfileActivity::class.java).apply {
+                        putExtra("USER_ID", ApiService.getCurrentUserId())
+                    }
+                    context.startActivity(intent)
+                },
                 scrollBehavior = scrollBehavior
             )
         },
         bottomBar = {
-            if (selectedItem !is Screen.Profile) {
-                LonyiChatBottomBar(
-                    items = bottomBarItems,
-                    selectedItem = selectedItem,
-                    onItemSelected = { selectedItem = it }
-                )
-            }
+            LonyiChatBottomBar(
+                items = bottomBarItems,
+                selectedItem = selectedItem,
+                onItemSelected = { selectedItem = it }
+            )
         },
-        floatingActionButton = {} // Removed FAB
+        floatingActionButton = {}
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -204,9 +200,7 @@ fun LonyiChatApp(
                 churchesViewModel = churchesViewModel,
                 chatListViewModel = chatListViewModel,
                 bibleViewModel = bibleViewModel,
-                mediaViewModel = mediaViewModel,
-                profileViewModel = profileViewModel,
-                scrollBehavior = scrollBehavior
+                mediaViewModel = mediaViewModel
             )
         }
     }
@@ -215,8 +209,6 @@ fun LonyiChatApp(
 @Composable
 fun LonyiChatTopBar(
     title: String,
-    showBackButton: Boolean,
-    onBackClicked: () -> Unit,
     onProfileClicked: () -> Unit,
     scrollBehavior: TopAppBarScrollBehavior
 ) {
@@ -235,18 +227,9 @@ fun LonyiChatTopBar(
 
     TopAppBar(
         title = { Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.headlineSmall) },
-        navigationIcon = {
-            if (showBackButton) {
-                IconButton(onClick = onBackClicked) {
-                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-            }
-        },
         actions = {
-            if (!showBackButton) {
-                IconButton(onClick = onProfileClicked) {
-                    Icon(imageVector = Icons.Default.AccountCircle, contentDescription = "Profile", modifier = Modifier.size(28.dp))
-                }
+            IconButton(onClick = onProfileClicked) {
+                Icon(imageVector = Icons.Default.AccountCircle, contentDescription = "Profile", modifier = Modifier.size(28.dp))
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(
@@ -298,9 +281,7 @@ fun ScreenContent(
     churchesViewModel: ChurchesViewModel,
     chatListViewModel: ChatListViewModel,
     bibleViewModel: BibleViewModel,
-    mediaViewModel: MediaViewModel,
-    profileViewModel: ProfileViewModel,
-    scrollBehavior: TopAppBarScrollBehavior
+    mediaViewModel: MediaViewModel
 ) {
     when (screen) {
         Screen.Home -> HomeFeedScreen(profileState, homeFeedViewModel)
@@ -308,9 +289,6 @@ fun ScreenContent(
         Screen.Bible -> BibleStudyScreen(bibleViewModel)
         Screen.Chat -> ChatScreen(chatListViewModel)
         Screen.Media -> MediaScreen(mediaViewModel)
-        Screen.Profile -> ProfileScreen(profileViewModel) {
-            homeFeedViewModel.fetchPosts()
-        }
     }
 }
 
@@ -412,7 +390,13 @@ fun HomeFeedScreen(
                             },
                             showReactionSelector = openReactionPostId == post.id,
                             onSelectorOpen = { openReactionPostId = it },
-                            onSelectorDismiss = { openReactionPostId = null }
+                            onSelectorDismiss = { openReactionPostId = null },
+                            onProfileClicked = { authorId ->
+                                val intent = Intent(context, ProfileActivity::class.java).apply {
+                                    putExtra("USER_ID", authorId)
+                                }
+                                context.startActivity(intent)
+                            }
                         )
                     }
                 }
@@ -461,280 +445,6 @@ fun PostCreationBar(
     }
 }
 
-// ✨ ProfileScreen and its helpers are now included ✨
-
-@Composable
-fun ProfileScreen(viewModel: ProfileViewModel, onProfileUpdated: () -> Unit) {
-    val context = LocalContext.current
-    val activity = context as Activity
-    val uiState by viewModel.uiState.collectAsState()
-    var showEditDialog by remember { mutableStateOf(false) }
-
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent(),
-        onResult = { uri: Uri? ->
-            if (uri != null) {
-                viewModel.updateProfilePhoto(uri, activity, onSuccess = onProfileUpdated)
-                Toast.makeText(context, "Uploading photo...", Toast.LENGTH_SHORT).show()
-            }
-        }
-    )
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        when {
-            uiState.isLoading -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-                return
-            }
-            uiState.error != null -> {
-                Text(
-                    "Error: ${uiState.error}",
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(32.dp)
-                )
-                Button(onClick = { viewModel.fetchProfile() }) {
-                    Text("Retry Load")
-                }
-                return
-            }
-            uiState.profile == null -> {
-                Text("Profile data not found.", modifier = Modifier.padding(32.dp))
-                return
-            }
-        }
-
-        val profile = uiState.profile!!
-
-        Box(
-            modifier = Modifier
-                .size(100.dp)
-                .clip(CircleShape)
-                .clickable(enabled = !uiState.isSaving) {
-                    imagePickerLauncher.launch("image/*")
-                }
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center
-        ) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(profile.photoUrl)
-                    .crossfade(true)
-                    .placeholder(R.drawable.ic_person_placeholder)
-                    .error(R.drawable.ic_person_placeholder)
-                    .build(),
-                contentDescription = "Profile Photo",
-                modifier = Modifier.fillMaxSize().clip(CircleShape),
-            )
-
-            Icon(
-                imageVector = Icons.Default.AddAPhoto,
-                contentDescription = "Change Photo",
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary)
-                    .padding(4.dp),
-                tint = MaterialTheme.colorScheme.onPrimary
-            )
-
-            if (uiState.isSaving) {
-                CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center).size(100.dp),
-                    strokeWidth = 4.dp,
-                    color = MaterialTheme.colorScheme.secondary
-                )
-            }
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            text = profile.name,
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = profile.email,
-            style = MaterialTheme.typography.bodyLarge,
-            color = Color.Gray
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            ProfileStat(count = profile.followingCount, label = "Following")
-            ProfileStat(count = profile.followerCount, label = "Followers")
-            ProfileStat(count = profile.churchCount, label = "Churches")
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = { showEditDialog = true },
-                enabled = !uiState.isSaving
-            ) {
-                if (uiState.isSaving) {
-                    CircularProgressIndicator(Modifier.size(24.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Saving...")
-                } else {
-                    Text("Edit Profile")
-                }
-            }
-
-            Button(onClick = {
-                ApiService.logout()
-                val intent = Intent(context, LoginActivity::class.java)
-                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                context.startActivity(intent)
-            }) {
-                Text("Logout")
-            }
-        }
-    }
-
-    if (showEditDialog) {
-        EditProfileDialog(
-            profile = uiState.profile,
-            onDismiss = { showEditDialog = false },
-            onSave = { name, phone, age, country ->
-                viewModel.updateProfile(name, phone, age, country, onSuccess = onProfileUpdated)
-                showEditDialog = false
-            }
-        )
-    }
-}
-
-@Composable
-fun ProfileStat(count: Int, label: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = count.toString(),
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = Color.Gray
-        )
-    }
-}
-
-@Composable
-fun ProfileDetail(icon: ImageVector, label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(icon, contentDescription = label, tint = MaterialTheme.colorScheme.primary)
-        Spacer(modifier = Modifier.width(16.dp))
-        Column {
-            Text(label, style = MaterialTheme.typography.labelMedium, color = Color.Gray)
-            Text(value, style = MaterialTheme.typography.bodyLarge)
-        }
-    }
-}
-
-@Composable
-fun EditProfileDialog(
-    profile: Profile?,
-    onDismiss: () -> Unit,
-    onSave: (name: String, phone: String, age: String, country: String) -> Unit
-) {
-    if (profile == null) {
-        onDismiss()
-        return
-    }
-
-    var name by remember { mutableStateOf(profile.name) }
-    var phone by remember { mutableStateOf(profile.phone ?: "") }
-    var age by remember { mutableStateOf(profile.age?.toString() ?: "") }
-    var country by remember { mutableStateOf(profile.country ?: "") }
-
-    val isSaveEnabled = name.isNotBlank() && phone.isNotBlank() && age.isNotBlank() && country.isNotBlank()
-
-    val textFieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = MaterialTheme.colorScheme.primary,
-        unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
-        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-        focusedContainerColor = MaterialTheme.colorScheme.surface,
-        cursorColor = MaterialTheme.colorScheme.primary,
-        focusedTextColor = MaterialTheme.colorScheme.onSurface,
-        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-    )
-
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Edit Your Profile") },
-        text = {
-            Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Name") },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                    singleLine = true,
-                    colors = textFieldColors
-                )
-                OutlinedTextField(
-                    value = phone,
-                    onValueChange = { phone = it },
-                    label = { Text("Phone Number") },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                    singleLine = true,
-                    colors = textFieldColors
-                )
-                OutlinedTextField(
-                    value = age,
-                    onValueChange = { age = it.filter { it.isDigit() } },
-                    label = { Text("Age") },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                    singleLine = true,
-                    colors = textFieldColors
-                )
-                OutlinedTextField(
-                    value = country,
-                    onValueChange = { country = it },
-                    label = { Text("Country") },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                    singleLine = true,
-                    colors = textFieldColors
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onSave(name, phone, age, country) },
-                enabled = isSaveEnabled
-            ) {
-                Text("Save Changes")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        },
-        containerColor = MaterialTheme.colorScheme.background,
-        textContentColor = MaterialTheme.colorScheme.onBackground
-    )
-}
-
-
 @Composable
 fun PostCard(
     post: com.arua.lonyichat.data.Post,
@@ -742,7 +452,8 @@ fun PostCard(
     onCommentClicked: () -> Unit,
     showReactionSelector: Boolean,
     onSelectorOpen: (String) -> Unit,
-    onSelectorDismiss: () -> Unit
+    onSelectorDismiss: () -> Unit,
+    onProfileClicked: (String) -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
     val currentUserId = ApiService.getCurrentUserId()
@@ -795,8 +506,8 @@ fun PostCard(
 
 
     Card(
-        modifier = Modifier.fillMaxWidth(), // No horizontal padding for edge-to-edge
-        shape = RoundedCornerShape(0.dp), // Squared corners
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(0.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         )
@@ -804,7 +515,10 @@ fun PostCard(
         Column {
             Column(modifier = Modifier.padding(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { onProfileClicked(post.authorId) }
+                    ) {
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
                                 .data(post.authorPhotoUrl)

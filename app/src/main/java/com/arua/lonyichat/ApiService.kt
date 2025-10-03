@@ -19,10 +19,16 @@ import java.io.InputStream
 
 class ApiException(message: String) : IOException(message)
 
+// ✨ ADDED: A new response class for the user profile endpoint
+data class UserProfileResponse(
+    val success: Boolean,
+    val profile: Profile,
+    val posts: List<Post>
+)
+
 object ApiService {
     private val client = OkHttpClient()
     private val gson = Gson()
-    // ✨ THIS IS THE FIX: Pointing the BASE_URL to your hosted Ubuntu server ✨
     const val BASE_URL = "http://104.225.141.13:3000"
     private val JSON = "application/json; charset=utf-8".toMediaType()
 
@@ -57,7 +63,6 @@ object ApiService {
         prefs.edit().clear().apply()
     }
 
-    // ✨ UPDATED SIGNUP FUNCTION ✨
     suspend fun signup(email: String, password: String, username: String, phone: String, age: String, country: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val json = gson.toJson(mapOf(
@@ -134,6 +139,32 @@ object ApiService {
 
     private fun getAuthToken(): String? = authToken
     fun getCurrentUserId(): String? = currentUserId
+
+    // ✨ --- THIS IS THE NEW FUNCTION: To fetch a user's profile and posts --- ✨
+    suspend fun getUserProfile(userId: String): Result<UserProfileResponse> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val request = Request.Builder()
+                .url("$BASE_URL/profile/$userId")
+                .addHeader("Authorization", "Bearer $token")
+                .build()
+
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        val errorBody = response.body?.string()
+                        throw ApiException("Failed to fetch user profile (${response.code}): ${getErrorMessage(errorBody)}")
+                    }
+                    val body = response.body!!.string()
+                    val profileResponse = gson.fromJson(body, UserProfileResponse::class.java)
+                    Result.success(profileResponse)
+                }
+            }
+        } catch (e: Exception) {
+            return Result.failure(e)
+        }
+    }
+
 
     suspend fun uploadProfilePhoto(uri: Uri, context: Activity): Result<String> {
         val userMongoId = getCurrentUserId() ?: return Result.failure(ApiException("User not authenticated."))

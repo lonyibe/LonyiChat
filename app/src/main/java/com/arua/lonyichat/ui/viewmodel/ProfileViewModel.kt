@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arua.lonyichat.data.ApiService
+import com.arua.lonyichat.data.Post
 import com.arua.lonyichat.data.Profile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +17,7 @@ private const val TAG = "ProfileViewModel"
 
 data class ProfileUiState(
     val profile: Profile? = null,
+    val posts: List<Post> = emptyList(), // ✨ ADDED: To hold the user's posts
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
     val error: String? = null
@@ -25,17 +27,20 @@ class ProfileViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(ProfileUiState())
     val uiState: StateFlow<ProfileUiState> = _uiState
 
-    init {
-        fetchProfile()
-    }
-
-    fun fetchProfile() {
+    // ✨ MODIFIED: Now takes a userId to fetch a specific profile
+    fun fetchProfile(userId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
-            ApiService.getProfile().onSuccess { profile ->
-                _uiState.update { it.copy(profile = profile, isLoading = false) }
+            ApiService.getUserProfile(userId).onSuccess { response ->
+                _uiState.update {
+                    it.copy(
+                        profile = response.profile,
+                        posts = response.posts,
+                        isLoading = false
+                    )
+                }
             }.onFailure { error ->
-                Log.e(TAG, "Error fetching profile: ${error.localizedMessage}")
+                Log.e(TAG, "Error fetching profile for $userId: ${error.localizedMessage}")
                 _uiState.update { it.copy(error = error.localizedMessage, isLoading = false) }
             }
         }
@@ -47,7 +52,7 @@ class ProfileViewModel : ViewModel() {
         age: String,
         country: String,
         photoUrl: String? = null,
-        onSuccess: () -> Unit // ✨ ADDED: Callback to run on successful update
+        onSuccess: () -> Unit
     ) {
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, error = null) }
@@ -58,11 +63,10 @@ class ProfileViewModel : ViewModel() {
                         phone = phone,
                         age = age.toIntOrNull() ?: _uiState.value.profile?.age,
                         country = country,
-                        // Use the new photoUrl if provided, otherwise keep the existing one
                         photoUrl = photoUrl ?: _uiState.value.profile?.photoUrl
                     )
                     _uiState.update { it.copy(profile = updatedProfile, isSaving = false) }
-                    onSuccess() // ✨ TRIGGER: Execute the callback
+                    onSuccess()
                 }
                 .onFailure { error ->
                     Log.e(TAG, "Error updating profile: ${error.localizedMessage}")
@@ -74,7 +78,7 @@ class ProfileViewModel : ViewModel() {
     fun updateProfilePhoto(
         uri: Uri,
         context: Activity,
-        onSuccess: () -> Unit // ✨ ADDED: Callback to run on successful update
+        onSuccess: () -> Unit
     ) {
         val currentProfile = _uiState.value.profile ?: run {
             _uiState.update { it.copy(error = "Cannot update photo: Profile not loaded.") }
@@ -93,7 +97,7 @@ class ProfileViewModel : ViewModel() {
                         age = currentProfile.age?.toString() ?: "",
                         country = currentProfile.country ?: "",
                         photoUrl = newPhotoUrl,
-                        onSuccess = onSuccess // ✨ PASS: Pass the callback down
+                        onSuccess = onSuccess
                     )
                 }
                 .onFailure { error ->
