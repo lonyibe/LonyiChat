@@ -46,7 +46,7 @@ object ApiService {
     data class CommentsResponse(val success: Boolean, val comments: List<Comment>)
     data class SingleCommentResponse(val success: Boolean, val comment: Comment)
     data class PollVoteResponse(val success: Boolean, val poll: Poll)
-
+    data class ChurchMessageReactionResponse(val success: Boolean, val message: ChurchMessage) // ✨ ADDED
 
     private fun getErrorMessage(responseBody: String?): String {
         return try {
@@ -688,10 +688,20 @@ object ApiService {
         }
     }
 
-    suspend fun postChurchMessage(churchId: String, content: String): Result<ChurchMessage> {
+    // ✨ UPDATED: postChurchMessage to support replies
+    suspend fun postChurchMessage(
+        churchId: String,
+        content: String,
+        repliedToMessageId: String? = null,
+        repliedToMessageContent: String? = null
+    ): Result<ChurchMessage> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {
-            val json = gson.toJson(mapOf("content" to content))
+            val bodyMap = mutableMapOf<String, Any>("content" to content)
+            repliedToMessageId?.let { bodyMap["repliedToMessageId"] = it }
+            repliedToMessageContent?.let { bodyMap["repliedToMessageContent"] = it }
+
+            val json = gson.toJson(bodyMap)
             val body = json.toRequestBody(JSON)
             val request = Request.Builder()
                 .url("$BASE_URL/churches/$churchId/messages")
@@ -820,16 +830,65 @@ object ApiService {
     }
 
     // =========================================================================================
-    // ✨ NEW CHURCH API METHODS (Implemented for Group Management) ✨
+    // ✨ NEW CHAT API METHODS (for Message Interactions) ✨
     // =========================================================================================
 
-    /**
-     * Uploads a new profile photo for a Church/Group.
-     * @param churchId The ID of the church.
-     * @param uri The local URI of the image to upload.
-     * @param context The activity context needed for content resolution.
-     * @return Result<String> The secure URL of the uploaded photo.
-     */
+    // ✨ NEW: Delete a message in a church
+    suspend fun deleteChurchMessage(churchId: String, messageId: String): Result<Unit> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val request = Request.Builder()
+                .url("$BASE_URL/churches/$churchId/messages/$messageId")
+                .addHeader("Authorization", "Bearer $token")
+                .delete()
+                .build()
+
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        val errorBody = response.body?.string()
+                        throw ApiException("Failed to delete message: ${getErrorMessage(errorBody)}")
+                    }
+                    Result.success(Unit)
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // ✨ NEW: React to a message in a church
+    suspend fun reactToChurchMessage(churchId: String, messageId: String, reactionEmoji: String): Result<ChurchMessage> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val json = gson.toJson(mapOf("reactionEmoji" to reactionEmoji))
+            val body = json.toRequestBody(JSON)
+
+            val request = Request.Builder()
+                .url("$BASE_URL/churches/$churchId/messages/$messageId/react")
+                .addHeader("Authorization", "Bearer $token")
+                .post(body)
+                .build()
+
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    val responseBody = response.body?.string()
+                    if (!response.isSuccessful) {
+                        throw ApiException("Failed to react to message: ${getErrorMessage(responseBody)}")
+                    }
+                    val reactionResponse = gson.fromJson(responseBody, ChurchMessageReactionResponse::class.java)
+                    Result.success(reactionResponse.message)
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // =========================================================================================
+    // CHURCH API METHODS (Implemented for Group Management)
+    // =========================================================================================
+
     suspend fun uploadChurchPhoto(churchId: String, uri: Uri, context: Activity): Result<String> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
 
@@ -874,11 +933,6 @@ object ApiService {
         }
     }
 
-    /**
-     * Deletes a Church/Group. Only the creator should succeed.
-     * @param churchId The ID of the church to delete.
-     * @return Result<Unit>
-     */
     suspend fun deleteChurch(churchId: String): Result<Unit> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {
@@ -902,13 +956,6 @@ object ApiService {
         }
     }
 
-    /**
-     * Adds or removes a member from a Church/Group (Admin feature).
-     * @param churchId The ID of the church.
-     * @param memberId The ID of the user to add/remove.
-     * @param isAdding True to add, false to remove.
-     * @return Result<Unit>
-     */
     suspend fun toggleChurchMember(churchId: String, memberId: String, isAdding: Boolean): Result<Unit> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         val endpoint = if (isAdding) "add-member" else "remove-member"

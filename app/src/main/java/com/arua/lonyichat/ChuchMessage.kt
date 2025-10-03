@@ -9,7 +9,11 @@ data class ChurchMessage(
     val authorName: String,
     val authorPhotoUrl: String?,
     val content: String,
-    val createdAt: Timestamp
+    val createdAt: Timestamp,
+    // ✨ ADDED for new features
+    val repliedToMessageId: String? = null,
+    val repliedToMessageContent: String? = null,
+    val reactions: Map<String, List<String>> = emptyMap() // Map of reaction emoji -> list of userIds
 )
 
 data class ChurchMessagesResponse(

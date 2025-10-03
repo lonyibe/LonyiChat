@@ -34,27 +34,68 @@ class ChurchChatViewModel : ViewModel() {
         }
     }
 
-    fun sendMessage(churchId: String, content: String) {
+    // ✨ UPDATED: sendMessage to accept reply context
+    fun sendMessage(
+        churchId: String,
+        content: String,
+        repliedToMessageId: String? = null,
+        repliedToMessageContent: String? = null
+    ) {
         if (content.isBlank()) return
 
         viewModelScope.launch {
-            // Optimistic update
-            val currentUser = ApiService.getCurrentUserId() ?: return@launch
-            // Create a temporary message to show immediately
-            // Note: This won't have the final ID or timestamp from the server
-            // A more robust solution might use a "sending" state for the message
+            // Optimistic update logic is generally safer to skip in a remote chat for complexity reasons.
+            // Relying on refresh/fetch.
 
-            ApiService.postChurchMessage(churchId, content)
+            ApiService.postChurchMessage(churchId, content, repliedToMessageId, repliedToMessageContent)
                 .onSuccess { newMessage ->
                     _uiState.update { currentState ->
                         currentState.copy(messages = currentState.messages + newMessage)
                     }
                 }
                 .onFailure { error ->
-                    // Here you could implement a retry mechanism or show an error state
-                    // For now, we'll just log it and update the UI with an error
                     _uiState.update { it.copy(error = "Failed to send message: ${error.localizedMessage}") }
                 }
+        }
+    }
+
+    // ✨ NEW: React to a message
+    fun reactToMessage(churchId: String, messageId: String, reactionEmoji: String) {
+        viewModelScope.launch {
+            ApiService.reactToChurchMessage(churchId, messageId, reactionEmoji)
+                .onSuccess { updatedMessage ->
+                    _uiState.update { currentState ->
+                        currentState.copy(
+                            messages = currentState.messages.map { message ->
+                                if (message.id == messageId) updatedMessage else message
+                            }
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update { it.copy(error = "Failed to add reaction: ${error.localizedMessage}") }
+                }
+        }
+    }
+
+    // ✨ NEW: Delete a message
+    fun deleteMessage(churchId: String, messageId: String) {
+        viewModelScope.launch {
+            val originalMessages = _uiState.value.messages
+            // Optimistic update: remove the message immediately
+            _uiState.update { currentState ->
+                currentState.copy(messages = currentState.messages.filterNot { it.id == messageId })
+            }
+
+            ApiService.deleteChurchMessage(churchId, messageId).onFailure { error ->
+                // Rollback on failure
+                _uiState.update {
+                    it.copy(
+                        messages = originalMessages,
+                        error = "Failed to delete message: ${error.localizedMessage}"
+                    )
+                }
+            }
         }
     }
 }
