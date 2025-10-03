@@ -1383,36 +1383,50 @@ fun ReactionSelectorMenu(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 LonyiReactions.forEachIndexed { index, reaction ->
-                    val isFocused = index == focusedReactionIndex
-                    val scale by animateFloatAsState(
-                        targetValue = if (isFocused) 1.5f else 1.0f,
-                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-                        label = "reactionScale${index}"
+                    // ✨ MODIFIED: Use the dedicated ReactionIcon composable to ensure non-stale click handler
+                    ReactionIcon(
+                        reaction = reaction,
+                        isFocused = index == focusedReactionIndex,
+                        onReactionSelected = onReactionSelected
                     )
-
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp) // Fixed size for touch target
-                            .scale(scale)
-                            .clip(CircleShape)
-                            // ✨ FIX: Add explicit and reliable clickable for selection ✨
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onClick = { onReactionSelected(reaction.type) } // This triggers the ViewModel update and the immediate dismissal (onSelectorDismiss)
-                            )
-                            .background(if (isFocused) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent), // Subtle background when focused
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = reaction.emoji,
-                            fontSize = 24.sp, // Larger emoji for a better visual
-                            modifier = Modifier.padding(4.dp)
-                        )
-                    }
                 }
             }
         }
+    }
+}
+
+// ✨ NEW: Dedicated Composable for each Reaction Icon to fix closure capture bug ✨
+@Composable
+private fun ReactionIcon(
+    reaction: AppReaction,
+    isFocused: Boolean,
+    onReactionSelected: (reactionType: String) -> Unit
+) {
+    val scale by animateFloatAsState(
+        targetValue = if (isFocused) 1.5f else 1.0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        label = "reactionScale${reaction.type}"
+    )
+
+    Box(
+        modifier = Modifier
+            .size(40.dp) // Fixed size for touch target
+            .scale(scale)
+            .clip(CircleShape)
+            // Clicks handled reliably here, capturing the correct 'reaction.type'
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = { onReactionSelected(reaction.type) }
+            )
+            .background(if (isFocused) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent), // Subtle background when focused
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = reaction.emoji,
+            fontSize = 24.sp, // Larger emoji for a better visual
+            modifier = Modifier.padding(4.dp)
+        )
     }
 }
 
