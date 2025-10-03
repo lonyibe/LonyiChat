@@ -10,6 +10,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -27,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -151,37 +153,35 @@ fun CreatePostScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    IconButton(onClick = {
-                        selectedImageUri = null
-                        postType = "post"
-                        imagePickerLauncher.launch("image/*")
-                    }) {
-                        Icon(
-                            Icons.Default.PhotoLibrary,
-                            contentDescription = "Add Photo",
-                            tint = if (postType == "post" && selectedImageUri != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                        )
-                    }
-                    IconButton(onClick = {
-                        postType = if (postType == "poll") "post" else "poll"
-                        selectedImageUri = null
-                    }) {
-                        Icon(
-                            Icons.Default.Poll,
-                            contentDescription = "Create Poll",
-                            tint = if (postType == "poll") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                        )
-                    }
-                    IconButton(onClick = {
-                        postType = if (postType == "prayer") "post" else "prayer"
-                        selectedImageUri = null
-                    }) {
-                        Icon(
-                            painterResource(id = R.drawable.ic_prayer),
-                            contentDescription = "Prayer Request",
-                            tint = if (postType == "prayer") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                        )
-                    }
+                    // ✨ MODIFICATION: Replaced IconButton with a custom IconWithLabel composable ✨
+                    IconWithLabel(
+                        icon = Icons.Default.PhotoLibrary,
+                        label = "Photo",
+                        isSelected = postType == "post" && selectedImageUri != null,
+                        onClick = {
+                            selectedImageUri = null
+                            postType = "post"
+                            imagePickerLauncher.launch("image/*")
+                        }
+                    )
+                    IconWithLabel(
+                        icon = Icons.Default.Poll,
+                        label = "Poll",
+                        isSelected = postType == "poll",
+                        onClick = {
+                            postType = if (postType == "poll") "post" else "poll"
+                            selectedImageUri = null
+                        }
+                    )
+                    IconWithLabel(
+                        painter = painterResource(id = R.drawable.ic_prayer),
+                        label = "Prayer",
+                        isSelected = postType == "prayer",
+                        onClick = {
+                            postType = if (postType == "prayer") "post" else "prayer"
+                            selectedImageUri = null
+                        }
+                    )
                 }
             }
         }
@@ -272,5 +272,57 @@ fun CreatePostScreen(
             onPostSuccess()
             viewModel.postCreationSuccessShown()
         }
+    }
+}
+
+// ✨ NEW: Custom composable for an icon with a text label below it ✨
+@Composable
+fun IconWithLabel(
+    icon: ImageVector,
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val contentColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable(onClick = onClick)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = contentColor
+        )
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            color = contentColor
+        )
+    }
+}
+
+// Overload for painter resources
+@Composable
+fun IconWithLabel(
+    painter: androidx.compose.ui.graphics.painter.Painter,
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val contentColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable(onClick = onClick)
+    ) {
+        Icon(
+            painter = painter,
+            contentDescription = label,
+            tint = contentColor
+        )
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            color = contentColor
+        )
     }
 }

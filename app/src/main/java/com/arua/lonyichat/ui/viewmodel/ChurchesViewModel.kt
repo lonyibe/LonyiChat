@@ -6,6 +6,8 @@ import com.arua.lonyichat.data.ApiService
 import com.arua.lonyichat.data.Church
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class ChurchesUiState(
@@ -16,7 +18,7 @@ data class ChurchesUiState(
 
 class ChurchesViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(ChurchesUiState())
-    val uiState: StateFlow<ChurchesUiState> = _uiState
+    val uiState: StateFlow<ChurchesUiState> = _uiState.asStateFlow()
 
     init {
         fetchChurches()
@@ -24,23 +26,22 @@ class ChurchesViewModel : ViewModel() {
 
     fun fetchChurches() {
         viewModelScope.launch {
-            _uiState.value = ChurchesUiState(isLoading = true)
+            _uiState.update { it.copy(isLoading = true) }
             ApiService.getChurches().onSuccess { churches ->
-                _uiState.value = ChurchesUiState(churches = churches)
+                _uiState.update { it.copy(churches = churches, isLoading = false) }
             }.onFailure { error ->
-                _uiState.value = ChurchesUiState(error = error.localizedMessage)
+                _uiState.update { it.copy(error = error.localizedMessage, isLoading = false) }
             }
         }
     }
 
-    fun followChurch(churchId: String) {
+    fun joinChurch(churchId: String) {
         viewModelScope.launch {
-            ApiService.followChurch(churchId).onSuccess {
-                // Refresh the list to show updated follower counts, etc.
+            ApiService.joinChurch(churchId).onSuccess {
+                // Refresh the list to show updated member status
                 fetchChurches()
             }.onFailure { error ->
-                // Optionally, you can set an error state to show a Toast or Snackbar
-                _uiState.value = _uiState.value.copy(error = "Failed to follow: ${error.localizedMessage}")
+                _uiState.update { it.copy(error = "Failed to join: ${error.localizedMessage}") }
             }
         }
     }

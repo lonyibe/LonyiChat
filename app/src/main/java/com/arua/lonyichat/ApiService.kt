@@ -19,7 +19,6 @@ import java.io.InputStream
 
 class ApiException(message: String) : IOException(message)
 
-// A new response class for the user profile endpoint
 data class UserProfileResponse(
     val success: Boolean,
     val profile: Profile,
@@ -46,7 +45,7 @@ object ApiService {
     data class ChatConversationsResponse(val success: Boolean, val chats: List<Chat>)
     data class CommentsResponse(val success: Boolean, val comments: List<Comment>)
     data class SingleCommentResponse(val success: Boolean, val comment: Comment)
-    data class PollVoteResponse(val success: Boolean, val poll: Poll) // ✨ NEW: For poll vote response
+    data class PollVoteResponse(val success: Boolean, val poll: Poll)
 
 
     private fun getErrorMessage(responseBody: String?): String {
@@ -89,7 +88,6 @@ object ApiService {
                 if (authResponse.token.isNullOrBlank()) {
                     throw ApiException("Signup succeeded but did not return a token.")
                 }
-                // Automatically log in
                 authToken = authResponse.token
                 currentUserId = authResponse.userId
                 prefs.edit()
@@ -141,7 +139,6 @@ object ApiService {
     private fun getAuthToken(): String? = authToken
     fun getCurrentUserId(): String? = currentUserId
 
-    //  --- THIS IS THE NEW FUNCTION: To fetch a user's profile and posts ---
     suspend fun getUserProfile(userId: String): Result<UserProfileResponse> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {
@@ -301,15 +298,11 @@ object ApiService {
                 .addHeader("Authorization", "Bearer $token")
                 .build()
 
-            Log.d("ApiService", "Fetching posts from: $BASE_URL/posts")
-
             withContext(Dispatchers.IO) {
                 client.newCall(request).execute().use { response ->
-                    Log.d("ApiService", "Response Code: ${response.code}")
                     val responseBody = response.body?.string()
 
                     if (!response.isSuccessful) {
-                        Log.e("ApiService", "API Error Body on POSTS fail: $responseBody")
                         throw ApiException("Failed to fetch posts (${response.code}): ${getErrorMessage(responseBody)}")
                     }
 
@@ -322,7 +315,6 @@ object ApiService {
         }
     }
 
-    // ✨ NEW: Function to get trending posts ✨
     suspend fun getTrendingPosts(): Result<List<Post>> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {
@@ -415,7 +407,6 @@ object ApiService {
         }
     }
 
-    // ✨ NEW: Function to vote on a poll ✨
     suspend fun voteOnPoll(postId: String, optionId: String): Result<Poll> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {
@@ -524,7 +515,6 @@ object ApiService {
                     val responseBody = response.body?.string()
 
                     if (!response.isSuccessful) {
-                        Log.e("ApiService", "GET /chats failed. Code: ${response.code}")
                         throw ApiException("Failed to fetch chats (${response.code}): ${getErrorMessage(responseBody)}")
                     }
 
@@ -628,11 +618,37 @@ object ApiService {
         }
     }
 
-    suspend fun followChurch(churchId: String): Result<Unit> {
+    suspend fun createChurch(name: String, description: String): Result<Church> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val json = gson.toJson(mapOf("name" to name, "description" to description))
+            val body = json.toRequestBody(JSON)
+            val request = Request.Builder()
+                .url("$BASE_URL/churches")
+                .addHeader("Authorization", "Bearer $token")
+                .post(body)
+                .build()
+
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    val responseBody = response.body!!.string()
+                    if (!response.isSuccessful) {
+                        throw ApiException("Failed to create church: ${getErrorMessage(responseBody)}")
+                    }
+                    val singleChurchResponse = gson.fromJson(responseBody, SingleChurchResponse::class.java)
+                    Result.success(singleChurchResponse.church)
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun joinChurch(churchId: String): Result<Unit> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {
             val request = Request.Builder()
-                .url("$BASE_URL/churches/$churchId/follow")
+                .url("$BASE_URL/churches/$churchId/join")
                 .addHeader("Authorization", "Bearer $token")
                 .post("".toRequestBody(null))
                 .build()
@@ -645,6 +661,56 @@ object ApiService {
             }
         } catch (e: Exception) {
             return Result.failure(e)
+        }
+    }
+
+    suspend fun getChurchMessages(churchId: String): Result<List<ChurchMessage>> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val request = Request.Builder()
+                .url("$BASE_URL/churches/$churchId/messages")
+                .addHeader("Authorization", "Bearer $token")
+                .get()
+                .build()
+
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    val responseBody = response.body!!.string()
+                    if (!response.isSuccessful) {
+                        throw ApiException("Failed to fetch messages: ${getErrorMessage(responseBody)}")
+                    }
+                    val messagesResponse = gson.fromJson(responseBody, ChurchMessagesResponse::class.java)
+                    Result.success(messagesResponse.messages)
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun postChurchMessage(churchId: String, content: String): Result<ChurchMessage> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val json = gson.toJson(mapOf("content" to content))
+            val body = json.toRequestBody(JSON)
+            val request = Request.Builder()
+                .url("$BASE_URL/churches/$churchId/messages")
+                .addHeader("Authorization", "Bearer $token")
+                .post(body)
+                .build()
+
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    val responseBody = response.body!!.string()
+                    if (!response.isSuccessful) {
+                        throw ApiException("Failed to send message: ${getErrorMessage(responseBody)}")
+                    }
+                    val singleMessageResponse = gson.fromJson(responseBody, SingleChurchMessageResponse::class.java)
+                    Result.success(singleMessageResponse.message)
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 
@@ -714,7 +780,6 @@ object ApiService {
     }
 
     suspend fun uploadMedia(uri: Uri, title: String, description: String, context: Activity): Result<Unit> {
-        Log.d("ApiService", "Starting media upload for title: $title")
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
 
         return withContext(Dispatchers.IO) {
@@ -722,7 +787,6 @@ object ApiService {
                 val inputStream = context.contentResolver.openInputStream(uri)
                 val mimeType = context.contentResolver.getType(uri)
                 if (inputStream == null || mimeType == null) {
-                    Log.e("ApiService", "Failed to open media file or get MIME type.")
                     return@withContext Result.failure(ApiException("Failed to open media file."))
                 }
 
@@ -743,16 +807,13 @@ object ApiService {
                     .build()
 
                 client.newCall(request).execute().use { response ->
-                    Log.d("ApiService", "Media upload response code: ${response.code}")
                     if (!response.isSuccessful) {
                         val errorBody = response.body?.string()
-                        Log.e("ApiService", "Media upload failed. Error body: $errorBody")
                         throw ApiException("Media upload failed: ${getErrorMessage(errorBody)}")
                     }
                     Result.success(Unit)
                 }
             } catch (e: Exception) {
-                Log.e("ApiService", "Media upload exception: ${e.localizedMessage}")
                 Result.failure(e)
             }
         }

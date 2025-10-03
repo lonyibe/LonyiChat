@@ -4,7 +4,6 @@ package com.arua.lonyichat
 
 import android.app.Activity
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -32,7 +31,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -53,6 +51,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.*
@@ -67,7 +66,6 @@ import com.arua.lonyichat.ui.theme.LonyiChatTheme
 import com.arua.lonyichat.ui.viewmodel.*
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -80,7 +78,6 @@ val LonyiReactions = listOf(
     AppReaction("praiseGod", "🙌", "Praise God")
 )
 
-private const val MIN_REFRESH_DURATION = 500L
 private const val TAG = "MainActivity"
 
 data class UserProfileState(
@@ -133,6 +130,8 @@ class MainActivity : ComponentActivity() {
         ApiService.getCurrentUserId()?.let {
             profileViewModel.fetchProfile(it)
         }
+        // ✨ Refresh the churches list when the activity is resumed ✨
+        churchesViewModel.fetchChurches()
     }
 }
 
@@ -145,21 +144,15 @@ fun LonyiChatApp(
     mediaViewModel: MediaViewModel,
     profileViewModel: ProfileViewModel
 ) {
-
     val profileUiState by profileViewModel.uiState.collectAsState()
-
     val profileState = UserProfileState(
         userName = profileUiState.profile?.name ?: "Loading...",
         photoUrl = profileUiState.profile?.photoUrl,
         isLoading = profileUiState.isLoading
     )
-
     var selectedItem: Screen by remember { mutableStateOf(Screen.Home) }
-
     val bottomBarItems = listOf(Screen.Home, Screen.Trending, Screen.Groups, Screen.Bible, Screen.Chat, Screen.Media)
-
     val context = LocalContext.current
-
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
 
     LaunchedEffect(ApiService.getCurrentUserId()) {
@@ -216,14 +209,9 @@ fun LonyiChatApp(
 }
 
 @Composable
-fun LonyiChatTopBar(
-    title: String,
-    onProfileClicked: () -> Unit,
-    scrollBehavior: TopAppBarScrollBehavior
-) {
+fun LonyiChatTopBar(title: String, onProfileClicked: () -> Unit, scrollBehavior: TopAppBarScrollBehavior) {
     val isDarkTheme = isSystemInDarkTheme()
     val view = LocalView.current
-
     val headerColor = if (isDarkTheme) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.primary
 
     if (!view.isInEditMode) {
@@ -252,13 +240,8 @@ fun LonyiChatTopBar(
     )
 }
 
-
 @Composable
-fun LonyiChatBottomBar(
-    items: List<Screen>,
-    selectedItem: Screen,
-    onItemSelected: (Screen) -> Unit
-) {
+fun LonyiChatBottomBar(items: List<Screen>, selectedItem: Screen, onItemSelected: (Screen) -> Unit) {
     NavigationBar(
         modifier = Modifier.navigationBarsPadding(),
         containerColor = MaterialTheme.colorScheme.surface,
@@ -303,15 +286,10 @@ fun ScreenContent(
 }
 
 @Composable
-fun HomeFeedScreen(
-    profileState: UserProfileState,
-    viewModel: HomeFeedViewModel
-) {
+fun HomeFeedScreen(profileState: UserProfileState, viewModel: HomeFeedViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
-    val createPostLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
+    val createPostLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             viewModel.fetchPosts()
         }
@@ -319,10 +297,7 @@ fun HomeFeedScreen(
     val reactorUiState by viewModel.reactorUiState.collectAsState()
 
     if (reactorUiState.isLoading || reactorUiState.reactors.amen.isNotEmpty() || reactorUiState.reactors.hallelujah.isNotEmpty() || reactorUiState.reactors.praiseGod.isNotEmpty() || reactorUiState.reactors.praying.isNotEmpty()) {
-        ReactorListDialog(
-            uiState = reactorUiState,
-            onDismiss = { viewModel.clearReactorState() }
-        )
+        ReactorListDialog(uiState = reactorUiState, onDismiss = { viewModel.clearReactorState() })
     }
 
     if (reactorUiState.error != null) {
@@ -339,7 +314,6 @@ fun HomeFeedScreen(
 
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = uiState.isLoading)
     val onRefresh = { viewModel.fetchPosts() }
-
     var openReactionPostId by remember { mutableStateOf<String?>(null) }
 
     when {
@@ -349,32 +323,19 @@ fun HomeFeedScreen(
             }
         }
         uiState.error != null -> {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp), contentAlignment = Alignment.Center
-            ) {
+            Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
                 Text("Error: ${uiState.error}", color = MaterialTheme.colorScheme.error)
             }
         }
         else -> {
             SwipeRefresh(state = swipeRefreshState, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
-                LazyColumn(
-                    state = lazyListState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+                LazyColumn(state = lazyListState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     item {
-                        PostCreationBar(
-                            profileState = profileState,
-                            onBarClick = {
-                                val intent = Intent(context, CreatePostActivity::class.java)
-                                createPostLauncher.launch(intent)
-                            }
-                        )
+                        PostCreationBar(profileState = profileState) {
+                            val intent = Intent(context, CreatePostActivity::class.java)
+                            createPostLauncher.launch(intent)
+                        }
                     }
-
                     items(uiState.posts, key = { it.id }) { post ->
                         PostCard(
                             post = post,
@@ -409,11 +370,7 @@ fun TrendingFeedScreen(viewModel: HomeFeedViewModel) {
     val onRefresh = { viewModel.fetchTrendingPosts() }
 
     SwipeRefresh(state = swipeRefreshState, onRefresh = onRefresh) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+        LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(uiState.trendingPosts, key = { it.id }) { post ->
                 PostCard(
                     post = post,
@@ -439,55 +396,26 @@ fun TrendingFeedScreen(viewModel: HomeFeedViewModel) {
 }
 
 @Composable
-fun PostCreationBar(
-    profileState: UserProfileState,
-    onBarClick: () -> Unit
-) {
+fun PostCreationBar(profileState: UserProfileState, onBarClick: () -> Unit) {
     Column(modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onBarClick)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onBarClick).padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(profileState.photoUrl)
-                    .crossfade(true)
-                    .placeholder(R.drawable.ic_person_placeholder)
-                    .error(R.drawable.ic_person_placeholder)
-                    .build(),
+                model = ImageRequest.Builder(LocalContext.current).data(profileState.photoUrl).crossfade(true).placeholder(R.drawable.ic_person_placeholder).error(R.drawable.ic_person_placeholder).build(),
                 contentDescription = "Your Profile Photo",
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
+                modifier = Modifier.size(40.dp).clip(CircleShape)
             )
-            Text(
-                text = "What is on your heart?",
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                modifier = Modifier.weight(1f)
-            )
-            Icon(
-                imageVector = Icons.Default.PhotoLibrary,
-                contentDescription = "Add Photo",
-                tint = MaterialTheme.colorScheme.primary
-            )
+            Text("What is on your heart?", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), modifier = Modifier.weight(1f))
+            Icon(imageVector = Icons.Default.PhotoLibrary, contentDescription = "Add Photo", tint = MaterialTheme.colorScheme.primary)
         }
     }
 }
 
 @Composable
-fun PostCard(
-    post: com.arua.lonyichat.data.Post,
-    viewModel: HomeFeedViewModel,
-    onCommentClicked: () -> Unit,
-    showReactionSelector: Boolean,
-    onSelectorOpen: (String) -> Unit,
-    onSelectorDismiss: () -> Unit,
-    onProfileClicked: (String) -> Unit
-) {
+fun PostCard(post: Post, viewModel: HomeFeedViewModel, onCommentClicked: () -> Unit, showReactionSelector: Boolean, onSelectorOpen: (String) -> Unit, onSelectorDismiss: () -> Unit, onProfileClicked: (String) -> Unit) {
     var showMenu by remember { mutableStateOf(false) }
     val currentUserId = ApiService.getCurrentUserId()
     val isAuthor = post.authorId == currentUserId
@@ -495,16 +423,11 @@ fun PostCard(
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var fullScreenImageUrl by remember { mutableStateOf<String?>(null) }
 
-
     if (isAuthor && showEditDialog) {
-        EditPostDialog(
-            postContent = post.content,
-            onDismiss = { showEditDialog = false },
-            onPost = { newContent ->
-                viewModel.updatePost(post.id, newContent)
-                showEditDialog = false
-            }
-        )
+        EditPostDialog(postContent = post.content, onDismiss = { showEditDialog = false }) { newContent ->
+            viewModel.updatePost(post.id, newContent)
+            showEditDialog = false
+        }
     }
 
     if (isAuthor && showDeleteConfirmDialog) {
@@ -512,156 +435,62 @@ fun PostCard(
             onDismissRequest = { showDeleteConfirmDialog = false },
             title = { Text("Delete Post") },
             text = { Text("Are you sure you want to permanently delete this post?") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        viewModel.deletePost(post.id)
-                        showDeleteConfirmDialog = false
-                    }
-                ) {
-                    Text("Delete")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteConfirmDialog = false }) {
-                    Text("Cancel")
-                }
-            }
+            confirmButton = { Button(onClick = { viewModel.deletePost(post.id); showDeleteConfirmDialog = false }) { Text("Delete") } },
+            dismissButton = { TextButton(onClick = { showDeleteConfirmDialog = false }) { Text("Cancel") } }
         )
     }
 
     fullScreenImageUrl?.let { imageUrl ->
-        FullScreenImageDialog(
-            imageUrl = imageUrl,
-            onDismiss = { fullScreenImageUrl = null }
-        )
+        FullScreenImageDialog(imageUrl = imageUrl, onDismiss = { fullScreenImageUrl = null })
     }
 
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(0.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
-    ) {
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(0.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column {
             Column(modifier = Modifier.padding(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { onProfileClicked(post.authorId) }
-                    ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { onProfileClicked(post.authorId) }) {
                         AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
-                                .data(post.authorPhotoUrl)
-                                .crossfade(true)
-                                .placeholder(R.drawable.ic_person_placeholder)
-                                .error(R.drawable.ic_person_placeholder)
-                                .build(),
+                            model = ImageRequest.Builder(LocalContext.current).data(post.authorPhotoUrl).crossfade(true).placeholder(R.drawable.ic_person_placeholder).error(R.drawable.ic_person_placeholder).build(),
                             contentDescription = "Author's Profile Photo",
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
+                            modifier = Modifier.size(40.dp).clip(CircleShape)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(post.authorName, fontWeight = FontWeight.Bold)
-                            Text(
-                                post.createdAt.toDate().toFormattedString(),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.Gray
-                            )
+                            Text(post.createdAt.toDate().toFormattedString(), style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                         }
                     }
                     if (isAuthor) {
                         Box {
-                            IconButton(onClick = { showMenu = !showMenu }) {
-                                Icon(Icons.Default.MoreVert, contentDescription = "More options")
-                            }
-                            DropdownMenu(
-                                expanded = showMenu,
-                                onDismissRequest = { showMenu = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Edit") },
-                                    onClick = {
-                                        showEditDialog = true
-                                        showMenu = false
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Delete") },
-                                    onClick = {
-                                        showDeleteConfirmDialog = true
-                                        showMenu = false
-                                    }
-                                )
+                            IconButton(onClick = { showMenu = !showMenu }) { Icon(Icons.Default.MoreVert, contentDescription = "More options") }
+                            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                                DropdownMenuItem(text = { Text("Edit") }, onClick = { showEditDialog = true; showMenu = false })
+                                DropdownMenuItem(text = { Text("Delete") }, onClick = { showDeleteConfirmDialog = true; showMenu = false })
                             }
                         }
                     }
                 }
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(post.content, style = MaterialTheme.typography.bodyMedium)
-
-                if (post.imageUrl != null) {
+                post.imageUrl?.let {
                     Spacer(modifier = Modifier.height(10.dp))
-                    AsyncImage(
-                        model = post.imageUrl,
-                        contentDescription = "Post image",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(MaterialTheme.shapes.medium)
-                            .clickable { fullScreenImageUrl = post.imageUrl },
-                        contentScale = ContentScale.Crop
-                    )
+                    AsyncImage(model = it, contentDescription = "Post image", modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium).clickable { fullScreenImageUrl = it }, contentScale = ContentScale.Crop)
                 }
-
                 if (post.type == "poll" && post.poll != null) {
                     Spacer(modifier = Modifier.height(16.dp))
-                    PollView(
-                        poll = post.poll,
-                        onVote = { optionId ->
-                            viewModel.voteOnPoll(post.id, optionId)
-                        }
-                    )
+                    PollView(poll = post.poll, onVote = { optionId -> viewModel.voteOnPoll(post.id, optionId) })
                 }
             }
-
-            PostReactionSummary(
-                post = post,
-                onSummaryClicked = {
-                    viewModel.fetchReactors(post.id)
-                }
-            )
-
-            Box(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-
-                PostInteractionBar(
-                    post = post,
-                    viewModel = viewModel,
-                    onCommentClicked = onCommentClicked,
-                    onLikeLongPressed = { onSelectorOpen(post.id) },
-                    isSelectorVisible = showReactionSelector
-                )
-
+            PostReactionSummary(post = post) { viewModel.fetchReactors(post.id) }
+            Box(modifier = Modifier.fillMaxWidth()) {
+                PostInteractionBar(post, viewModel, onCommentClicked, { onSelectorOpen(post.id) }, showReactionSelector)
                 if (showReactionSelector) {
                     val density = LocalDensity.current
-                    Popup(
-                        alignment = Alignment.BottomStart,
-                        offset = with(density) {
-                            IntOffset(16.dp.roundToPx(), -72.dp.roundToPx())
-                        },
-                        onDismissRequest = onSelectorDismiss
-                    ) {
-                        ReactionSelectorMenu(
-                            onReactionSelected = { reactionType ->
-                                viewModel.reactToPost(post.id, reactionType)
-                                onSelectorDismiss()
-                            }
-                        )
+                    Popup(alignment = Alignment.BottomStart, offset = with(density) { IntOffset(16.dp.roundToPx(), -72.dp.roundToPx()) }, onDismissRequest = onSelectorDismiss) {
+                        ReactionSelectorMenu { reactionType ->
+                            viewModel.reactToPost(post.id, reactionType)
+                            onSelectorDismiss()
+                        }
                     }
                 }
             }
@@ -681,36 +510,11 @@ fun PollView(poll: Poll, onVote: (String) -> Unit) {
             val percentage = if (totalVotes > 0) (voteCount.toFloat() / totalVotes) else 0f
             val isSelected = option.id == userVote?.id
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable { onVote(option.id) }
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(percentage)
-                        .height(40.dp)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
-                )
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = option.option,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "$voteCount votes",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                    )
+            Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clickable { onVote(option.id) }) {
+                Box(modifier = Modifier.fillMaxWidth(percentage).height(40.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)))
+                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text(option.option, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("$voteCount votes", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
                 }
             }
         }
@@ -718,14 +522,9 @@ fun PollView(poll: Poll, onVote: (String) -> Unit) {
 }
 
 @Composable
-fun EditPostDialog(
-    postContent: String,
-    onDismiss: () -> Unit,
-    onPost: (newContent: String) -> Unit
-) {
+fun EditPostDialog(postContent: String, onDismiss: () -> Unit, onPost: (newContent: String) -> Unit) {
     var newContent by remember { mutableStateOf(postContent) }
     val isSaveEnabled = newContent.isNotBlank() && newContent != postContent
-
     val textFieldColors = OutlinedTextFieldDefaults.colors(
         focusedBorderColor = MaterialTheme.colorScheme.primary,
         unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
@@ -741,76 +540,23 @@ fun EditPostDialog(
         title = { Text("Edit Post") },
         text = {
             Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
-                OutlinedTextField(
-                    value = newContent,
-                    onValueChange = { newContent = it },
-                    label = { Text("Post Content") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .defaultMinSize(minHeight = 100.dp),
-                    colors = textFieldColors
-                )
+                OutlinedTextField(value = newContent, onValueChange = { newContent = it }, label = { Text("Post Content") }, modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 100.dp), colors = textFieldColors)
             }
         },
-        confirmButton = {
-            Button(
-                onClick = { onPost(newContent) },
-                enabled = isSaveEnabled
-            ) {
-                Text("Save Changes")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        },
+        confirmButton = { Button(onClick = { onPost(newContent) }, enabled = isSaveEnabled) { Text("Save Changes") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
         containerColor = MaterialTheme.colorScheme.background,
         textContentColor = MaterialTheme.colorScheme.onBackground
     )
 }
 
 @Composable
-fun FullScreenImageDialog(
-    imageUrl: String,
-    onDismiss: () -> Unit
-) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = true
-        )
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black),
-            contentAlignment = Alignment.Center
-        ) {
-            AsyncImage(
-                model = imageUrl,
-                contentDescription = "Full-screen post image",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .wrapContentHeight()
-                    .clickable(onClick = onDismiss),
-                contentScale = ContentScale.Fit
-            )
-
-            IconButton(
-                onClick = onDismiss,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(16.dp)
-                    .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.5f))
-            ) {
-                Icon(
-                    Icons.Default.Close,
-                    contentDescription = "Close",
-                    tint = Color.White
-                )
+fun FullScreenImageDialog(imageUrl: String, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = true)) {
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+            AsyncImage(model = imageUrl, contentDescription = "Full-screen post image", modifier = Modifier.fillMaxWidth().wrapContentHeight().clickable(onClick = onDismiss), contentScale = ContentScale.Fit)
+            IconButton(onClick = onDismiss, modifier = Modifier.align(Alignment.TopEnd).padding(16.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f))) {
+                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
             }
         }
     }
@@ -818,106 +564,48 @@ fun FullScreenImageDialog(
 
 @Composable
 fun InteractionButton(painter: Painter, text: String, onClick: () -> Unit, modifier: Modifier = Modifier, contentColor: Color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier
-            .clickable(onClick = onClick)
-            .padding(vertical = 8.dp, horizontal = 16.dp),
-        horizontalArrangement = Arrangement.Center
-    ) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier.clickable(onClick = onClick).padding(vertical = 8.dp, horizontal = 16.dp), horizontalArrangement = Arrangement.Center) {
         Icon(painter, contentDescription = text, tint = contentColor)
         Spacer(Modifier.width(8.dp))
-        Text(
-            text,
-            color = contentColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            fontWeight = FontWeight.Bold
-        )
+        Text(text, color = contentColor, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
 fun InteractionButton(icon: ImageVector, text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier
-            .clickable(onClick = onClick)
-            .padding(vertical = 8.dp, horizontal = 16.dp),
-        horizontalArrangement = Arrangement.Center
-    ) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier.clickable(onClick = onClick).padding(vertical = 8.dp, horizontal = 16.dp), horizontalArrangement = Arrangement.Center) {
         Icon(icon, contentDescription = text, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
         Spacer(Modifier.width(8.dp))
-        Text(
-            text,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            fontWeight = FontWeight.Bold
-        )
+        Text(text, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
-fun PostReactionSummary(post: com.arua.lonyichat.data.Post, onSummaryClicked: () -> Unit) {
+fun PostReactionSummary(post: Post, onSummaryClicked: () -> Unit) {
     val totalReactions = post.reactions.amen + post.reactions.hallelujah + post.reactions.praiseGod + post.reactions.praying
 
     Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f), thickness = 1.dp)
 
     if (totalReactions > 0) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onSummaryClicked)
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
+        Row(modifier = Modifier.fillMaxWidth().clickable(onClick = onSummaryClicked).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (post.reactions.praying > 0) {
                     Icon(painterResource(id = R.drawable.ic_prayer), contentDescription = "Praying", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
                 }
-                if (post.reactions.amen > 0) {
-                    Text("🙏", fontSize = 16.sp)
-                    Spacer(Modifier.width(4.dp))
-                }
-                if (post.reactions.hallelujah > 0) {
-                    Text("🥳", fontSize = 16.sp)
-                    Spacer(Modifier.width(4.dp))
-                }
-                if (post.reactions.praiseGod > 0) {
-                    Text("🙌", fontSize = 16.sp)
-                    Spacer(Modifier.width(4.dp))
-                }
-
-                Text(
-                    text = totalReactions.toString(),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                    modifier = Modifier.padding(start = 4.dp)
-                )
+                if (post.reactions.amen > 0) { Text("🙏", fontSize = 16.sp); Spacer(Modifier.width(4.dp)) }
+                if (post.reactions.hallelujah > 0) { Text("🥳", fontSize = 16.sp); Spacer(Modifier.width(4.dp)) }
+                if (post.reactions.praiseGod > 0) { Text("🙌", fontSize = 16.sp); Spacer(Modifier.width(4.dp)) }
+                Text(totalReactions.toString(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), modifier = Modifier.padding(start = 4.dp))
             }
-
-            Text(
-                text = "${post.commentCount} Comments · ${post.shareCount} Shares",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-            )
+            Text("${post.commentCount} Comments · ${post.shareCount} Shares", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
         }
         Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f), thickness = 1.dp)
     }
 }
 
-
 @Composable
-fun PostInteractionBar(
-    post: com.arua.lonyichat.data.Post,
-    viewModel: HomeFeedViewModel,
-    onCommentClicked: () -> Unit,
-    onLikeLongPressed: () -> Unit,
-    isSelectorVisible: Boolean
-) {
+fun PostInteractionBar(post: Post, viewModel: HomeFeedViewModel, onCommentClicked: () -> Unit, onLikeLongPressed: () -> Unit, isSelectorVisible: Boolean) {
     val currentReaction = when {
         post.userReactions.amen -> "amen"
         post.userReactions.hallelujah -> "hallelujah"
@@ -932,147 +620,45 @@ fun PostInteractionBar(
         else -> Pair(Icons.Default.ThumbUp, "Like")
     }
 
-    val contentColor by animateColorAsState(
-        targetValue = if (currentReaction != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-        label = "reactionColor"
-    )
-
+    val contentColor by animateColorAsState(targetValue = if (currentReaction != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), label = "reactionColor")
     val reactionTypeForShortClick = currentReaction ?: "amen"
 
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-        horizontalArrangement = Arrangement.SpaceAround,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.SpaceAround, verticalAlignment = Alignment.CenterVertically) {
         if (post.type == "prayer") {
-            val prayingColor by animateColorAsState(
-                targetValue = if (post.userReactions.praying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                label = "prayingColor"
-            )
-            InteractionButton(
-                painter = painterResource(id = R.drawable.ic_prayer),
-                text = if (post.userReactions.praying) "Praying" else "Pray",
-                onClick = { viewModel.reactToPost(post.id, "praying") },
-                modifier = Modifier.weight(1f),
-                contentColor = prayingColor
-            )
+            val prayingColor by animateColorAsState(targetValue = if (post.userReactions.praying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), label = "prayingColor")
+            InteractionButton(painter = painterResource(id = R.drawable.ic_prayer), text = if (post.userReactions.praying) "Praying" else "Pray", onClick = { viewModel.reactToPost(post.id, "praying") }, modifier = Modifier.weight(1f), contentColor = prayingColor)
         } else {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .weight(1f)
-                    .combinedClickable(
-                        onClick = {
-                            viewModel.reactToPost(post.id, reactionTypeForShortClick)
-                        },
-                        onLongClick = onLikeLongPressed
-                    )
-                    .padding(vertical = 8.dp, horizontal = 16.dp),
-                horizontalArrangement = Arrangement.Center
-            ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f).combinedClickable(onClick = { viewModel.reactToPost(post.id, reactionTypeForShortClick) }, onLongClick = onLikeLongPressed).padding(vertical = 8.dp, horizontal = 16.dp), horizontalArrangement = Arrangement.Center) {
                 Icon(icon, contentDescription = text, tint = contentColor)
                 Spacer(Modifier.width(8.dp))
                 Text(text, color = contentColor, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
             }
         }
-
-        InteractionButton(
-            icon = Icons.Default.Comment,
-            text = "Comment",
-            onClick = onCommentClicked,
-            modifier = Modifier.weight(1f)
-        )
-
-        InteractionButton(
-            icon = Icons.Default.Share,
-            text = "Share",
-            onClick = { viewModel.sharePost(post.id) },
-            modifier = Modifier.weight(1f)
-        )
+        InteractionButton(icon = Icons.Default.Comment, text = "Comment", onClick = onCommentClicked, modifier = Modifier.weight(1f))
+        InteractionButton(icon = Icons.Default.Share, text = "Share", onClick = { viewModel.sharePost(post.id) }, modifier = Modifier.weight(1f))
     }
 }
 
 @Composable
-fun ReactionSelectorMenu(
-    onReactionSelected: (reactionType: String) -> Unit
-) {
+fun ReactionSelectorMenu(onReactionSelected: (reactionType: String) -> Unit) {
     var focusedReactionIndex by remember { mutableStateOf<Int?>(null) }
     var rowSize by remember { mutableStateOf(IntSize.Zero) }
     val reactionCount = LonyiReactions.size
+    val indexFromPosition: (x: Float) -> Int? = { x -> if (rowSize.width == 0) null else { (x / (rowSize.width.toFloat() / reactionCount)).toInt().coerceIn(0, reactionCount - 1) } }
 
-    val indexFromPosition: (x: Float) -> Int? = { x ->
-        if (rowSize.width == 0) null else {
-            val itemWidth = rowSize.width.toFloat() / reactionCount
-            (x / itemWidth).toInt().coerceIn(0, reactionCount - 1)
-        }
-    }
-
-    Card(
-        elevation = CardDefaults.cardElevation(8.dp),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
+    Card(elevation = CardDefaults.cardElevation(8.dp), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             focusedReactionIndex?.let { index ->
                 val reaction = LonyiReactions[index]
-                Text(
-                    text = reaction.label,
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp,
-                    modifier = Modifier
-                        .padding(top = 8.dp)
-                        .background(
-                            MaterialTheme.colorScheme.primary,
-                            RoundedCornerShape(4.dp)
-                        )
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                )
+                Text(reaction.label, color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp))
                 Spacer(modifier = Modifier.height(8.dp))
             }
-
-            Row(
-                modifier = Modifier
-                    .onSizeChanged { rowSize = it }
-                    .pointerInput(Unit) {
-                        detectDragGestures(
-                            onDragStart = { offset -> focusedReactionIndex = indexFromPosition(offset.x) },
-                            onDragEnd = { focusedReactionIndex = null },
-                            onDragCancel = { focusedReactionIndex = null },
-                            onDrag = { change, _ ->
-                                focusedReactionIndex = indexFromPosition(change.position.x)
-                                change.consume()
-                            }
-                        )
-                    }
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            Row(modifier = Modifier.onSizeChanged { rowSize = it }.pointerInput(Unit) { detectDragGestures(onDragStart = { offset -> focusedReactionIndex = indexFromPosition(offset.x) }, onDragEnd = { focusedReactionIndex = null }, onDragCancel = { focusedReactionIndex = null }, onDrag = { change, _ -> focusedReactionIndex = indexFromPosition(change.position.x); change.consume() }) }.padding(horizontal = 8.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 LonyiReactions.forEachIndexed { index, reaction ->
                     val isFocused = index == focusedReactionIndex
-                    val scale by animateFloatAsState(
-                        targetValue = if (isFocused) 1.5f else 1.0f,
-                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-                        label = "reactionScale"
-                    )
-                    Box(
-                        modifier = Modifier
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onClick = { onReactionSelected(reaction.type) }
-                            )
-                            .size(40.dp)
-                            .scale(scale)
-                            .clip(CircleShape)
-                            .background(if (isFocused) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = reaction.emoji,
-                            fontSize = 24.sp,
-                            modifier = Modifier.padding(4.dp)
-                        )
+                    val scale by animateFloatAsState(targetValue = if (isFocused) 1.5f else 1.0f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow), label = "reactionScale")
+                    Box(modifier = Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = { onReactionSelected(reaction.type) }).size(40.dp).scale(scale).clip(CircleShape).background(if (isFocused) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent), contentAlignment = Alignment.Center) {
+                        Text(reaction.emoji, fontSize = 24.sp, modifier = Modifier.padding(4.dp))
                     }
                 }
             }
@@ -1081,162 +667,90 @@ fun ReactionSelectorMenu(
 }
 
 @Composable
-fun ReactorListDialog(
-    uiState: ReactorUiState,
-    onDismiss: () -> Unit
-) {
+fun ReactorListDialog(uiState: ReactorUiState, onDismiss: () -> Unit) {
     val content: @Composable () -> Unit = {
         if (uiState.isLoading) {
-            Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
+            Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         } else if (uiState.error != null) {
             Text("Error loading reactions: ${uiState.error}", color = MaterialTheme.colorScheme.error)
         } else {
-            val amenReactors = uiState.reactors.amen
-            val hallelujahReactors = uiState.reactors.hallelujah
-            val praiseGodReactors = uiState.reactors.praiseGod
-            val prayingReactors = uiState.reactors.praying
-
-            val allReactors = (amenReactors + hallelujahReactors + praiseGodReactors + prayingReactors)
-                .distinctBy { it.userId }
-                .toMutableList()
-
+            val allReactors = (uiState.reactors.amen + uiState.reactors.hallelujah + uiState.reactors.praiseGod + uiState.reactors.praying).distinctBy { it.userId }.toMutableList()
             Column(modifier = Modifier.fillMaxWidth()) {
                 var selectedTab by remember { mutableStateOf(0) }
                 val tabs = listOf(
                     Triple("All", allReactors.size, null),
-                    Triple("Amen", amenReactors.size, "🙏"),
-                    Triple("Hallelujah", hallelujahReactors.size, "🥳"),
-                    Triple("Praise God", praiseGodReactors.size, "🙌"),
-                    Triple("Praying", prayingReactors.size, "🛐")
+                    Triple("Amen", uiState.reactors.amen.size, "🙏"),
+                    Triple("Hallelujah", uiState.reactors.hallelujah.size, "🥳"),
+                    Triple("Praise God", uiState.reactors.praiseGod.size, "🙌"),
+                    Triple("Praying", uiState.reactors.praying.size, "🛐")
                 )
-
-                ScrollableTabRow(
-                    selectedTabIndex = selectedTab,
-                    containerColor = MaterialTheme.colorScheme.background,
-                    contentColor = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                ScrollableTabRow(selectedTabIndex = selectedTab, containerColor = MaterialTheme.colorScheme.background, contentColor = MaterialTheme.colorScheme.primary, modifier = Modifier.fillMaxWidth()) {
                     tabs.forEachIndexed { index, tabData ->
                         val (title, count, emoji) = tabData
-                        Tab(
-                            selected = selectedTab == index,
-                            onClick = { selectedTab = index },
-                            text = { Text("$title ($count)", style = MaterialTheme.typography.labelLarge) },
-                            icon = if (emoji != null) {
-                                { Text(emoji, fontSize = 20.sp) }
-                            } else null
-                        )
+                        Tab(selected = selectedTab == index, onClick = { selectedTab = index }, text = { Text("$title ($count)", style = MaterialTheme.typography.labelLarge) }, icon = if (emoji != null) { { Text(emoji, fontSize = 20.sp) } } else null)
                     }
                 }
-
                 Spacer(Modifier.height(8.dp))
-
-                val currentList = when (selectedTab) {
-                    1 -> amenReactors
-                    2 -> hallelujahReactors
-                    3 -> praiseGodReactors
-                    4 -> prayingReactors
-                    else -> allReactors
-                }
-
+                val currentList = when (selectedTab) { 1 -> uiState.reactors.amen; 2 -> uiState.reactors.hallelujah; 3 -> uiState.reactors.praiseGod; 4 -> uiState.reactors.praying; else -> allReactors }
                 if (currentList.isEmpty()) {
                     Text("No one has left this reaction yet.", modifier = Modifier.padding(16.dp))
                 } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp, max = 300.dp)
-                    ) {
-                        items(currentList, key = { it.userId }) { reactor ->
-                            ReactorItem(reactor = reactor)
-                        }
+                    LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp, max = 300.dp)) {
+                        items(currentList, key = { it.userId }) { reactor -> ReactorItem(reactor = reactor) }
                     }
                 }
             }
         }
     }
-
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Post Reactions") },
-        text = content,
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Close")
-            }
-        },
-        containerColor = MaterialTheme.colorScheme.background,
-        textContentColor = MaterialTheme.colorScheme.onBackground
-    )
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Post Reactions") }, text = content, confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } }, containerColor = MaterialTheme.colorScheme.background, textContentColor = MaterialTheme.colorScheme.onBackground)
 }
 
 @Composable
 fun ReactorItem(reactor: Reactor) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current)
-                .data(reactor.photoUrl)
-                .crossfade(true)
-                .placeholder(R.drawable.ic_person_placeholder)
-                .error(R.drawable.ic_person_placeholder)
-                .build(),
-            contentDescription = "Reactor Profile Photo",
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape),
-            contentScale = ContentScale.Crop
-        )
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        AsyncImage(model = ImageRequest.Builder(LocalContext.current).data(reactor.photoUrl).crossfade(true).placeholder(R.drawable.ic_person_placeholder).error(R.drawable.ic_person_placeholder).build(), contentDescription = "Reactor Profile Photo", modifier = Modifier.size(40.dp).clip(CircleShape), contentScale = ContentScale.Crop)
         Spacer(modifier = Modifier.width(12.dp))
         Text(reactor.name, fontWeight = FontWeight.Medium)
     }
 }
 
-
 @Composable
 fun GroupsChurchScreen(viewModel: ChurchesViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     val onRefresh = { viewModel.fetchChurches() }
+    val context = LocalContext.current
+    val createChurchLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            viewModel.fetchChurches()
+        }
+    }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        Text(
-            text = "Churches & Groups",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold
-        )
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("Churches & Groups", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            TextButton(onClick = { createChurchLauncher.launch(Intent(context, CreateChurchActivity::class.java)) }) {
+                Icon(Icons.Default.Add, contentDescription = "Create Church"); Spacer(modifier = Modifier.width(4.dp)); Text("Create")
+            }
+        }
         Spacer(modifier = Modifier.height(16.dp))
 
         when {
-            uiState.isLoading && uiState.churches.isEmpty() -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-            }
-            uiState.error != null -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Error: ${uiState.error}", color = MaterialTheme.colorScheme.error)
-                }
-            }
+            uiState.isLoading && uiState.churches.isEmpty() -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            uiState.error != null -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Error: ${uiState.error}", color = MaterialTheme.colorScheme.error) }
+            uiState.churches.isEmpty() -> EmptyChurchesView { createChurchLauncher.launch(Intent(context, CreateChurchActivity::class.java)) }
             else -> {
-                SwipeRefresh(
-                    state = rememberSwipeRefreshState(isRefreshing = uiState.isLoading),
-                    onRefresh = onRefresh,
-                    modifier = Modifier.fillMaxSize()
-                ) {
+                SwipeRefresh(state = rememberSwipeRefreshState(isRefreshing = uiState.isLoading), onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(uiState.churches) { church ->
+                        items(uiState.churches, key = { it.id }) { church ->
                             ChurchCard(
                                 church = church,
-                                onFollowClicked = { viewModel.followChurch(church.id) }
+                                onJoinClicked = { viewModel.joinChurch(church.id) },
+                                onCardClicked = {
+                                    val intent = Intent(context, ChurchChatActivity::class.java).apply {
+                                        putExtra("CHURCH_EXTRA", church)
+                                    }
+                                    context.startActivity(intent)
+                                }
                             )
                         }
                     }
@@ -1247,35 +761,37 @@ fun GroupsChurchScreen(viewModel: ChurchesViewModel) {
 }
 
 @Composable
-fun ChurchCard(church: Church, onFollowClicked: () -> Unit) {
+fun EmptyChurchesView(onCreateClick: () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Icon(imageVector = Icons.Default.Group, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+            Text("No churches yet.", style = MaterialTheme.typography.titleLarge)
+            Text("Be the first to create a community or find one to join.", textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+            Button(onClick = onCreateClick) { Text("Create a Church or Group") }
+        }
+    }
+}
+
+@Composable
+fun ChurchCard(church: Church, onJoinClicked: () -> Unit, onCardClicked: () -> Unit) {
     val currentUserId = ApiService.getCurrentUserId()
     val isMember = church.members.contains(currentUserId)
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(2.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
+    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onCardClicked), elevation = CardDefaults.cardElevation(2.dp)) {
+        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(church.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(church.description, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                Text(church.description, style = MaterialTheme.typography.bodyMedium, color = Color.Gray, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("${church.followerCount} Followers", style = MaterialTheme.typography.labelMedium)
+                Text("${church.followerCount} Members", style = MaterialTheme.typography.labelMedium)
             }
             Spacer(modifier = Modifier.width(16.dp))
-
             Button(
-                onClick = onFollowClicked,
-                enabled = !isMember,
+                onClick = onJoinClicked,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isMember) Color.Gray else MaterialTheme.colorScheme.primary
+                    containerColor = if (isMember) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primary,
+                    contentColor = if (isMember) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onPrimary
                 )
             ) {
                 Text(if (isMember) "Joined" else "Join")
@@ -1290,78 +806,30 @@ fun ChatScreen(viewModel: ChatListViewModel) {
     val currentUserId = ApiService.getCurrentUserId()
     val onRefresh = { viewModel.fetchConversations() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(top=16.dp)
-    ) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            elevation = CardDefaults.cardElevation(2.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(top = 16.dp)) {
+        Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), elevation = CardDefaults.cardElevation(2.dp)) {
+            Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Find other Christians", style = MaterialTheme.typography.titleMedium)
-
-                Row(
-                    modifier = Modifier.clickable { Log.d(TAG, "Find Christians clicked") },
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Row(modifier = Modifier.clickable { Log.d(TAG, "Find Christians clicked") }, verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.PersonAdd, contentDescription = "Find Friends", tint = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("Search", color = MaterialTheme.colorScheme.primary)
                 }
             }
         }
-
         Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            text = "Messages",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
+        Text("Messages", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp))
         Divider(modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp))
-
         when {
-            uiState.isLoading && uiState.conversations.isEmpty() -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-            }
-            uiState.error != null -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Error: ${uiState.error}", color = MaterialTheme.colorScheme.error)
-                }
-            }
+            uiState.isLoading && uiState.conversations.isEmpty() -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            uiState.error != null -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Error: ${uiState.error}", color = MaterialTheme.colorScheme.error) }
             else -> {
-                SwipeRefresh(
-                    state = rememberSwipeRefreshState(isRefreshing = uiState.isLoading),
-                    onRefresh = onRefresh,
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    LazyColumn(
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
+                SwipeRefresh(state = rememberSwipeRefreshState(isRefreshing = uiState.isLoading), onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(uiState.conversations) { chat ->
                             val otherParticipantId = chat.participants.firstOrNull { it != currentUserId }
                             val chatName = chat.participantNames[otherParticipantId] ?: "Unknown User"
-
-                            ChatThreadItem(
-                                chatName = chatName,
-                                lastMessage = chat.lastMessage,
-                                timestamp = chat.lastMessageTimestamp
-                            )
+                            ChatThreadItem(chatName, chat.lastMessage, chat.lastMessageTimestamp)
                         }
                     }
                 }
@@ -1370,35 +838,16 @@ fun ChatScreen(viewModel: ChatListViewModel) {
     }
 }
 
-
 @Composable
 fun ChatThreadItem(chatName: String, lastMessage: String, timestamp: Date?) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { /* TODO: Navigate to conversation screen */ }
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(50.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.secondaryContainer),
-            contentAlignment = Alignment.Center
-        ) {
+    Row(modifier = Modifier.fillMaxWidth().clickable { /* TODO: Navigate to conversation screen */ }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier.size(50.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer), contentAlignment = Alignment.Center) {
             Text(chatName.firstOrNull()?.toString() ?: " ", style = MaterialTheme.typography.titleLarge)
         }
         Spacer(modifier = Modifier.width(12.dp))
-
         Column(modifier = Modifier.weight(1f)) {
             Text(chatName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-            Text(
-                lastMessage,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.Gray,
-                maxLines = 1
-            )
+            Text(lastMessage, style = MaterialTheme.typography.bodyMedium, color = Color.Gray, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Text(timestamp?.toFormattedString() ?: "", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
     }
@@ -1408,99 +857,40 @@ fun ChatThreadItem(chatName: String, lastMessage: String, timestamp: Date?) {
 @Composable
 fun BibleStudyScreen(viewModel: BibleViewModel) {
     val uiState by viewModel.uiState.collectAsState()
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(16.dp)
-    ) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-            elevation = CardDefaults.cardElevation(4.dp)
-        ) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
+        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), elevation = CardDefaults.cardElevation(4.dp)) {
             when {
-                uiState.isLoading -> {
-                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
-                }
-                uiState.error != null -> {
-                    Text(
-                        text = "Error: ${uiState.error}",
-                        modifier = Modifier.padding(16.dp),
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
+                uiState.isLoading -> Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                uiState.error != null -> Text("Error: ${uiState.error}", modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error)
                 uiState.verseOfTheDay != null -> {
                     val verse = uiState.verseOfTheDay!!
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "Daily Bread: ${verse.reference}",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+                        Text("Daily Bread: ${verse.reference}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "\"${verse.text}\"",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+                        Text("\"${verse.text}\"", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
                         Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = { Log.d(TAG, "Read full chapter clicked") }) {
-                            Text("Read Full Chapter")
-                        }
+                        Button(onClick = { Log.d(TAG, "Read full chapter clicked") }) { Text("Read Full Chapter") }
                     }
                 }
             }
         }
-
         Spacer(modifier = Modifier.height(24.dp))
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            elevation = CardDefaults.cardElevation(2.dp)
-        ) {
+        Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(2.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "Your Reading Plan Progress",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
+                Text("Your Reading Plan Progress", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(text = "Currently reading: Genesis (Day 3 of 90)", style = MaterialTheme.typography.bodyMedium)
+                Text("Currently reading: Genesis (Day 3 of 90)", style = MaterialTheme.typography.bodyMedium)
                 Spacer(modifier = Modifier.height(4.dp))
-                LinearProgressIndicator(
-                    progress = 0.03f,
-                    modifier = Modifier.fillMaxWidth().height(8.dp).clip(MaterialTheme.shapes.small),
-                    color = MaterialTheme.colorScheme.primary
-                )
+                LinearProgressIndicator(progress = 0.03f, modifier = Modifier.fillMaxWidth().height(8.dp).clip(MaterialTheme.shapes.small), color = MaterialTheme.colorScheme.primary)
             }
         }
-
         Spacer(modifier = Modifier.height(24.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            Button(
-                onClick = { Log.d(TAG, "Bible Search clicked") },
-                modifier = Modifier.weight(1f).padding(end = 8.dp)
-            ) {
-                Icon(Icons.Default.Search, contentDescription = "Search", Modifier.size(20.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Search Bible")
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+            Button(onClick = { Log.d(TAG, "Bible Search clicked") }, modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                Icon(Icons.Default.Search, contentDescription = "Search", Modifier.size(20.dp)); Spacer(Modifier.width(4.dp)); Text("Search Bible")
             }
-            Button(
-                onClick = { Log.d(TAG, "Browse Books clicked") },
-                modifier = Modifier.weight(1f).padding(start = 8.dp)
-            ) {
-                Icon(Icons.Default.Timeline, contentDescription = "Books", Modifier.size(20.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Books A-Z")
+            Button(onClick = { Log.d(TAG, "Browse Books clicked") }, modifier = Modifier.weight(1f).padding(start = 8.dp)) {
+                Icon(Icons.Default.Timeline, contentDescription = "Books", Modifier.size(20.dp)); Spacer(Modifier.width(4.dp)); Text("Books A-Z")
             }
         }
     }
@@ -1510,40 +900,16 @@ fun BibleStudyScreen(viewModel: BibleViewModel) {
 fun MediaScreen(viewModel: MediaViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     val onRefresh = { viewModel.fetchMedia() }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        Text(
-            text = "Media & Testimonies",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold
-        )
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Text("Media & Testimonies", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(16.dp))
-
         when {
-            uiState.isLoading && uiState.mediaItems.isEmpty() -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-            }
-            uiState.error != null -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Error: ${uiState.error}", color = MaterialTheme.colorScheme.error)
-                }
-            }
+            uiState.isLoading && uiState.mediaItems.isEmpty() -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            uiState.error != null -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Error: ${uiState.error}", color = MaterialTheme.colorScheme.error) }
             else -> {
-                SwipeRefresh(
-                    state = rememberSwipeRefreshState(isRefreshing = uiState.isLoading),
-                    onRefresh = onRefresh,
-                    modifier = Modifier.fillMaxSize()
-                ) {
+                SwipeRefresh(state = rememberSwipeRefreshState(isRefreshing = uiState.isLoading), onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(uiState.mediaItems) { mediaItem ->
-                            MediaItemCard(mediaItem = mediaItem)
-                        }
+                        items(uiState.mediaItems) { mediaItem -> MediaItemCard(mediaItem = mediaItem) }
                     }
                 }
             }
@@ -1553,35 +919,15 @@ fun MediaScreen(viewModel: MediaViewModel) {
 
 @Composable
 fun MediaItemCard(mediaItem: MediaItem) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { /* TODO: Open video player or testimony text */ },
-        elevation = CardDefaults.cardElevation(2.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val icon = when (mediaItem.mediaType) {
-                "video" -> Icons.Default.Videocam
-                "livestream" -> Icons.Default.LiveTv
-                "testimony" -> Icons.Default.Book
-                else -> Icons.Default.PlayCircle
-            }
-            Icon(
-                imageVector = icon,
-                contentDescription = mediaItem.mediaType,
-                modifier = Modifier.size(40.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
-
+    Card(modifier = Modifier.fillMaxWidth().clickable { /* TODO: Open video player or testimony text */ }, elevation = CardDefaults.cardElevation(2.dp)) {
+        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            val icon = when (mediaItem.mediaType) { "video" -> Icons.Default.Videocam; "livestream" -> Icons.Default.LiveTv; "testimony" -> Icons.Default.Book; else -> Icons.Default.PlayCircle }
+            Icon(imageVector = icon, contentDescription = mediaItem.mediaType, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.width(16.dp))
-
             Column {
                 Text(mediaItem.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(mediaItem.description, style = MaterialTheme.typography.bodyMedium, color = Color.Gray, maxLines = 2)
+                Text(mediaItem.description, style = MaterialTheme.typography.bodyMedium, color = Color.Gray, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -1596,13 +942,6 @@ fun Date.toFormattedString(): String {
 @Composable
 fun LonyiChatPreview() {
     LonyiChatTheme {
-        LonyiChatApp(
-            HomeFeedViewModel(),
-            ChurchesViewModel(),
-            ChatListViewModel(),
-            BibleViewModel(),
-            MediaViewModel(),
-            ProfileViewModel()
-        )
+        LonyiChatApp(HomeFeedViewModel(), ChurchesViewModel(), ChatListViewModel(), BibleViewModel(), MediaViewModel(), ProfileViewModel())
     }
 }

@@ -2,7 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    // Removed Firebase plugin ID
+    id("kotlin-parcelize") // ✨ ADD THIS LINE
 }
 
 android {
@@ -18,6 +18,7 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
+
     }
 
     buildTypes {
@@ -31,8 +32,8 @@ android {
     }
 
 
+
     compileOptions  {
-        // ✨ DEFINITIVE FIX: Using explicit assignment to properties of the CompileOptions object ✨
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
@@ -47,15 +48,12 @@ android {
 dependencies {
     implementation("androidx.core:core-splashscreen:1.0.1")
 
-    // UPDATED FOR MODERN EMOJI/PLATFORM SUPPORT
-    implementation("androidx.appcompat:appcompat:1.7.0") // BUMPED from 1.6.1 for emoji compatibility
-    implementation("androidx.core:core-ktx:1.13.1") // BUMPED from 1.10.1 for latest features
-    implementation("com.google.android.material:material:1.12.0") // BUMPED from 1.11.0 for emoji compatibility
+    // UPDATED FOR
+    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("com.google.android.material:material:1.12.0")
 
-    // FIX: Explicitly adding androidx.emoji2 to ensure correct backporting of modern emojis on older Android versions.
     implementation("androidx.emoji2:emoji2:1.4.0")
-
-    // Removed all Firebase and associated dependencies
 
     // OkHttp for network calls
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
@@ -66,8 +64,6 @@ dependencies {
     // ADDED: Coil for image loading from URLs
     implementation("io.coil-kt:coil-compose:2.6.0")
 
-    // 🔥 CRITICAL FIX: Add Accompanist SwipeRefresh as a reliable fallback to solve unresolved references.
-    // This library is stable and self-contained, resolving dependency confusion.
     implementation("com.google.accompanist:accompanist-swiperefresh:0.32.0")
 
     implementation(libs.androidx.core.ktx)
@@ -77,7 +73,7 @@ dependencies {
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
-    implementation(libs.androidx.compose.material3) // This relies on the core library
+    implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
 
     testImplementation(libs.junit)
