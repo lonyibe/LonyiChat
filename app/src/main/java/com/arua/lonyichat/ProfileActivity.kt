@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+
 package com.arua.lonyichat
 
 import android.app.Activity
@@ -48,8 +50,6 @@ import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 
 class ProfileActivity : ComponentActivity() {
 
-    // ✨ FIX: Use the standard `by viewModels()` delegate.
-    // This correctly scopes the ViewModel to this Activity's lifecycle.
     private val profileViewModel: ProfileViewModel by viewModels()
     private val homeFeedViewModel: HomeFeedViewModel by viewModels()
     private var userId: String? = null
@@ -96,7 +96,6 @@ class ProfileActivity : ComponentActivity() {
         }
     }
 
-    // ✨ THIS REMAINS CRITICAL: Refresh the profile every time the activity comes into view.
     override fun onResume() {
         super.onResume()
         userId?.let {
@@ -105,7 +104,6 @@ class ProfileActivity : ComponentActivity() {
     }
 }
 
-// No changes are needed below this line in ProfileActivity.kt
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun UserProfileScreen(
@@ -140,9 +138,19 @@ fun UserProfileScreen(
             profile = profile,
             onDismiss = { showEditDialog = false },
             onSave = { name, phone, age, country ->
-                profileViewModel.updateProfile(name, phone, age, country, onSuccess = {
-                    profileViewModel.fetchProfile(profile.userId)
-                })
+                // ✨ THIS IS THE FIX: Pass the existing photoUrl to the update function.
+                // This prevents the photo from disappearing when you only edit text fields.
+                profileViewModel.updateProfile(
+                    name = name,
+                    phone = phone,
+                    age = age,
+                    country = country,
+                    photoUrl = profile.photoUrl, // Always include the current photo URL
+                    onSuccess = {
+                        // The onResume will handle the refresh, but fetching immediately gives a better UX
+                        profileViewModel.fetchProfile(profile.userId)
+                    }
+                )
                 showEditDialog = false
             }
         )
@@ -270,6 +278,7 @@ fun UserProfileScreen(
     }
 }
 
+// No changes below this line
 @Composable
 fun ProfileHeader(
     profile: Profile,
