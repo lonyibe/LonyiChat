@@ -3,7 +3,7 @@ package com.arua.lonyichat.data
 import android.os.Parcelable
 import com.google.gson.annotations.SerializedName
 import kotlinx.parcelize.Parcelize
-import kotlinx.parcelize.RawValue // ✨ FIX: ADDED for Timestamp serialization
+import kotlinx.parcelize.RawValue
 
 @Parcelize
 data class Event(
@@ -11,7 +11,9 @@ data class Event(
     val title: String,
     val description: String,
     val imageUrl: String? = null,
-    @RawValue val date: Timestamp, // ✨ FIX: Annotated with @RawValue
+    // ✨ FIX: Used @field:RawValue target to correctly apply the annotation to the generated property,
+    // resolving both the 'not applicable to value parameter' and 'Type not directly supported' errors.
+    @field:RawValue val date: Timestamp,
     val location: String,
     val createdBy: String,
     val authorName: String,
