@@ -19,7 +19,7 @@ import java.io.InputStream
 
 class ApiException(message: String) : IOException(message)
 
-// ✨ ADDED: A new response class for the user profile endpoint
+// A new response class for the user profile endpoint
 data class UserProfileResponse(
     val success: Boolean,
     val profile: Profile,
@@ -46,6 +46,7 @@ object ApiService {
     data class ChatConversationsResponse(val success: Boolean, val chats: List<Chat>)
     data class CommentsResponse(val success: Boolean, val comments: List<Comment>)
     data class SingleCommentResponse(val success: Boolean, val comment: Comment)
+    data class PollVoteResponse(val success: Boolean, val poll: Poll) // ✨ NEW: For poll vote response
 
 
     private fun getErrorMessage(responseBody: String?): String {
@@ -140,7 +141,7 @@ object ApiService {
     private fun getAuthToken(): String? = authToken
     fun getCurrentUserId(): String? = currentUserId
 
-    // ✨ --- THIS IS THE NEW FUNCTION: To fetch a user's profile and posts --- ✨
+    //  --- THIS IS THE NEW FUNCTION: To fetch a user's profile and posts ---
     suspend fun getUserProfile(userId: String): Result<UserProfileResponse> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {
@@ -251,15 +252,20 @@ object ApiService {
         }
     }
 
-    suspend fun createPost(content: String, type: String = "post", imageUrl: String? = null): Result<Post> {
+    suspend fun createPost(content: String, type: String = "post", imageUrl: String? = null, pollOptions: List<String>? = null): Result<Post> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
 
         return try {
-            val json = gson.toJson(mapOf(
+            val postData = mutableMapOf<String, Any?>(
                 "content" to content,
                 "type" to type,
                 "imageUrl" to imageUrl
-            ))
+            )
+            if (type == "poll" && pollOptions != null) {
+                postData["pollOptions"] = pollOptions
+            }
+
+            val json = gson.toJson(postData)
             val body = json.toRequestBody(JSON)
 
             val request = Request.Builder()
@@ -313,6 +319,30 @@ object ApiService {
             }
         } catch (e: Exception) {
             return Result.failure(e)
+        }
+    }
+
+    // ✨ NEW: Function to get trending posts ✨
+    suspend fun getTrendingPosts(): Result<List<Post>> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val request = Request.Builder()
+                .url("$BASE_URL/posts/trending")
+                .addHeader("Authorization", "Bearer $token")
+                .build()
+
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        throw ApiException("Failed to fetch trending posts (${response.code})")
+                    }
+                    val responseBody = response.body!!.string()
+                    val postResponse = gson.fromJson(responseBody, PostResponse::class.java)
+                    Result.success(postResponse.posts)
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 
@@ -380,6 +410,32 @@ object ApiService {
                 }
             }
             Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // ✨ NEW: Function to vote on a poll ✨
+    suspend fun voteOnPoll(postId: String, optionId: String): Result<Poll> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val json = gson.toJson(mapOf("optionId" to optionId))
+            val body = json.toRequestBody(JSON)
+            val request = Request.Builder()
+                .url("$BASE_URL/posts/$postId/vote")
+                .addHeader("Authorization", "Bearer $token")
+                .post(body)
+                .build()
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        throw ApiException("Failed to vote on poll")
+                    }
+                    val responseBody = response.body!!.string()
+                    val pollResponse = gson.fromJson(responseBody, PollVoteResponse::class.java)
+                    Result.success(pollResponse.poll)
+                }
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }

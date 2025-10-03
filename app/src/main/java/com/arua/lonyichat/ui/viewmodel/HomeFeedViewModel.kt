@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arua.lonyichat.data.ApiService
+import com.arua.lonyichat.data.Poll
 import com.arua.lonyichat.data.Post
 import com.arua.lonyichat.data.ReactionsWithUsers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,12 +19,13 @@ private const val TAG = "HomeFeedViewModel"
 
 data class HomeFeedUiState(
     val posts: List<Post> = emptyList(),
+    val trendingPosts: List<Post> = emptyList(), // ✨ ADDED: For the trending feed
     val isLoading: Boolean = false,
     val isUploading: Boolean = false,
     val error: String? = null
 )
 
-// ✨ NEW: State for the Reactor List Dialog ✨
+// State for the Reactor List Dialog
 data class ReactorUiState(
     val isLoading: Boolean = false,
     val reactors: ReactionsWithUsers = ReactionsWithUsers(),
@@ -34,19 +36,18 @@ class HomeFeedViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(HomeFeedUiState())
     val uiState: StateFlow<HomeFeedUiState> = _uiState
 
-    // ✨ NEW: Reactor Dialog State ✨
+    // Reactor Dialog State
     private val _reactorUiState = MutableStateFlow(ReactorUiState())
     val reactorUiState: StateFlow<ReactorUiState> = _reactorUiState.asStateFlow()
 
-    // ✨ 1. ADDED: A state to signal when a post is successfully created
     private val _postCreationSuccess = MutableStateFlow(false)
     val postCreationSuccess: StateFlow<Boolean> = _postCreationSuccess.asStateFlow()
 
     init {
         fetchPosts()
+        fetchTrendingPosts() // ✨ ADDED: Fetch trending posts on init
     }
 
-    // ✨ 2. ADDED: A function to reset the success signal
     fun postCreationSuccessShown() {
         _postCreationSuccess.value = false
     }
@@ -63,9 +64,22 @@ class HomeFeedViewModel : ViewModel() {
         }
     }
 
-    fun createPost(content: String, type: String) {
+    // ✨ NEW: Function to fetch trending posts ✨
+    fun fetchTrendingPosts() {
         viewModelScope.launch {
-            ApiService.createPost(content, type)
+            _uiState.update { it.copy(isLoading = true) }
+            ApiService.getTrendingPosts().onSuccess { posts ->
+                _uiState.update { it.copy(trendingPosts = posts, isLoading = false) }
+            }.onFailure { error ->
+                Log.e(TAG, "Error fetching trending posts: ${error.localizedMessage}", error)
+                // Don't show an error for trending posts, just fail silently
+            }
+        }
+    }
+
+    fun createPost(content: String, type: String, pollOptions: List<String>? = null) {
+        viewModelScope.launch {
+            ApiService.createPost(content, type, pollOptions = pollOptions)
                 .onSuccess { newPost ->
                     _uiState.update { currentState ->
                         currentState.copy(posts = listOf(newPost) + currentState.posts)
@@ -101,19 +115,13 @@ class HomeFeedViewModel : ViewModel() {
         }
     }
 
-    // ✨ UPDATED: Function to handle direct media (video/music) upload
     fun createMediaItem(title: String, mediaUri: Uri, activity: Activity) {
-        Log.d(TAG, "createMediaItem called for URI: $mediaUri") // ADDED LOG
+        Log.d(TAG, "createMediaItem called for URI: $mediaUri")
         viewModelScope.launch {
-            // Trim the title, if empty use a placeholder for safe API interaction
             val finalTitle = title.trim().ifBlank { "Untitled Media" }
-
             _uiState.update { it.copy(isUploading = true, error = null) }
-
-            // Pass the finalTitle as both title and description
             ApiService.uploadMedia(mediaUri, finalTitle, finalTitle, activity)
                 .onSuccess {
-                    // Screen does NOT close
                     _uiState.update { it.copy(isUploading = false) }
                 }
                 .onFailure { error ->
@@ -124,7 +132,7 @@ class HomeFeedViewModel : ViewModel() {
 
     private fun handleUploadFailure(error: Throwable) {
         val userErrorMessage = error.localizedMessage ?: "Unknown error"
-        Log.e(TAG, "Failed to create photo post or media: $userErrorMessage", error) // MODIFIED LOG
+        Log.e(TAG, "Failed to create photo post or media: $userErrorMessage", error)
         _uiState.update { it.copy(error = userErrorMessage, isUploading = false) }
     }
 
@@ -162,7 +170,6 @@ class HomeFeedViewModel : ViewModel() {
         }
     }
 
-    // ✨ NEW: Function to fetch reactors for the dialog ✨
     fun fetchReactors(postId: String) {
         viewModelScope.launch {
             _reactorUiState.update { ReactorUiState(isLoading = true) }
@@ -174,7 +181,6 @@ class HomeFeedViewModel : ViewModel() {
         }
     }
 
-    // ✨ NEW: Function to clear reactor state after dialog dismisses ✨
     fun clearReactorState() {
         _reactorUiState.value = ReactorUiState()
     }
@@ -190,36 +196,34 @@ class HomeFeedViewModel : ViewModel() {
                             "amen" -> post.userReactions.amen
                             "hallelujah" -> post.userReactions.hallelujah
                             "praiseGod" -> post.userReactions.praiseGod
+                            "praying" -> post.userReactions.praying
                             else -> false
                         }
 
-                        // 1. Calculate new reaction counts (always reset other two, then set the new/un-set the old)
                         val updatedReactions = post.reactions.copy(
                             amen = post.reactions.amen - if (post.userReactions.amen) 1 else 0,
                             hallelujah = post.reactions.hallelujah - if (post.userReactions.hallelujah) 1 else 0,
-                            praiseGod = post.reactions.praiseGod - if (post.userReactions.praiseGod) 1 else 0
+                            praiseGod = post.reactions.praiseGod - if (post.userReactions.praiseGod) 1 else 0,
+                            praying = post.reactions.praying - if (post.userReactions.praying) 1 else 0
                         )
 
                         val finalReactions = when {
-                            // If user clicks the SAME reaction, it's a removal (already removed in updatedReactions)
                             isSameReaction -> updatedReactions
-                            // If user clicks a NEW reaction, increment the new one
                             else -> updatedReactions.copy(
                                 amen = updatedReactions.amen + if (reactionType == "amen") 1 else 0,
                                 hallelujah = updatedReactions.hallelujah + if (reactionType == "hallelujah") 1 else 0,
-                                praiseGod = updatedReactions.praiseGod + if (reactionType == "praiseGod") 1 else 0
+                                praiseGod = updatedReactions.praiseGod + if (reactionType == "praiseGod") 1 else 0,
+                                praying = updatedReactions.praying + if (reactionType == "praying") 1 else 0
                             )
                         }
 
-                        // 2. Calculate new user reaction flags
                         val finalUserReactions = when {
-                            // If user clicks the SAME reaction, clear all flags (removal)
-                            isSameReaction -> post.userReactions.copy(amen = false, hallelujah = false, praiseGod = false)
-                            // If user clicks a NEW reaction, set only the new one to true
+                            isSameReaction -> post.userReactions.copy(amen = false, hallelujah = false, praiseGod = false, praying = false)
                             else -> post.userReactions.copy(
                                 amen = reactionType == "amen",
                                 hallelujah = reactionType == "hallelujah",
-                                praiseGod = reactionType == "praiseGod"
+                                praiseGod = reactionType == "praiseGod",
+                                praying = reactionType == "praying"
                             )
                         }
 
@@ -233,12 +237,29 @@ class HomeFeedViewModel : ViewModel() {
             }
 
             ApiService.reactToPost(postId, reactionType).onFailure { error ->
-                // If API fails, revert the optimistic update
                 _uiState.update { it.copy(posts = originalPosts) }
-                // Log the error to see what's going wrong
                 Log.e("HomeFeedViewModel", "Failed to react to post: ${error.localizedMessage}")
-                // Optional: Show an error to the user
                 _uiState.update { it.copy(error = "Failed to save reaction. Please try again.") }
+            }
+        }
+    }
+
+    // ✨ NEW: Function to vote on a poll ✨
+    fun voteOnPoll(postId: String, optionId: String) {
+        viewModelScope.launch {
+            ApiService.voteOnPoll(postId, optionId).onSuccess { updatedPoll ->
+                _uiState.update { currentState ->
+                    val updatedPosts = currentState.posts.map { post ->
+                        if (post.id == postId) {
+                            post.copy(poll = updatedPoll)
+                        } else {
+                            post
+                        }
+                    }
+                    currentState.copy(posts = updatedPosts)
+                }
+            }.onFailure { error ->
+                _uiState.update { it.copy(error = "Failed to vote: ${error.localizedMessage}") }
             }
         }
     }

@@ -3,6 +3,17 @@ package com.arua.lonyichat.data
 import com.google.gson.annotations.SerializedName
 import java.util.Date
 
+// ✨ NEW: Data classes to represent a Poll ✨
+data class PollOption(
+    @SerializedName("_id") val id: String,
+    val option: String,
+    val votes: List<String>
+)
+
+data class Poll(
+    val options: List<PollOption>
+)
+
 // Represents the structure of a Post from your backend API
 data class Post(
     val id: String,
@@ -11,26 +22,29 @@ data class Post(
     val authorPhotoUrl: String?,
     val content: String,
     val imageUrl: String?,
-    val type: String, // 'post' or 'status'
+    val type: String, // 'post', 'status', 'poll', 'prayer'
     val reactions: Reactions,
-    val userReactions: UserReactions, // ✨ ADDED: To track if the current user has reacted
+    val userReactions: UserReactions,
     val commentCount: Int,
     val shareCount: Int,
-    @SerializedName("createdAt") val createdAt: Timestamp
+    @SerializedName("createdAt") val createdAt: Timestamp,
+    val poll: Poll? // ✨ ADDED: Poll data is now included
 )
 
 // Holds the counts of each reaction type
 data class Reactions(
     val amen: Int = 0,
     val hallelujah: Int = 0,
-    val praiseGod: Int = 0
+    val praiseGod: Int = 0,
+    val praying: Int = 0 // ✨ ADDED: For prayer requests
 )
 
-// ✨ ADDED: Holds the boolean state of the current user's reactions
+// Holds the boolean state of the current user's reactions
 data class UserReactions(
     val amen: Boolean = false,
     val hallelujah: Boolean = false,
-    val praiseGod: Boolean = false
+    val praiseGod: Boolean = false,
+    val praying: Boolean = false // ✨ ADDED: For prayer requests
 )
 
 data class Comment(
@@ -55,13 +69,13 @@ data class PostResponse(
     val posts: List<Post>
 )
 
-// ✨ ADDED: Wrapper for a single post response (for creating a new post)
+// Wrapper for a single post response (for creating a new post)
 data class SinglePostResponse(
     val success: Boolean,
     val post: Post
 )
 
-// ✨ NEW: Data models for fetching reactors list from the new API endpoint ✨
+// Data models for fetching reactors list from the new API endpoint
 data class Reactor(
     val userId: String,
     val name: String,
@@ -71,7 +85,8 @@ data class Reactor(
 data class ReactionsWithUsers(
     val amen: List<Reactor> = emptyList(),
     val hallelujah: List<Reactor> = emptyList(),
-    val praiseGod: List<Reactor> = emptyList()
+    val praiseGod: List<Reactor> = emptyList(),
+    val praying: List<Reactor> = emptyList() // ✨ ADDED: Praying reactors
 )
 
 data class ReactorsResponse(

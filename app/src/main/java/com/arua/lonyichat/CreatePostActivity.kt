@@ -3,7 +3,6 @@ package com.arua.lonyichat
 import android.app.Activity
 import android.net.Uri
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -18,8 +17,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Poll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -74,28 +75,26 @@ fun CreatePostScreen(
     onNavigateUp: () -> Unit
 ) {
     var postContent by remember { mutableStateOf("") }
-    // REVERTED: Now only handles the selected image URI
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+    var postType by remember { mutableStateOf("post") }
+    var pollOptions by remember { mutableStateOf(listOf("", "")) }
+
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current as Activity
 
-    // Launcher only for selecting an image (no video/audio logic)
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         selectedImageUri = uri
     }
 
-    // ✨ ADDED: Custom colors for a subtle border on a dark background, switching to OutlinedTextField
     val textFieldColors = OutlinedTextFieldDefaults.colors(
         focusedContainerColor = Color.Transparent,
         unfocusedContainerColor = Color.Transparent,
-        focusedBorderColor = MaterialTheme.colorScheme.primary, // Highlight border on focus
-        unfocusedBorderColor = Color.White.copy(alpha = 0.3f), // Subtle border when unfocused
-        disabledBorderColor = Color.White.copy(alpha = 0.3f)
+        focusedBorderColor = MaterialTheme.colorScheme.primary,
+        unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+        disabledBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
     )
-
-    // REMOVED: mediaPickerLauncher for video/audio is gone.
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -110,15 +109,24 @@ fun CreatePostScreen(
                 actions = {
                     Button(
                         onClick = {
-                            // SIMPLIFIED LOGIC: Only handles photo upload or text post
-                            if (selectedImageUri != null) {
-                                viewModel.createPhotoPost(postContent, selectedImageUri!!, context)
-                            } else {
-                                viewModel.createPost(postContent, "post")
+                            when (postType) {
+                                "poll" -> {
+                                    val validOptions = pollOptions.filter { it.isNotBlank() }
+                                    if (validOptions.size >= 2) {
+                                        viewModel.createPost(postContent, "poll", pollOptions = validOptions)
+                                    }
+                                }
+                                "prayer" -> viewModel.createPost(postContent, "prayer")
+                                else -> {
+                                    if (selectedImageUri != null) {
+                                        viewModel.createPhotoPost(postContent, selectedImageUri!!, context)
+                                    } else {
+                                        viewModel.createPost(postContent, "post")
+                                    }
+                                }
                             }
                         },
-                        // SIMPLIFIED ENABLEMENT: Only checks for text or selected image URI
-                        enabled = (postContent.isNotBlank() || selectedImageUri != null) && !uiState.isUploading
+                        enabled = (postContent.isNotBlank() || selectedImageUri != null || (postType == "poll" && pollOptions.filter { it.isNotBlank() }.size >= 2)) && !uiState.isUploading
                     ) {
                         if (uiState.isUploading) {
                             CircularProgressIndicator(
@@ -140,23 +148,40 @@ fun CreatePostScreen(
                         .navigationBarsPadding()
                         .imePadding()
                         .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    // Photo Icon (Original functionality)
                     IconButton(onClick = {
-                        selectedImageUri = null // Clear old selection if any
+                        selectedImageUri = null
+                        postType = "post"
                         imagePickerLauncher.launch("image/*")
                     }) {
                         Icon(
                             Icons.Default.PhotoLibrary,
                             contentDescription = "Add Photo",
-                            tint = MaterialTheme.colorScheme.primary
+                            tint = if (postType == "post" && selectedImageUri != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                         )
                     }
-
-                    // REMOVED: Video Icon is gone.
-
-                    // REMOVED: Music Icon is gone.
+                    IconButton(onClick = {
+                        postType = if (postType == "poll") "post" else "poll"
+                        selectedImageUri = null
+                    }) {
+                        Icon(
+                            Icons.Default.Poll,
+                            contentDescription = "Create Poll",
+                            tint = if (postType == "poll") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                    }
+                    IconButton(onClick = {
+                        postType = if (postType == "prayer") "post" else "prayer"
+                        selectedImageUri = null
+                    }) {
+                        Icon(
+                            painterResource(id = R.drawable.ic_prayer),
+                            contentDescription = "Prayer Request",
+                            tint = if (postType == "prayer") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                    }
                 }
             }
         }
@@ -186,19 +211,16 @@ fun CreatePostScreen(
                 )
             }
             Spacer(modifier = Modifier.height(16.dp))
-            // ✨ MODIFIED: Changed TextField to OutlinedTextField and applied custom colors
             OutlinedTextField(
                 value = postContent,
                 onValueChange = { postContent = it },
                 modifier = Modifier
                     .fillMaxWidth()
                     .defaultMinSize(minHeight = 150.dp),
-                // Reverting hint to simple prompt
-                placeholder = { Text("What is on your heart?") },
-                colors = textFieldColors // ✨ APPLIED: Custom colors for subtle border
+                placeholder = { Text(if (postType == "poll") "Ask a question..." else if (postType == "prayer") "What's your prayer request?" else "What is on your heart?") },
+                colors = textFieldColors
             )
 
-            // SIMPLIFIED PREVIEW LOGIC: Only shows image preview
             if (selectedImageUri != null) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Box(contentAlignment = Alignment.TopEnd) {
@@ -218,6 +240,27 @@ fun CreatePostScreen(
                             modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), CircleShape)
                         )
                     }
+                }
+            }
+
+            if (postType == "poll") {
+                Spacer(modifier = Modifier.height(16.dp))
+                pollOptions.forEachIndexed { index, option ->
+                    OutlinedTextField(
+                        value = option,
+                        onValueChange = {
+                            val newOptions = pollOptions.toMutableList()
+                            newOptions[index] = it
+                            pollOptions = newOptions
+                        },
+                        label = { Text("Option ${index + 1}") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                TextButton(onClick = { pollOptions = pollOptions + "" }) {
+                    Icon(Icons.Default.Add, contentDescription = "Add Option")
+                    Text("Add Option")
                 }
             }
         }

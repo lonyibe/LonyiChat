@@ -41,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -89,11 +90,12 @@ data class UserProfileState(
 )
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
-    data object Home : Screen("home", "Feed", Icons.Filled.Home)
-    data object Groups : Screen("groups", "Churches", Icons.Filled.Group)
-    data object Bible : Screen("bible", "Bible", Icons.Filled.Book)
-    data object Chat : Screen("chat", "Chat", Icons.Filled.Message)
-    data object Media : Screen("media", "Media", Icons.Filled.LiveTv)
+    object Home : Screen("home", "Feed", Icons.Filled.Home)
+    object Trending : Screen("trending", "Trending", Icons.Filled.Whatshot)
+    object Groups : Screen("groups", "Churches", Icons.Filled.Group)
+    object Bible : Screen("bible", "Bible", Icons.Filled.Book)
+    object Chat : Screen("chat", "Chat", Icons.Filled.Message)
+    object Media : Screen("media", "Media", Icons.Filled.LiveTv)
 }
 
 class MainActivity : ComponentActivity() {
@@ -126,8 +128,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // ✨ THIS IS THE FIX: Refresh the current user's profile every time the MainActivity is resumed.
-    // This ensures the profile picture in the "What's on your heart?" bar is always up-to-date.
     override fun onResume() {
         super.onResume()
         ApiService.getCurrentUserId()?.let {
@@ -156,7 +156,7 @@ fun LonyiChatApp(
 
     var selectedItem: Screen by remember { mutableStateOf(Screen.Home) }
 
-    val bottomBarItems = listOf(Screen.Home, Screen.Groups, Screen.Bible, Screen.Chat, Screen.Media)
+    val bottomBarItems = listOf(Screen.Home, Screen.Trending, Screen.Groups, Screen.Bible, Screen.Chat, Screen.Media)
 
     val context = LocalContext.current
 
@@ -215,7 +215,6 @@ fun LonyiChatApp(
     }
 }
 
-// No changes are needed below this line
 @Composable
 fun LonyiChatTopBar(
     title: String,
@@ -295,6 +294,7 @@ fun ScreenContent(
 ) {
     when (screen) {
         Screen.Home -> HomeFeedScreen(profileState, homeFeedViewModel)
+        Screen.Trending -> TrendingFeedScreen(homeFeedViewModel)
         Screen.Groups -> GroupsChurchScreen(churchesViewModel)
         Screen.Bible -> BibleStudyScreen(bibleViewModel)
         Screen.Chat -> ChatScreen(chatListViewModel)
@@ -309,7 +309,6 @@ fun HomeFeedScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
     val createPostLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -319,7 +318,7 @@ fun HomeFeedScreen(
     }
     val reactorUiState by viewModel.reactorUiState.collectAsState()
 
-    if (reactorUiState.isLoading || reactorUiState.reactors.amen.isNotEmpty() || reactorUiState.reactors.hallelujah.isNotEmpty() || reactorUiState.reactors.praiseGod.isNotEmpty()) {
+    if (reactorUiState.isLoading || reactorUiState.reactors.amen.isNotEmpty() || reactorUiState.reactors.hallelujah.isNotEmpty() || reactorUiState.reactors.praiseGod.isNotEmpty() || reactorUiState.reactors.praying.isNotEmpty()) {
         ReactorListDialog(
             uiState = reactorUiState,
             onDismiss = { viewModel.clearReactorState() }
@@ -334,25 +333,12 @@ fun HomeFeedScreen(
     val lazyListState = rememberLazyListState()
     LaunchedEffect(uiState.posts.firstOrNull()?.id) {
         if (uiState.posts.isNotEmpty()) {
-            coroutineScope.launch {
-                lazyListState.animateScrollToItem(0)
-            }
+            lazyListState.animateScrollToItem(0)
         }
     }
 
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = uiState.isLoading)
-    val onRefresh = {
-        coroutineScope.launch {
-            val startTime = System.currentTimeMillis()
-            viewModel.fetchPosts()
-            val endTime = System.currentTimeMillis()
-            val duration = endTime - startTime
-            if (duration < MIN_REFRESH_DURATION) {
-                delay(MIN_REFRESH_DURATION - duration)
-            }
-        }
-        Unit
-    }
+    val onRefresh = { viewModel.fetchPosts() }
 
     var openReactionPostId by remember { mutableStateOf<String?>(null) }
 
@@ -410,6 +396,43 @@ fun HomeFeedScreen(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun TrendingFeedScreen(viewModel: HomeFeedViewModel) {
+    val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = uiState.isLoading)
+    val onRefresh = { viewModel.fetchTrendingPosts() }
+
+    SwipeRefresh(state = swipeRefreshState, onRefresh = onRefresh) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(uiState.trendingPosts, key = { it.id }) { post ->
+                PostCard(
+                    post = post,
+                    viewModel = viewModel,
+                    onCommentClicked = {
+                        val intent = Intent(context, CommentsActivity::class.java)
+                        intent.putExtra("POST_ID", post.id)
+                        context.startActivity(intent)
+                    },
+                    showReactionSelector = false,
+                    onSelectorOpen = {},
+                    onSelectorDismiss = {},
+                    onProfileClicked = { authorId ->
+                        val intent = Intent(context, ProfileActivity::class.java).apply {
+                            putExtra("USER_ID", authorId)
+                        }
+                        context.startActivity(intent)
+                    }
+                )
             }
         }
     }
@@ -593,6 +616,16 @@ fun PostCard(
                         contentScale = ContentScale.Crop
                     )
                 }
+
+                if (post.type == "poll" && post.poll != null) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    PollView(
+                        poll = post.poll,
+                        onVote = { optionId ->
+                            viewModel.voteOnPoll(post.id, optionId)
+                        }
+                    )
+                }
             }
 
             PostReactionSummary(
@@ -630,6 +663,54 @@ fun PostCard(
                             }
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PollView(poll: Poll, onVote: (String) -> Unit) {
+    val totalVotes = poll.options.sumOf { it.votes.size }
+    val currentUser = ApiService.getCurrentUserId()
+    val userVote = poll.options.find { it.votes.contains(currentUser) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        poll.options.forEach { option ->
+            val voteCount = option.votes.size
+            val percentage = if (totalVotes > 0) (voteCount.toFloat() / totalVotes) else 0f
+            val isSelected = option.id == userVote?.id
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable { onVote(option.id) }
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(percentage)
+                        .height(40.dp)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = option.option,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "$voteCount votes",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
                 }
             }
         }
@@ -736,6 +817,27 @@ fun FullScreenImageDialog(
 }
 
 @Composable
+fun InteractionButton(painter: Painter, text: String, onClick: () -> Unit, modifier: Modifier = Modifier, contentColor: Color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp, horizontal = 16.dp),
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Icon(painter, contentDescription = text, tint = contentColor)
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text,
+            color = contentColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
 fun InteractionButton(icon: ImageVector, text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -758,7 +860,7 @@ fun InteractionButton(icon: ImageVector, text: String, onClick: () -> Unit, modi
 
 @Composable
 fun PostReactionSummary(post: com.arua.lonyichat.data.Post, onSummaryClicked: () -> Unit) {
-    val totalReactions = post.reactions.amen + post.reactions.hallelujah + post.reactions.praiseGod
+    val totalReactions = post.reactions.amen + post.reactions.hallelujah + post.reactions.praiseGod + post.reactions.praying
 
     Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f), thickness = 1.dp)
 
@@ -772,6 +874,10 @@ fun PostReactionSummary(post: com.arua.lonyichat.data.Post, onSummaryClicked: ()
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (post.reactions.praying > 0) {
+                    Icon(painterResource(id = R.drawable.ic_prayer), contentDescription = "Praying", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                }
                 if (post.reactions.amen > 0) {
                     Text("🙏", fontSize = 16.sp)
                     Spacer(Modifier.width(4.dp))
@@ -838,22 +944,36 @@ fun PostInteractionBar(
         horizontalArrangement = Arrangement.SpaceAround,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .weight(1f)
-                .combinedClickable(
-                    onClick = {
-                        viewModel.reactToPost(post.id, reactionTypeForShortClick)
-                    },
-                    onLongClick = onLikeLongPressed
-                )
-                .padding(vertical = 8.dp, horizontal = 16.dp),
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Icon(icon, contentDescription = text, tint = contentColor)
-            Spacer(Modifier.width(8.dp))
-            Text(text, color = contentColor, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
+        if (post.type == "prayer") {
+            val prayingColor by animateColorAsState(
+                targetValue = if (post.userReactions.praying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                label = "prayingColor"
+            )
+            InteractionButton(
+                painter = painterResource(id = R.drawable.ic_prayer),
+                text = if (post.userReactions.praying) "Praying" else "Pray",
+                onClick = { viewModel.reactToPost(post.id, "praying") },
+                modifier = Modifier.weight(1f),
+                contentColor = prayingColor
+            )
+        } else {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .weight(1f)
+                    .combinedClickable(
+                        onClick = {
+                            viewModel.reactToPost(post.id, reactionTypeForShortClick)
+                        },
+                        onLongClick = onLikeLongPressed
+                    )
+                    .padding(vertical = 8.dp, horizontal = 16.dp),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(icon, contentDescription = text, tint = contentColor)
+                Spacer(Modifier.width(8.dp))
+                Text(text, color = contentColor, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
+            }
         }
 
         InteractionButton(
@@ -976,8 +1096,9 @@ fun ReactorListDialog(
             val amenReactors = uiState.reactors.amen
             val hallelujahReactors = uiState.reactors.hallelujah
             val praiseGodReactors = uiState.reactors.praiseGod
+            val prayingReactors = uiState.reactors.praying
 
-            val allReactors = (amenReactors + hallelujahReactors + praiseGodReactors)
+            val allReactors = (amenReactors + hallelujahReactors + praiseGodReactors + prayingReactors)
                 .distinctBy { it.userId }
                 .toMutableList()
 
@@ -987,7 +1108,8 @@ fun ReactorListDialog(
                     Triple("All", allReactors.size, null),
                     Triple("Amen", amenReactors.size, "🙏"),
                     Triple("Hallelujah", hallelujahReactors.size, "🥳"),
-                    Triple("Praise God", praiseGodReactors.size, "🙌")
+                    Triple("Praise God", praiseGodReactors.size, "🙌"),
+                    Triple("Praying", prayingReactors.size, "🛐")
                 )
 
                 ScrollableTabRow(
@@ -1015,6 +1137,7 @@ fun ReactorListDialog(
                     1 -> amenReactors
                     2 -> hallelujahReactors
                     3 -> praiseGodReactors
+                    4 -> prayingReactors
                     else -> allReactors
                 }
 
@@ -1078,22 +1201,7 @@ fun ReactorItem(reactor: Reactor) {
 @Composable
 fun GroupsChurchScreen(viewModel: ChurchesViewModel) {
     val uiState by viewModel.uiState.collectAsState()
-    val coroutineScope = rememberCoroutineScope()
-
-    val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = uiState.isLoading)
-
-    val onRefresh = {
-        coroutineScope.launch {
-            val startTime = System.currentTimeMillis()
-            viewModel.fetchChurches()
-            val endTime = System.currentTimeMillis()
-            val duration = endTime - startTime
-            if (duration < MIN_REFRESH_DURATION) {
-                delay(MIN_REFRESH_DURATION - duration)
-            }
-        }
-        Unit
-    }
+    val onRefresh = { viewModel.fetchChurches() }
 
     Column(
         modifier = Modifier
@@ -1120,7 +1228,7 @@ fun GroupsChurchScreen(viewModel: ChurchesViewModel) {
             }
             else -> {
                 SwipeRefresh(
-                    state = swipeRefreshState,
+                    state = rememberSwipeRefreshState(isRefreshing = uiState.isLoading),
                     onRefresh = onRefresh,
                     modifier = Modifier.fillMaxSize()
                 ) {
@@ -1180,22 +1288,7 @@ fun ChurchCard(church: Church, onFollowClicked: () -> Unit) {
 fun ChatScreen(viewModel: ChatListViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     val currentUserId = ApiService.getCurrentUserId()
-    val coroutineScope = rememberCoroutineScope()
-
-    val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = uiState.isLoading)
-
-    val onRefresh = {
-        coroutineScope.launch {
-            val startTime = System.currentTimeMillis()
-            viewModel.fetchConversations()
-            val endTime = System.currentTimeMillis()
-            val duration = endTime - startTime
-            if (duration < MIN_REFRESH_DURATION) {
-                delay(MIN_REFRESH_DURATION - duration)
-            }
-        }
-        Unit
-    }
+    val onRefresh = { viewModel.fetchConversations() }
 
     Column(
         modifier = Modifier
@@ -1252,7 +1345,7 @@ fun ChatScreen(viewModel: ChatListViewModel) {
             }
             else -> {
                 SwipeRefresh(
-                    state = swipeRefreshState,
+                    state = rememberSwipeRefreshState(isRefreshing = uiState.isLoading),
                     onRefresh = onRefresh,
                     modifier = Modifier.fillMaxSize()
                 ) {
@@ -1416,22 +1509,7 @@ fun BibleStudyScreen(viewModel: BibleViewModel) {
 @Composable
 fun MediaScreen(viewModel: MediaViewModel) {
     val uiState by viewModel.uiState.collectAsState()
-    val coroutineScope = rememberCoroutineScope()
-
-    val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = uiState.isLoading)
-
-    val onRefresh = {
-        coroutineScope.launch {
-            val startTime = System.currentTimeMillis()
-            viewModel.fetchMedia()
-            val endTime = System.currentTimeMillis()
-            val duration = endTime - startTime
-            if (duration < MIN_REFRESH_DURATION) {
-                delay(MIN_REFRESH_DURATION - duration)
-            }
-        }
-        Unit
-    }
+    val onRefresh = { viewModel.fetchMedia() }
 
     Column(
         modifier = Modifier
@@ -1458,7 +1536,7 @@ fun MediaScreen(viewModel: MediaViewModel) {
             }
             else -> {
                 SwipeRefresh(
-                    state = swipeRefreshState,
+                    state = rememberSwipeRefreshState(isRefreshing = uiState.isLoading),
                     onRefresh = onRefresh,
                     modifier = Modifier.fillMaxSize()
                 ) {
