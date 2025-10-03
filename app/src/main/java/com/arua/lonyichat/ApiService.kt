@@ -830,15 +830,17 @@ object ApiService {
     }
 
     // =========================================================================================
-    // ✨ NEW CHAT API METHODS (for Message Interactions) ✨
+    // ✨ UPDATED CHAT API METHODS (for Message Interactions) ✨
     // =========================================================================================
 
-    // ✨ NEW: Delete a message in a church
+    /**
+     * Deletes a message using a simplified global endpoint based on message ID.
+     */
     suspend fun deleteChurchMessage(churchId: String, messageId: String): Result<Unit> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {
             val request = Request.Builder()
-                .url("$BASE_URL/churches/$churchId/messages/$messageId")
+                .url("$BASE_URL/messages/$messageId") // ✨ FIX: Simplified URL path for delete
                 .addHeader("Authorization", "Bearer $token")
                 .delete()
                 .build()
@@ -847,7 +849,7 @@ object ApiService {
                 client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) {
                         val errorBody = response.body?.string()
-                        throw ApiException("Failed to delete message: ${getErrorMessage(errorBody)}")
+                        throw ApiException("Failed to delete message (${response.code}): ${getErrorMessage(errorBody)}")
                     }
                     Result.success(Unit)
                 }
@@ -857,7 +859,9 @@ object ApiService {
         }
     }
 
-    // ✨ NEW: React to a message in a church
+    /**
+     * Reacts to a message using a simplified global endpoint based on message ID.
+     */
     suspend fun reactToChurchMessage(churchId: String, messageId: String, reactionEmoji: String): Result<ChurchMessage> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {
@@ -865,7 +869,7 @@ object ApiService {
             val body = json.toRequestBody(JSON)
 
             val request = Request.Builder()
-                .url("$BASE_URL/churches/$churchId/messages/$messageId/react")
+                .url("$BASE_URL/messages/$messageId/react") // ✨ FIX: Simplified URL path for react
                 .addHeader("Authorization", "Bearer $token")
                 .post(body)
                 .build()
@@ -874,7 +878,8 @@ object ApiService {
                 client.newCall(request).execute().use { response ->
                     val responseBody = response.body?.string()
                     if (!response.isSuccessful) {
-                        throw ApiException("Failed to react to message: ${getErrorMessage(responseBody)}")
+                        // FIX: Explicitly include HTTP status code and try to parse the error body
+                        throw ApiException("Failed to react to message (${response.code}): ${getErrorMessage(responseBody)}")
                     }
                     val reactionResponse = gson.fromJson(responseBody, ChurchMessageReactionResponse::class.java)
                     Result.success(reactionResponse.message)
