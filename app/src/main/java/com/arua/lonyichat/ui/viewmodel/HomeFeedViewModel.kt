@@ -66,8 +66,9 @@ class HomeFeedViewModel : ViewModel() {
 
     // REMOVED: fun fetchTrendingPosts() was here
 
-    fun createPost(content: String, type: String, pollOptions: List<String>? = null) {
-        if (content.isBlank() && type != "poll") {
+    // ✨ FIX: Updated signature to include imageUrl and updated API call
+    fun createPost(content: String, type: String, imageUrl: String? = null, pollOptions: List<String>? = null) {
+        if (content.isBlank() && imageUrl == null && type != "poll") { // Added imageUrl check
             _uiState.update { it.copy(error = "Post cannot be empty.") }
             return
         }
@@ -75,7 +76,8 @@ class HomeFeedViewModel : ViewModel() {
         viewModelScope.launch {
             _uiState.update { it.copy(isUploading = true, error = null) }
 
-            ApiService.createPost(content, type, pollOptions = pollOptions)
+            // FIX: Pass imageUrl to the API call
+            ApiService.createPost(content, type, imageUrl = imageUrl, pollOptions = pollOptions)
                 .onSuccess { newPost ->
                     _uiState.update { currentState ->
                         currentState.copy(
@@ -97,7 +99,8 @@ class HomeFeedViewModel : ViewModel() {
 
             ApiService.uploadPostPhoto(imageUri, activity)
                 .onSuccess { imageUrl ->
-                    createPost(caption, "post", imageUrl)
+                    // FIX: This call now correctly maps imageUrl to the updated createPost signature
+                    createPost(caption, "post", imageUrl = imageUrl)
                 }
                 .onFailure { error ->
                     handleUploadFailure(error)

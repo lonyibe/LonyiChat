@@ -38,6 +38,7 @@ import com.arua.lonyichat.ui.viewmodel.EventViewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.foundation.background // ✨ FIX: Added missing import for 'background'
 
 class CreateEventActivity : ComponentActivity() {
 
@@ -133,7 +134,7 @@ fun CreateEventScreen(
                     .height(200.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .clickable { imagePickerLauncher.launch("image/*") }
-                    .then(if (selectedImageUri == null) Modifier.background(MaterialTheme.colorScheme.surfaceVariant) else Modifier),
+                    .background(if (selectedImageUri == null) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent), // ✨ FIXED: Corrected background usage
                 contentAlignment = Alignment.Center
             ) {
                 if (selectedImageUri != null) {

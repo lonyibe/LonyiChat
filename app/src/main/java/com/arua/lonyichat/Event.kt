@@ -3,6 +3,7 @@ package com.arua.lonyichat.data
 import android.os.Parcelable
 import com.google.gson.annotations.SerializedName
 import kotlinx.parcelize.Parcelize
+import kotlinx.parcelize.RawValue // ✨ FIX: ADDED for Timestamp serialization
 
 @Parcelize
 data class Event(
@@ -10,7 +11,7 @@ data class Event(
     val title: String,
     val description: String,
     val imageUrl: String? = null,
-    val date: Timestamp, // Event date/time
+    @RawValue val date: Timestamp, // ✨ FIX: Annotated with @RawValue
     val location: String,
     val createdBy: String,
     val authorName: String,
