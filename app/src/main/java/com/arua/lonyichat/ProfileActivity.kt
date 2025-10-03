@@ -2,10 +2,13 @@ package com.arua.lonyichat
 
 import android.app.Activity
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -19,6 +22,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,7 +33,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.arua.lonyichat.data.ApiService
@@ -42,7 +45,6 @@ import com.arua.lonyichat.ui.viewmodel.ProfileViewModel
 class ProfileActivity : ComponentActivity() {
 
     private val profileViewModel: ProfileViewModel by viewModels()
-    // We need HomeFeedViewModel for PostCard interactions
     private val homeFeedViewModel: HomeFeedViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -78,6 +80,7 @@ class ProfileActivity : ComponentActivity() {
                                 profile = uiState.profile!!,
                                 posts = uiState.posts,
                                 homeFeedViewModel = homeFeedViewModel,
+                                profileViewModel = profileViewModel,
                                 onNavigateUp = { finish() }
                             )
                         }
@@ -94,11 +97,41 @@ fun UserProfileScreen(
     profile: Profile,
     posts: List<Post>,
     homeFeedViewModel: HomeFeedViewModel,
+    profileViewModel: ProfileViewModel,
     onNavigateUp: () -> Unit
 ) {
     var selectedTabIndex by remember { mutableStateOf(0) }
     val tabs = listOf("Posts", "Photos")
     val context = LocalContext.current
+    val activity = context as Activity
+
+    var showEditDialog by remember { mutableStateOf(false) }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri: Uri? ->
+            if (uri != null) {
+                profileViewModel.updateProfilePhoto(uri, activity, onSuccess = {
+                    // Refresh the profile to show the new picture
+                    profileViewModel.fetchProfile(profile.userId)
+                })
+                Toast.makeText(context, "Uploading photo...", Toast.LENGTH_SHORT).show()
+            }
+        }
+    )
+
+    if (showEditDialog) {
+        EditProfileDialog(
+            profile = profile,
+            onDismiss = { showEditDialog = false },
+            onSave = { name, phone, age, country ->
+                profileViewModel.updateProfile(name, phone, age, country, onSuccess = {
+                    profileViewModel.fetchProfile(profile.userId) // Refresh profile after edit
+                })
+                showEditDialog = false
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -118,7 +151,22 @@ fun UserProfileScreen(
                 .fillMaxSize()
         ) {
             item {
-                ProfileHeader(profile = profile)
+                ProfileHeader(
+                    profile = profile,
+                    onEditProfile = { showEditDialog = true },
+                    onLogout = {
+                        ApiService.logout()
+                        val intent = Intent(context, LoginActivity::class.java)
+                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        context.startActivity(intent)
+                        activity.finishAffinity()
+                    },
+                    onProfilePicClick = {
+                        if (profile.userId == ApiService.getCurrentUserId()) {
+                            imagePickerLauncher.launch("image/*")
+                        }
+                    }
+                )
             }
 
             stickyHeader {
@@ -181,7 +229,7 @@ fun UserProfileScreen(
                         item {
                             LazyVerticalGrid(
                                 columns = GridCells.Fixed(3),
-                                modifier = Modifier.heightIn(max = 1000.dp), // Avoid nested scroll issues
+                                modifier = Modifier.heightIn(max = 1000.dp),
                                 contentPadding = PaddingValues(2.dp),
                                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                                 verticalArrangement = Arrangement.spacedBy(2.dp)
@@ -206,7 +254,12 @@ fun UserProfileScreen(
 }
 
 @Composable
-fun ProfileHeader(profile: Profile) {
+fun ProfileHeader(
+    profile: Profile,
+    onEditProfile: () -> Unit,
+    onLogout: () -> Unit,
+    onProfilePicClick: () -> Unit
+) {
     val currentUserId = ApiService.getCurrentUserId()
     val isCurrentUser = profile.userId == currentUserId
 
@@ -216,20 +269,38 @@ fun ProfileHeader(profile: Profile) {
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current)
-                .data(profile.photoUrl)
-                .crossfade(true)
-                .placeholder(R.drawable.ic_person_placeholder)
-                .error(R.drawable.ic_person_placeholder)
-                .build(),
-            contentDescription = "Profile Photo",
-            modifier = Modifier
-                .size(100.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentScale = ContentScale.Crop
-        )
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.clickable(enabled = isCurrentUser, onClick = onProfilePicClick)
+        ) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(profile.photoUrl)
+                    .crossfade(true)
+                    .placeholder(R.drawable.ic_person_placeholder)
+                    .error(R.drawable.ic_person_placeholder)
+                    .build(),
+                contentDescription = "Profile Photo",
+                modifier = Modifier
+                    .size(100.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentScale = ContentScale.Crop
+            )
+            if (isCurrentUser) {
+                Icon(
+                    imageVector = Icons.Default.AddAPhoto,
+                    contentDescription = "Change Photo",
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                        .padding(4.dp),
+                    tint = MaterialTheme.colorScheme.onPrimary
+                )
+            }
+        }
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
@@ -256,17 +327,15 @@ fun ProfileHeader(profile: Profile) {
         Spacer(modifier = Modifier.height(32.dp))
 
         if (isCurrentUser) {
-            // Show Edit Profile and Logout buttons for the current user
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { /* TODO: Implement edit profile dialog */ }) {
+                Button(onClick = onEditProfile) {
                     Text("Edit Profile")
                 }
-                Button(onClick = { /* TODO: Implement logout */ }) {
+                Button(onClick = onLogout) {
                     Text("Logout")
                 }
             }
         } else {
-            // Show Follow/Message buttons for other users
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { /* TODO: Implement follow logic */ }) {
                     Text("Follow")
@@ -293,4 +362,74 @@ fun ProfileStat(count: Int, label: String) {
             color = Color.Gray
         )
     }
+}
+
+// ✨ ADDED: Reusable EditProfileDialog from MainActivity
+@Composable
+fun EditProfileDialog(
+    profile: Profile?,
+    onDismiss: () -> Unit,
+    onSave: (name: String, phone: String, age: String, country: String) -> Unit
+) {
+    if (profile == null) {
+        onDismiss()
+        return
+    }
+
+    var name by remember { mutableStateOf(profile.name) }
+    var phone by remember { mutableStateOf(profile.phone ?: "") }
+    var age by remember { mutableStateOf(profile.age?.toString() ?: "") }
+    var country by remember { mutableStateOf(profile.country ?: "") }
+
+    val isSaveEnabled = name.isNotBlank()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Your Profile") },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Name") },
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = phone,
+                    onValueChange = { phone = it },
+                    label = { Text("Phone Number") },
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = age,
+                    onValueChange = { age = it.filter { it.isDigit() } },
+                    label = { Text("Age") },
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = country,
+                    onValueChange = { country = it },
+                    label = { Text("Country") },
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    singleLine = true
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSave(name, phone, age, country) },
+                enabled = isSaveEnabled
+            ) {
+                Text("Save Changes")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }

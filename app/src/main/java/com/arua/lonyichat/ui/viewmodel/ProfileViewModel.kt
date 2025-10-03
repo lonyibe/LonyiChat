@@ -17,7 +17,7 @@ private const val TAG = "ProfileViewModel"
 
 data class ProfileUiState(
     val profile: Profile? = null,
-    val posts: List<Post> = emptyList(), // ✨ ADDED: To hold the user's posts
+    val posts: List<Post> = emptyList(),
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
     val error: String? = null
@@ -27,7 +27,20 @@ class ProfileViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(ProfileUiState())
     val uiState: StateFlow<ProfileUiState> = _uiState
 
-    // ✨ MODIFIED: Now takes a userId to fetch a specific profile
+    // ✨ THIS IS THE FIX: Added the init block back to fetch the current user's profile on launch ✨
+    init {
+        fetchCurrentUserProfile()
+    }
+
+    private fun fetchCurrentUserProfile() {
+        val currentUserId = ApiService.getCurrentUserId()
+        if (currentUserId != null) {
+            fetchProfile(currentUserId)
+        } else {
+            _uiState.update { it.copy(isLoading = false, error = "User not logged in.") }
+        }
+    }
+
     fun fetchProfile(userId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
