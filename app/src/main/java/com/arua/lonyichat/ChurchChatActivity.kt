@@ -100,7 +100,7 @@ fun ChurchChatScreen(
     val uiState by viewModel.uiState.collectAsState()
     var messageText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
-    val context = LocalContext.current as Activity
+    val context = LocalContext.current as ComponentActivity // ✨ FIX: Explicitly cast to ComponentActivity for lifecycleScope
     val currentUserId = ApiService.getCurrentUserId()
     val isCreator = church.createdBy == currentUserId
 
@@ -122,7 +122,7 @@ fun ChurchChatScreen(
                     currentChurch = currentChurch.copy(photoUrl = newPhotoUrl)
                     Toast.makeText(context, "Church photo updated!", Toast.LENGTH_SHORT).show()
                     // Signal main activity to refresh its Church list on resume
-                    (context as Activity).setResult(Activity.RESULT_OK)
+                    context.setResult(Activity.RESULT_OK) // ✨ FIX: Removed redundant cast
                 }.onFailure { error ->
                     Toast.makeText(context, "Upload failed: ${error.localizedMessage}", Toast.LENGTH_LONG).show()
                 }
