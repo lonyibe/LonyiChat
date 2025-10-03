@@ -102,8 +102,6 @@ class MainActivity : ComponentActivity() {
     private val chatListViewModel: ChatListViewModel by viewModels()
     private val bibleViewModel: BibleViewModel by viewModels()
     private val mediaViewModel: MediaViewModel by viewModels()
-
-    // ✨ THIS IS THE FIX: Initialize the ViewModel using the standard `by viewModels()` delegate.
     private val profileViewModel: ProfileViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -125,6 +123,15 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
+        }
+    }
+
+    // ✨ THIS IS THE FIX: Refresh the current user's profile every time the MainActivity is resumed.
+    // This ensures the profile picture in the "What's on your heart?" bar is always up-to-date.
+    override fun onResume() {
+        super.onResume()
+        ApiService.getCurrentUserId()?.let {
+            profileViewModel.fetchProfile(it)
         }
     }
 }
@@ -208,7 +215,7 @@ fun LonyiChatApp(
     }
 }
 
-// No changes are needed in the rest of the file.
+// No changes are needed below this line
 @Composable
 fun LonyiChatTopBar(
     title: String,
