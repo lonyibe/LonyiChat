@@ -11,8 +11,8 @@ data class Event(
     val title: String,
     val description: String,
     val imageUrl: String? = null,
-    // CRITICAL FIX: Ensure the correct use-site target is explicitly set for the property backing field.
-    @field:RawValue val date: Timestamp,
+    // FIX: Removed the incorrect @field:RawValue annotation and applied @RawValue directly to the type.
+    val date: @RawValue Timestamp,
     val location: String,
     val createdBy: String,
     val authorName: String,
