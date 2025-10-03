@@ -87,7 +87,6 @@ class ProfileViewModel : ViewModel() {
         }
     }
 
-    // ✨ THIS IS THE FIX: Optimistically updates the UI before calling the full updateProfile ✨
     fun updateProfilePhoto(
         uri: Uri,
         context: Activity,
@@ -103,19 +102,21 @@ class ProfileViewModel : ViewModel() {
         viewModelScope.launch {
             ApiService.uploadProfilePhoto(uri, context)
                 .onSuccess { newPhotoUrl ->
-                    Log.d(TAG, "Backend upload successful. Updating UI optimistically.")
+                    // ✨ THIS IS THE FIX: Append a timestamp to the URL to bust the cache ✨
+                    val cacheBustedUrl = "$newPhotoUrl?t=${System.currentTimeMillis()}"
+                    Log.d(TAG, "Cache-busted URL: $cacheBustedUrl")
 
-                    // 1. Optimistic UI Update: Update the state immediately
-                    val optimisticallyUpdatedProfile = currentProfile.copy(photoUrl = newPhotoUrl)
-                    _uiState.update { it.copy(profile = optimisticallyUpdatedProfile, isSaving = false) }
+                    val optimisticallyUpdatedProfile = currentProfile.copy(photoUrl = cacheBustedUrl)
+                    _uiState.update {
+                        it.copy(profile = optimisticallyUpdatedProfile, isSaving = false)
+                    }
 
-                    // 2. Persist the change to the backend in the background
                     updateProfile(
                         name = currentProfile.name,
                         phone = currentProfile.phone ?: "",
                         age = currentProfile.age?.toString() ?: "",
                         country = currentProfile.country ?: "",
-                        photoUrl = newPhotoUrl,
+                        photoUrl = cacheBustedUrl, // Persist the cache-busted URL
                         onSuccess = onSuccess
                     )
                 }

@@ -59,6 +59,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Popup
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.ViewModelProvider
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.arua.lonyichat.data.*
@@ -102,7 +103,10 @@ class MainActivity : ComponentActivity() {
     private val chatListViewModel: ChatListViewModel by viewModels()
     private val bibleViewModel: BibleViewModel by viewModels()
     private val mediaViewModel: MediaViewModel by viewModels()
-    private val profileViewModel: ProfileViewModel by viewModels()
+
+    private val profileViewModel: ProfileViewModel by lazy {
+        ViewModelProvider(this, LonyiChatApp.getViewModelFactory(application)).get(ProfileViewModel::class.java)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()

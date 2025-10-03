@@ -35,6 +35,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModelProvider
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.arua.lonyichat.data.ApiService
@@ -43,15 +44,20 @@ import com.arua.lonyichat.data.Profile
 import com.arua.lonyichat.ui.theme.LonyiChatTheme
 import com.arua.lonyichat.ui.viewmodel.HomeFeedViewModel
 import com.arua.lonyichat.ui.viewmodel.ProfileViewModel
+import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 
 class ProfileActivity : ComponentActivity() {
 
-    private val profileViewModel: ProfileViewModel by viewModels()
+    private val profileViewModel: ProfileViewModel by lazy {
+        ViewModelProvider(this, LonyiChatApp.getViewModelFactory(application)).get(ProfileViewModel::class.java)
+    }
     private val homeFeedViewModel: HomeFeedViewModel by viewModels()
+    private var userId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val userId = intent.getStringExtra("USER_ID")
+        userId = intent.getStringExtra("USER_ID")
 
         if (userId == null) {
             Toast.makeText(this, "User ID not found.", Toast.LENGTH_SHORT).show()
@@ -59,15 +65,13 @@ class ProfileActivity : ComponentActivity() {
             return
         }
 
-        profileViewModel.fetchProfile(userId)
-
         setContent {
             LonyiChatTheme {
                 val uiState by profileViewModel.uiState.collectAsState()
 
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     when {
-                        uiState.isLoading -> {
+                        uiState.isLoading && uiState.profile == null -> {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 CircularProgressIndicator()
                             }
@@ -83,12 +87,21 @@ class ProfileActivity : ComponentActivity() {
                                 posts = uiState.posts,
                                 homeFeedViewModel = homeFeedViewModel,
                                 profileViewModel = profileViewModel,
+                                isLoading = uiState.isLoading,
                                 onNavigateUp = { finish() }
                             )
                         }
                     }
                 }
             }
+        }
+    }
+
+    // ✨ THIS IS THE FIX: Refresh the profile every time the activity comes into view ✨
+    override fun onResume() {
+        super.onResume()
+        userId?.let {
+            profileViewModel.fetchProfile(it)
         }
     }
 }
@@ -100,6 +113,7 @@ fun UserProfileScreen(
     posts: List<Post>,
     homeFeedViewModel: HomeFeedViewModel,
     profileViewModel: ProfileViewModel,
+    isLoading: Boolean,
     onNavigateUp: () -> Unit
 ) {
     var selectedTabIndex by remember { mutableStateOf(0) }
@@ -127,7 +141,7 @@ fun UserProfileScreen(
             onDismiss = { showEditDialog = false },
             onSave = { name, phone, age, country ->
                 profileViewModel.updateProfile(name, phone, age, country, onSuccess = {
-                    profileViewModel.fetchProfile(profile.userId) // Refresh profile after edit
+                    profileViewModel.fetchProfile(profile.userId)
                 })
                 showEditDialog = false
             }
@@ -146,104 +160,106 @@ fun UserProfileScreen(
             )
         }
     ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize()
+        SwipeRefresh(
+            state = rememberSwipeRefreshState(isRefreshing = isLoading),
+            onRefresh = { profileViewModel.fetchProfile(profile.userId) },
+            modifier = Modifier.padding(innerPadding)
         ) {
-            item {
-                ProfileHeader(
-                    profile = profile,
-                    onEditProfile = { showEditDialog = true },
-                    onLogout = {
-                        ApiService.logout()
-                        val intent = Intent(context, LoginActivity::class.java)
-                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                        context.startActivity(intent)
-                        activity.finishAffinity()
-                    },
-                    onProfilePicClick = {
-                        if (profile.userId == ApiService.getCurrentUserId()) {
-                            imagePickerLauncher.launch("image/*")
-                        }
-                    }
-                )
-            }
-
-            stickyHeader {
-                TabRow(
-                    selectedTabIndex = selectedTabIndex,
-                    containerColor = MaterialTheme.colorScheme.surface
-                ) {
-                    tabs.forEachIndexed { index, title ->
-                        Tab(
-                            selected = selectedTabIndex == index,
-                            onClick = { selectedTabIndex = index },
-                            text = { Text(title) }
-                        )
-                    }
-                }
-            }
-
-            when (selectedTabIndex) {
-                0 -> { // Posts Tab
-                    if (posts.isEmpty()) {
-                        item {
-                            Box(modifier = Modifier.fillParentMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
-                                Text("No posts yet.")
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                item {
+                    ProfileHeader(
+                        profile = profile,
+                        onEditProfile = { showEditDialog = true },
+                        onLogout = {
+                            ApiService.logout()
+                            val intent = Intent(context, LoginActivity::class.java)
+                            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                            context.startActivity(intent)
+                            activity.finishAffinity()
+                        },
+                        onProfilePicClick = {
+                            if (profile.userId == ApiService.getCurrentUserId()) {
+                                imagePickerLauncher.launch("image/*")
                             }
                         }
-                    } else {
-                        items(posts, key = { it.id }) { post ->
-                            PostCard(
-                                post = post,
-                                viewModel = homeFeedViewModel,
-                                onCommentClicked = {
-                                    val intent = Intent(context, CommentsActivity::class.java)
-                                    intent.putExtra("POST_ID", post.id)
-                                    context.startActivity(intent)
-                                },
-                                showReactionSelector = false,
-                                onSelectorOpen = {},
-                                onSelectorDismiss = {},
-                                onProfileClicked = { authorId ->
-                                    if(authorId != profile.userId) {
-                                        val intent = Intent(context, ProfileActivity::class.java).apply {
-                                            putExtra("USER_ID", authorId)
-                                        }
-                                        context.startActivity(intent)
-                                    }
-                                }
+                    )
+                }
+
+                stickyHeader {
+                    TabRow(
+                        selectedTabIndex = selectedTabIndex,
+                        containerColor = MaterialTheme.colorScheme.surface
+                    ) {
+                        tabs.forEachIndexed { index, title ->
+                            Tab(
+                                selected = selectedTabIndex == index,
+                                onClick = { selectedTabIndex = index },
+                                text = { Text(title) }
                             )
                         }
                     }
                 }
-                1 -> { // Photos Tab
-                    val photoPosts = posts.filter { !it.imageUrl.isNullOrBlank() }
-                    if (photoPosts.isEmpty()) {
-                        item {
-                            Box(modifier = Modifier.fillParentMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
-                                Text("No photos yet.")
+
+                when (selectedTabIndex) {
+                    0 -> { // Posts Tab
+                        if (posts.isEmpty()) {
+                            item {
+                                Box(modifier = Modifier.fillParentMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+                                    Text("No posts yet.")
+                                }
+                            }
+                        } else {
+                            items(posts, key = { it.id }) { post ->
+                                PostCard(
+                                    post = post,
+                                    viewModel = homeFeedViewModel,
+                                    onCommentClicked = {
+                                        val intent = Intent(context, CommentsActivity::class.java)
+                                        intent.putExtra("POST_ID", post.id)
+                                        context.startActivity(intent)
+                                    },
+                                    showReactionSelector = false,
+                                    onSelectorOpen = {},
+                                    onSelectorDismiss = {},
+                                    onProfileClicked = { authorId ->
+                                        if (authorId != profile.userId) {
+                                            val intent = Intent(context, ProfileActivity::class.java).apply {
+                                                putExtra("USER_ID", authorId)
+                                            }
+                                            context.startActivity(intent)
+                                        }
+                                    }
+                                )
                             }
                         }
-                    } else {
-                        item {
-                            LazyVerticalGrid(
-                                columns = GridCells.Fixed(3),
-                                modifier = Modifier.heightIn(max = 1000.dp),
-                                contentPadding = PaddingValues(2.dp),
-                                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                                verticalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                items(photoPosts) { post ->
-                                    AsyncImage(
-                                        model = post.imageUrl,
-                                        contentDescription = "Post photo",
-                                        modifier = Modifier
-                                            .aspectRatio(1f)
-                                            .clickable { /* TODO: Open full screen image */ },
-                                        contentScale = ContentScale.Crop
-                                    )
+                    }
+                    1 -> { // Photos Tab
+                        val photoPosts = posts.filter { !it.imageUrl.isNullOrBlank() }
+                        if (photoPosts.isEmpty()) {
+                            item {
+                                Box(modifier = Modifier.fillParentMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+                                    Text("No photos yet.")
+                                }
+                            }
+                        } else {
+                            item {
+                                LazyVerticalGrid(
+                                    columns = GridCells.Fixed(3),
+                                    modifier = Modifier.heightIn(max = 1000.dp),
+                                    contentPadding = PaddingValues(2.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    items(photoPosts) { post ->
+                                        AsyncImage(
+                                            model = post.imageUrl,
+                                            contentDescription = "Post photo",
+                                            modifier = Modifier
+                                                .aspectRatio(1f)
+                                                .clickable { /* TODO: Open full screen image */ },
+                                            contentScale = ContentScale.Crop
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -275,20 +291,22 @@ fun ProfileHeader(
             modifier = Modifier.clickable(enabled = isCurrentUser, onClick = onProfilePicClick)
         ) {
             Crossfade(targetState = profile.photoUrl, animationSpec = tween(durationMillis = 500)) { imageUrl ->
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(imageUrl)
-                        .crossfade(true)
-                        .placeholder(R.drawable.ic_person_placeholder)
-                        .error(R.drawable.ic_person_placeholder)
-                        .build(),
-                    contentDescription = "Profile Photo",
-                    modifier = Modifier
-                        .size(100.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                    contentScale = ContentScale.Crop
-                )
+                key(imageUrl) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(imageUrl)
+                            .crossfade(true)
+                            .placeholder(R.drawable.ic_person_placeholder)
+                            .error(R.drawable.ic_person_placeholder)
+                            .build(),
+                        contentDescription = "Profile Photo",
+                        modifier = Modifier
+                            .size(100.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentScale = ContentScale.Crop
+                    )
+                }
             }
             if (isCurrentUser) {
                 Icon(
