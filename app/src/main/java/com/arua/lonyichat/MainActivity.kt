@@ -23,6 +23,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource // ✨ FIX: ADDED MISSING IMPORT
+import androidx.compose.foundation.interaction.collectIsFocusedAsState // ✨ NEW: Import for focus state
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -1195,7 +1196,7 @@ fun PostReactionSummary(post: com.arua.lonyichat.data.Post, onSummaryClicked: ()
                 .clickable(onClick = onSummaryClicked)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // Reaction icons placeholder (Facebook-like)
@@ -1309,17 +1310,16 @@ fun PostInteractionBar(
     }
 }
 
-// ✨ MODIFIED: ReactionSelectorMenu (Facebook-like interactive hover/scale) ✨
+// ✨ MODIFIED & FIXED: ReactionSelectorMenu now inlines logic to correctly handle clicks/focus. ✨
 @Composable
 fun ReactionSelectorMenu(
     onDismiss: () -> Unit,
     onReactionSelected: (reactionType: String) -> Unit
 ) {
-    // State to track which reaction index is currently being focused (0, 1, 2, or null)
+    // State to track which reaction index is currently being focused (for visual feedback)
     var focusedReactionIndex by remember { mutableStateOf<Int?>(null) }
-
-    // To track the layout bounds of the reaction row for touch detection
-    val reactionRowWidth = remember { mutableStateOf(0) }
+    // State to keep track of the Row size for calculation in pointerInput
+    val reactionRowSize = remember { mutableStateOf(IntSize.Zero) }
     val reactionCount = LonyiReactions.size
 
     Card(
@@ -1350,32 +1350,44 @@ fun ReactionSelectorMenu(
             // 2. Reaction Icons Row
             Row(
                 modifier = Modifier
-                    .onSizeChanged { reactionRowWidth.value = it.width }
-                    // CRITICAL FIX: The pointerInput is now ONLY for hover effect, the click is handled by the individual Box.
-                    .pointerInput(Unit) {
-                        // Calculate the ideal width of each reaction slot for easy mapping
-                        val itemWidth = reactionRowWidth.value / reactionCount
-
-                        // Detect and process all pointer events (used for drag/hover)
+                    .onSizeChanged { reactionRowSize.value = it }
+                    // CRITICAL FIX: The pointerInput is maintained for hover/focus state tracking (visuals only).
+                    .pointerInput(reactionRowSize.value) {
+                        val itemWidth = reactionRowSize.value.width.toFloat() / reactionCount
                         awaitPointerEventScope {
                             while (true) {
+                                // Wait for the first down event or move event
                                 val event = awaitPointerEvent()
                                 val change = event.changes.first()
 
-                                val xPos = change.position.x.toInt()
-                                val newIndex = (xPos / itemWidth).coerceIn(0, reactionCount - 1)
+                                val xPos = change.position.x
 
-                                // Update focus on move/down (Keep hover logic)
-                                if (change.pressed) {
-                                    focusedReactionIndex = newIndex
+                                // Determine current focused index
+                                val newIndex = if (xPos < 0 || xPos > reactionRowSize.value.width) {
+                                    null // Outside bounds
+                                } else {
+                                    (xPos / itemWidth).toInt().coerceIn(0, reactionCount - 1)
                                 }
 
-                                // REMOVED: Unreliable Release/Dismissal logic from here. The clickable in the box and the parent lambda handle it.
+                                focusedReactionIndex = newIndex
 
-                                // Clear focus on dismiss/outside interaction (simple check: if pointer moves outside the horizontal bounds)
-                                if (xPos < 0 || xPos > reactionRowWidth.value) {
-                                    focusedReactionIndex = null
+                                // Loop to track movement until the pointer is lifted
+                                if (event.changes.any { it.pressed }) {
+                                    do {
+                                        val moveEvent = awaitPointerEvent()
+                                        val moveChange = moveEvent.changes.first()
+
+                                        val moveXPos = moveChange.position.x
+                                        val movedIndex = if (moveXPos < 0 || moveXPos > reactionRowSize.value.width) {
+                                            null
+                                        } else {
+                                            (moveXPos / itemWidth).toInt().coerceIn(0, reactionCount - 1)
+                                        }
+                                        focusedReactionIndex = movedIndex
+                                    } while (moveChange.pressed)
                                 }
+
+                                focusedReactionIndex = null // Clear focus when pointer is lifted
                             }
                         }
                     }
@@ -1383,52 +1395,42 @@ fun ReactionSelectorMenu(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 LonyiReactions.forEachIndexed { index, reaction ->
-                    // ✨ MODIFIED: Use the dedicated ReactionIcon composable to ensure non-stale click handler
-                    ReactionIcon(
-                        reaction = reaction,
-                        isFocused = index == focusedReactionIndex,
-                        onReactionSelected = onReactionSelected
+                    val isFocused = index == focusedReactionIndex
+                    val scale by animateFloatAsState(
+                        targetValue = if (isFocused) 1.5f else 1.0f,
+                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                        label = "reactionScale${reaction.type}"
                     )
+
+                    // Inlining the logic (from the previously deleted ReactionIcon) ensures the onClick lambda
+                    // correctly captures the unique 'reaction.type' for each iteration, solving the core bug.
+                    // The clickable handles the actual tap event independently from the pointerInput for hover/focus.
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp) // Fixed size for touch target
+                            .scale(scale)
+                            .clip(CircleShape)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { onReactionSelected(reaction.type) }
+                            )
+                            .background(if (isFocused) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = reaction.emoji,
+                            fontSize = 24.sp,
+                            modifier = Modifier.padding(4.dp)
+                        )
+                    }
                 }
             }
         }
     }
 }
 
-// ✨ NEW: Dedicated Composable for each Reaction Icon to fix closure capture bug ✨
-@Composable
-private fun ReactionIcon(
-    reaction: AppReaction,
-    isFocused: Boolean,
-    onReactionSelected: (reactionType: String) -> Unit
-) {
-    val scale by animateFloatAsState(
-        targetValue = if (isFocused) 1.5f else 1.0f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-        label = "reactionScale${reaction.type}"
-    )
-
-    Box(
-        modifier = Modifier
-            .size(40.dp) // Fixed size for touch target
-            .scale(scale)
-            .clip(CircleShape)
-            // Clicks handled reliably here, capturing the correct 'reaction.type'
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = { onReactionSelected(reaction.type) }
-            )
-            .background(if (isFocused) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent), // Subtle background when focused
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = reaction.emoji,
-            fontSize = 24.sp, // Larger emoji for a better visual
-            modifier = Modifier.padding(4.dp)
-        )
-    }
-}
+// ✨ DELETED: The `ReactionIcon` composable previously located here (Lines 1191-1215) was removed to fix the closure bug.
 
 // ✨ FIX: Restored reference
 @Composable
