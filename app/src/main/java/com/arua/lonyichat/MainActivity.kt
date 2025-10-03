@@ -172,10 +172,9 @@ fun LonyiChatApp(
             .fillMaxSize()
             .nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = MaterialTheme.colorScheme.background,
-        contentWindowInsets = ScaffoldDefaults.contentWindowInsets.exclude(WindowInsets.navigationBars),
         topBar = {
             LonyiChatTopBar(
-                title = if (selectedItem is Screen.Profile) "Profile" else selectedItem.title,
+                title = if (selectedItem is Screen.Profile) "Profile" else "LonyiChat",
                 showBackButton = showBackButton,
                 onBackClicked = onBackClicked,
                 onProfileClicked = { selectedItem = Screen.Profile },
@@ -191,41 +190,7 @@ fun LonyiChatApp(
                 )
             }
         },
-        floatingActionButton = {
-            if (selectedItem is Screen.Home) {
-                val createPostLauncher = rememberLauncherForActivityResult(
-                    contract = ActivityResultContracts.StartActivityForResult()
-                ) { result ->
-                    if (result.resultCode == Activity.RESULT_OK) {
-                        homeFeedViewModel.fetchPosts()
-                    }
-                }
-                FloatingActionButton(
-                    onClick = {
-                        val intent = Intent(context, CreatePostActivity::class.java)
-                        createPostLauncher.launch(intent)
-                    }
-                ) {
-                    Icon(Icons.Default.Edit, contentDescription = "Create Post")
-                }
-            } else if (selectedItem is Screen.Media) {
-                val createMediaLauncher = rememberLauncherForActivityResult(
-                    contract = ActivityResultContracts.StartActivityForResult()
-                ) { result ->
-                    if (result.resultCode == Activity.RESULT_OK) {
-                        mediaViewModel.fetchMedia()
-                    }
-                }
-                FloatingActionButton(
-                    onClick = {
-                        val intent = Intent(context, CreateMediaActivity::class.java)
-                        createMediaLauncher.launch(intent)
-                    }
-                ) {
-                    Icon(Icons.Default.VideoCall, contentDescription = "Upload Media")
-                }
-            }
-        }
+        floatingActionButton = {} // Removed FAB
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -247,7 +212,6 @@ fun LonyiChatApp(
     }
 }
 
-// ✨ THIS IS THE PRIMARY FIX ✨
 @Composable
 fun LonyiChatTopBar(
     title: String,
@@ -259,51 +223,35 @@ fun LonyiChatTopBar(
     val isDarkTheme = isSystemInDarkTheme()
     val view = LocalView.current
 
-    // Determine the color for the header based on the theme
-    val headerColor = if (isDarkTheme) {
-        // Use a specific dark color for an immersive feel
-        MaterialTheme.colorScheme.surface
-    } else {
-        // Use the theme's primary color in light mode
-        MaterialTheme.colorScheme.primary
-    }
+    val headerColor = if (isDarkTheme) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.primary
 
-    // This SideEffect will run when headerColor changes, ensuring the status bar always matches
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
             window.statusBarColor = headerColor.toArgb()
-            // Set status bar icons to be light or dark based on the header's background
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !isDarkTheme
         }
     }
 
     TopAppBar(
-        title = { Text(title) },
+        title = { Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.headlineSmall) },
         navigationIcon = {
             if (showBackButton) {
                 IconButton(onClick = onBackClicked) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back"
-                    )
+                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                 }
             }
         },
         actions = {
             if (!showBackButton) {
                 IconButton(onClick = onProfileClicked) {
-                    Icon(
-                        imageVector = Icons.Default.AccountCircle,
-                        contentDescription = "Profile",
-                        modifier = Modifier.size(28.dp)
-                    )
+                    Icon(imageVector = Icons.Default.AccountCircle, contentDescription = "Profile", modifier = Modifier.size(28.dp))
                 }
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = headerColor,
-            // Adjust text/icon color for contrast
+            scrolledContainerColor = headerColor,
             titleContentColor = if (isDarkTheme) MaterialTheme.colorScheme.onSurface else Color.White,
             actionIconContentColor = if (isDarkTheme) MaterialTheme.colorScheme.onSurface else Color.White,
             navigationIconContentColor = if (isDarkTheme) MaterialTheme.colorScheme.onSurface else Color.White
@@ -321,14 +269,22 @@ fun LonyiChatBottomBar(
 ) {
     NavigationBar(
         modifier = Modifier.navigationBarsPadding(),
-        containerColor = MaterialTheme.colorScheme.surface
+        containerColor = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface
     ) {
         items.forEach { screen ->
             NavigationBarItem(
                 icon = { Icon(screen.icon, contentDescription = screen.title) },
-                label = { Text(screen.title) },
+                label = { Text(screen.title, style = MaterialTheme.typography.labelSmall) },
                 selected = selectedItem == screen,
-                onClick = { onItemSelected(screen) }
+                onClick = { onItemSelected(screen) },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                )
             )
         }
     }
@@ -347,7 +303,7 @@ fun ScreenContent(
     scrollBehavior: TopAppBarScrollBehavior
 ) {
     when (screen) {
-        Screen.Home -> HomeFeedScreen(profileState, homeFeedViewModel, scrollBehavior)
+        Screen.Home -> HomeFeedScreen(profileState, homeFeedViewModel)
         Screen.Groups -> GroupsChurchScreen(churchesViewModel)
         Screen.Bible -> BibleStudyScreen(bibleViewModel)
         Screen.Chat -> ChatScreen(chatListViewModel)
@@ -357,6 +313,155 @@ fun ScreenContent(
         }
     }
 }
+
+@Composable
+fun HomeFeedScreen(
+    profileState: UserProfileState,
+    viewModel: HomeFeedViewModel
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val createPostLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            viewModel.fetchPosts()
+        }
+    }
+    val reactorUiState by viewModel.reactorUiState.collectAsState()
+
+    if (reactorUiState.isLoading || reactorUiState.reactors.amen.isNotEmpty() || reactorUiState.reactors.hallelujah.isNotEmpty() || reactorUiState.reactors.praiseGod.isNotEmpty()) {
+        ReactorListDialog(
+            uiState = reactorUiState,
+            onDismiss = { viewModel.clearReactorState() }
+        )
+    }
+
+    if (reactorUiState.error != null) {
+        Toast.makeText(LocalContext.current, "Error loading reactors: ${reactorUiState.error}", Toast.LENGTH_LONG).show()
+        viewModel.clearReactorState()
+    }
+
+    val lazyListState = rememberLazyListState()
+    LaunchedEffect(uiState.posts.firstOrNull()?.id) {
+        if (uiState.posts.isNotEmpty()) {
+            coroutineScope.launch {
+                lazyListState.animateScrollToItem(0)
+            }
+        }
+    }
+
+    val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = uiState.isLoading)
+    val onRefresh = {
+        coroutineScope.launch {
+            val startTime = System.currentTimeMillis()
+            viewModel.fetchPosts()
+            val endTime = System.currentTimeMillis()
+            val duration = endTime - startTime
+            if (duration < MIN_REFRESH_DURATION) {
+                delay(MIN_REFRESH_DURATION - duration)
+            }
+        }
+        Unit
+    }
+
+    var openReactionPostId by remember { mutableStateOf<String?>(null) }
+
+    when {
+        uiState.isLoading && uiState.posts.isEmpty() -> {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        }
+        uiState.error != null -> {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp), contentAlignment = Alignment.Center
+            ) {
+                Text("Error: ${uiState.error}", color = MaterialTheme.colorScheme.error)
+            }
+        }
+        else -> {
+            SwipeRefresh(state = swipeRefreshState, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
+                LazyColumn(
+                    state = lazyListState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    item {
+                        PostCreationBar(
+                            profileState = profileState,
+                            onBarClick = {
+                                val intent = Intent(context, CreatePostActivity::class.java)
+                                createPostLauncher.launch(intent)
+                            }
+                        )
+                    }
+
+                    items(uiState.posts, key = { it.id }) { post ->
+                        PostCard(
+                            post = post,
+                            viewModel = viewModel,
+                            onCommentClicked = {
+                                val intent = Intent(context, CommentsActivity::class.java)
+                                intent.putExtra("POST_ID", post.id)
+                                context.startActivity(intent)
+                            },
+                            showReactionSelector = openReactionPostId == post.id,
+                            onSelectorOpen = { openReactionPostId = it },
+                            onSelectorDismiss = { openReactionPostId = null }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PostCreationBar(
+    profileState: UserProfileState,
+    onBarClick: () -> Unit
+) {
+    Column(modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onBarClick)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(profileState.photoUrl)
+                    .crossfade(true)
+                    .placeholder(R.drawable.ic_person_placeholder)
+                    .error(R.drawable.ic_person_placeholder)
+                    .build(),
+                contentDescription = "Your Profile Photo",
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+            )
+            Text(
+                text = "What is on your heart?",
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                imageVector = Icons.Default.PhotoLibrary,
+                contentDescription = "Add Photo",
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+
+// ✨ ProfileScreen and its helpers are now included ✨
 
 @Composable
 fun ProfileScreen(viewModel: ProfileViewModel, onProfileUpdated: () -> Unit) {
@@ -509,6 +614,7 @@ fun ProfileScreen(viewModel: ProfileViewModel, onProfileUpdated: () -> Unit) {
         )
     }
 }
+
 @Composable
 fun ProfileStat(count: Int, label: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -628,199 +734,6 @@ fun EditProfileDialog(
     )
 }
 
-@Composable
-fun HomeFeedScreen(
-    profileState: UserProfileState,
-    viewModel: HomeFeedViewModel,
-    scrollBehavior: TopAppBarScrollBehavior
-) {
-    val uiState by viewModel.uiState.collectAsState()
-    val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
-
-    val createPostLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            viewModel.fetchPosts()
-        }
-    }
-
-    val reactorUiState by viewModel.reactorUiState.collectAsState()
-
-    if (reactorUiState.reactors.amen.isNotEmpty() || reactorUiState.reactors.hallelujah.isNotEmpty() || reactorUiState.reactors.praiseGod.isNotEmpty() || reactorUiState.isLoading) {
-        ReactorListDialog(
-            uiState = reactorUiState,
-            onDismiss = { viewModel.clearReactorState() }
-        )
-    }
-
-    if (reactorUiState.error != null) {
-        Toast.makeText(LocalContext.current, "Error loading reactors: ${reactorUiState.error}", Toast.LENGTH_LONG).show()
-        viewModel.clearReactorState()
-    }
-
-
-    val lazyListState = rememberLazyListState()
-
-    LaunchedEffect(uiState.posts.firstOrNull()?.id) {
-        if (uiState.posts.isNotEmpty()) {
-            coroutineScope.launch {
-                lazyListState.animateScrollToItem(0)
-            }
-        }
-    }
-
-    val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = uiState.isLoading)
-
-    val onRefresh = {
-        coroutineScope.launch {
-            val startTime = System.currentTimeMillis()
-            viewModel.fetchPosts()
-            val endTime = System.currentTimeMillis()
-            val duration = endTime - startTime
-            if (duration < MIN_REFRESH_DURATION) {
-                delay(MIN_REFRESH_DURATION - duration)
-            }
-        }
-        Unit
-    }
-
-    var openReactionPostId by remember { mutableStateOf<String?>(null) }
-
-
-    when {
-        uiState.isLoading && uiState.posts.isEmpty() -> {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        }
-        uiState.error != null -> {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp), contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "Error: ${uiState.error}",
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
-        }
-        else -> {
-            SwipeRefresh(
-                state = swipeRefreshState,
-                onRefresh = onRefresh,
-                modifier = Modifier.fillMaxSize()
-            ) {
-                LazyColumn(
-                    state = lazyListState,
-                    modifier = Modifier
-                        .fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 8.dp)
-                ) {
-                    item {
-                        PostCreationBar(
-                            profileState = profileState,
-                            onTextClicked = {
-                                val intent = Intent(context, CreatePostActivity::class.java)
-                                createPostLauncher.launch(intent)
-                            },
-                            onPhotoClicked = {
-                                val intent = Intent(context, CreatePostActivity::class.java)
-                                createPostLauncher.launch(intent)
-                            }
-                        )
-                        Divider(color = Color.Gray.copy(alpha = 0.3f), thickness = 1.dp)
-                    }
-
-                    items(uiState.posts, key = { it.id }) { post ->
-                        PostCard(
-                            post = post,
-                            viewModel = viewModel,
-                            onCommentClicked = {
-                                val intent = Intent(context, CommentsActivity::class.java)
-                                intent.putExtra("POST_ID", post.id)
-                                context.startActivity(intent)
-                            },
-                            showReactionSelector = openReactionPostId == post.id,
-                            onSelectorOpen = { openReactionPostId = it },
-                            onSelectorDismiss = { openReactionPostId = null }
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun PostCreationBar(
-    profileState: UserProfileState,
-    onTextClicked: () -> Unit,
-    onPhotoClicked: () -> Unit
-) {
-    val prompt = when {
-        profileState.isLoading -> "Loading user profile..."
-        else -> "What is on your heart, ${profileState.userName}?"
-    }
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(8.dp),
-        elevation = CardDefaults.cardElevation(2.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(profileState.photoUrl)
-                    .crossfade(true)
-                    .placeholder(R.drawable.ic_person_placeholder)
-                    .error(R.drawable.ic_person_placeholder)
-                    .build(),
-                contentDescription = "Your Profile Photo",
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-            )
-            Spacer(modifier = Modifier.size(8.dp))
-            Text(
-                text = prompt,
-                color = if (profileState.isLoading) Color.LightGray else Color.Gray,
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { onTextClicked() }
-            )
-        }
-        Divider(color = Color.Gray.copy(alpha = 0.3f), thickness = 1.dp)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            PostActionButton(icon = Icons.Default.Edit, text = "Text", onClick = onTextClicked)
-            PostActionButton(icon = Icons.Default.PhotoCamera, text = "Photo", onClick = onPhotoClicked)
-        }
-    }
-}
-@Composable
-fun PostActionButton(icon: ImageVector, text: String, onClick: () -> Unit) {
-    TextButton(onClick = onClick) {
-        Icon(icon, contentDescription = text, tint = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.width(4.dp))
-        Text(text, color = MaterialTheme.colorScheme.primary)
-    }
-}
 
 @Composable
 fun PostCard(
@@ -882,10 +795,8 @@ fun PostCard(
 
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp),
-        elevation = CardDefaults.cardElevation(2.dp),
+        modifier = Modifier.fillMaxWidth(), // No horizontal padding for edge-to-edge
+        shape = RoundedCornerShape(0.dp), // Squared corners
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         )
@@ -1109,13 +1020,14 @@ fun InteractionButton(icon: ImageVector, text: String, onClick: () -> Unit, modi
             .padding(vertical = 8.dp, horizontal = 16.dp),
         horizontalArrangement = Arrangement.Center
     ) {
-        Icon(icon, contentDescription = text, tint = MaterialTheme.colorScheme.primary)
+        Icon(icon, contentDescription = text, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
         Spacer(Modifier.width(8.dp))
         Text(
             text,
-            color = MaterialTheme.colorScheme.primary,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            fontWeight = FontWeight.Bold
         )
     }
 }
@@ -1124,7 +1036,7 @@ fun InteractionButton(icon: ImageVector, text: String, onClick: () -> Unit, modi
 fun PostReactionSummary(post: com.arua.lonyichat.data.Post, onSummaryClicked: () -> Unit) {
     val totalReactions = post.reactions.amen + post.reactions.hallelujah + post.reactions.praiseGod
 
-    Divider(color = Color.Gray.copy(alpha = 0.3f), thickness = 1.dp)
+    Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f), thickness = 1.dp)
 
     if (totalReactions > 0) {
         Row(
@@ -1152,7 +1064,7 @@ fun PostReactionSummary(post: com.arua.lonyichat.data.Post, onSummaryClicked: ()
                 Text(
                     text = totalReactions.toString(),
                     style = MaterialTheme.typography.labelMedium,
-                    color = Color.Gray,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     modifier = Modifier.padding(start = 4.dp)
                 )
             }
@@ -1160,10 +1072,10 @@ fun PostReactionSummary(post: com.arua.lonyichat.data.Post, onSummaryClicked: ()
             Text(
                 text = "${post.commentCount} Comments · ${post.shareCount} Shares",
                 style = MaterialTheme.typography.labelMedium,
-                color = Color.Gray
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
         }
-        Divider(color = Color.Gray.copy(alpha = 0.3f), thickness = 1.dp)
+        Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f), thickness = 1.dp)
     }
 }
 
@@ -1191,7 +1103,7 @@ fun PostInteractionBar(
     }
 
     val contentColor by animateColorAsState(
-        targetValue = if (currentReaction != null) MaterialTheme.colorScheme.primary else Color.Gray,
+        targetValue = if (currentReaction != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
         label = "reactionColor"
     )
 
@@ -1217,7 +1129,7 @@ fun PostInteractionBar(
         ) {
             Icon(icon, contentDescription = text, tint = contentColor)
             Spacer(Modifier.width(8.dp))
-            Text(text, color = contentColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(text, color = contentColor, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold)
         }
 
         InteractionButton(
