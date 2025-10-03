@@ -11,8 +11,7 @@ data class Event(
     val title: String,
     val description: String,
     val imageUrl: String? = null,
-    // ✨ FIX: Used @field:RawValue target to correctly apply the annotation to the generated property,
-    // resolving both the 'not applicable to value parameter' and 'Type not directly supported' errors.
+    // CRITICAL FIX: Ensure the correct use-site target is explicitly set for the property backing field.
     @field:RawValue val date: Timestamp,
     val location: String,
     val createdBy: String,
