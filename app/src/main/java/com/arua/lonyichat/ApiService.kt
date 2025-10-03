@@ -818,4 +818,122 @@ object ApiService {
             }
         }
     }
+
+    // =========================================================================================
+    // ✨ NEW CHURCH API METHODS (Implemented for Group Management) ✨
+    // =========================================================================================
+
+    /**
+     * Uploads a new profile photo for a Church/Group.
+     * @param churchId The ID of the church.
+     * @param uri The local URI of the image to upload.
+     * @param context The activity context needed for content resolution.
+     * @return Result<String> The secure URL of the uploaded photo.
+     */
+    suspend fun uploadChurchPhoto(churchId: String, uri: Uri, context: Activity): Result<String> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+
+        return withContext(Dispatchers.IO) {
+            try {
+                val inputStream: InputStream? = context.contentResolver.openInputStream(uri)
+                val mimeType = context.contentResolver.getType(uri)
+                if (inputStream == null || mimeType == null) {
+                    return@withContext Result.failure(ApiException("Failed to open image file."))
+                }
+
+                val fileBytes = inputStream.use { it.readBytes() }
+                val requestBody = fileBytes.toRequestBody(mimeType.toMediaTypeOrNull(), 0, fileBytes.size)
+
+                val multipartBody = MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    // Server expects 'churchImage' as the field name
+                    .addFormDataPart("churchImage", "church-photo.jpg", requestBody)
+                    .build()
+
+                val request = Request.Builder()
+                    .url("$BASE_URL/upload/church-photo/$churchId")
+                    .addHeader("Authorization", "Bearer $token")
+                    .post(multipartBody)
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    val responseBody = response.body?.string()
+                    if (!response.isSuccessful) {
+                        throw ApiException("Photo upload failed: ${getErrorMessage(responseBody)}")
+                    }
+                    val jsonResponse = gson.fromJson(responseBody, Map::class.java)
+                    val secureUrl = jsonResponse["secure_url"] as? String
+                    if (secureUrl.isNullOrBlank()) {
+                        return@withContext Result.failure(ApiException("Backend returned success but no URL."))
+                    }
+                    return@withContext Result.success(secureUrl)
+                }
+            } catch (e: Exception) {
+                return@withContext Result.failure(ApiException("File operation failed: ${e.localizedMessage}"))
+            }
+        }
+    }
+
+    /**
+     * Deletes a Church/Group. Only the creator should succeed.
+     * @param churchId The ID of the church to delete.
+     * @return Result<Unit>
+     */
+    suspend fun deleteChurch(churchId: String): Result<Unit> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val request = Request.Builder()
+                .url("$BASE_URL/churches/$churchId")
+                .addHeader("Authorization", "Bearer $token")
+                .delete() // Use the DELETE HTTP method
+                .build()
+
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        val errorBody = response.body?.string()
+                        throw ApiException("Failed to delete church: ${getErrorMessage(errorBody)}")
+                    }
+                    Result.success(Unit)
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Adds or removes a member from a Church/Group (Admin feature).
+     * @param churchId The ID of the church.
+     * @param memberId The ID of the user to add/remove.
+     * @param isAdding True to add, false to remove.
+     * @return Result<Unit>
+     */
+    suspend fun toggleChurchMember(churchId: String, memberId: String, isAdding: Boolean): Result<Unit> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        val endpoint = if (isAdding) "add-member" else "remove-member"
+
+        return try {
+            val json = gson.toJson(mapOf("memberId" to memberId))
+            val body = json.toRequestBody(JSON)
+
+            val request = Request.Builder()
+                .url("$BASE_URL/churches/$churchId/$endpoint")
+                .addHeader("Authorization", "Bearer $token")
+                .post(body)
+                .build()
+
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        val errorBody = response.body?.string()
+                        throw ApiException("Failed to update membership: ${getErrorMessage(errorBody)}")
+                    }
+                    Result.success(Unit)
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

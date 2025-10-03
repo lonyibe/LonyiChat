@@ -37,12 +37,49 @@ class ChurchesViewModel : ViewModel() {
 
     fun joinChurch(churchId: String) {
         viewModelScope.launch {
+            // Note: joinChurch is now a toggle action on the backend
             ApiService.joinChurch(churchId).onSuccess {
-                // Refresh the list to show updated member status
+                // Refresh the list to show updated membership status
                 fetchChurches()
             }.onFailure { error ->
-                _uiState.update { it.copy(error = "Failed to join: ${error.localizedMessage}") }
+                _uiState.update { it.copy(error = "Failed to toggle membership: ${error.localizedMessage}") }
             }
         }
     }
+
+    // ✨ NEW: Delete Church function
+    fun deleteChurch(churchId: String) {
+        viewModelScope.launch {
+            val originalChurches = _uiState.value.churches
+            // Optimistic update: remove the church immediately
+            _uiState.update { currentState ->
+                currentState.copy(churches = currentState.churches.filterNot { it.id == churchId })
+            }
+
+            ApiService.deleteChurch(churchId).onFailure { error ->
+                // Rollback on failure
+                _uiState.update {
+                    it.copy(
+                        churches = originalChurches,
+                        error = "Failed to delete church: ${error.localizedMessage}"
+                    )
+                }
+            }
+        }
+    }
+
+    // ✨ NEW: Toggle Member function (for an admin feature later)
+    fun toggleMember(churchId: String, memberId: String, isAdding: Boolean) {
+        viewModelScope.launch {
+            ApiService.toggleChurchMember(churchId, memberId, isAdding).onSuccess {
+                // Refresh the list to show updated member count/status
+                fetchChurches()
+            }.onFailure { error ->
+                _uiState.update { it.copy(error = "Failed to update member list: ${error.localizedMessage}") }
+            }
+        }
+    }
+
+    // NOTE: Church photo update logic will likely reside in a dedicated ChurchDetailViewModel or similar,
+    // or be implemented directly in the UI for simplicity, calling the new ApiService function.
 }

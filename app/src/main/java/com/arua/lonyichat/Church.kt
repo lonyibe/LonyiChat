@@ -12,7 +12,9 @@ data class Church(
     val description: String,
     val createdBy: String,
     val members: List<String>,
-    val followerCount: Int
+    val followerCount: Int,
+    // ✨ ADDED: New field for the Church's profile picture URL
+    val photoUrl: String? = null
 ) : Parcelable
 
 // Wrapper for the API response when fetching churches

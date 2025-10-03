@@ -779,6 +779,23 @@ fun ChurchCard(church: Church, onJoinClicked: () -> Unit, onCardClicked: () -> U
 
     Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onCardClicked), elevation = CardDefaults.cardElevation(2.dp)) {
         Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+
+            // ✨ NEW: Display Church Photo ✨
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(church.photoUrl)
+                    .crossfade(true)
+                    .placeholder(R.drawable.ic_person_placeholder) // Using placeholder for lack of church icon
+                    .error(R.drawable.ic_person_placeholder)
+                    .build(),
+                contentDescription = "Church Profile Photo",
+                modifier = Modifier
+                    .size(50.dp)
+                    .clip(CircleShape),
+                contentScale = ContentScale.Crop
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(church.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(4.dp))
