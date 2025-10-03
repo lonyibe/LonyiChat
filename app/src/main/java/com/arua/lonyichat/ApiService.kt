@@ -3,7 +3,7 @@ package com.arua.lonyichat.data
 import android.app.Activity
 import android.content.Context
 import android.net.Uri
-import android.util.Log // Re-added Log import
+import android.util.Log
 import com.arua.lonyichat.LonyiChatApp
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
@@ -15,7 +15,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
-import java.io.InputStream // Re-added InputStream import
+import java.io.InputStream
 
 class ApiException(message: String) : IOException(message)
 
@@ -56,44 +56,80 @@ object ApiService {
         prefs.edit().clear().apply()
     }
 
-    suspend fun login(email: String, password: String): Result<String> {
-        return try {
+    // ✨ UPDATED SIGNUP FUNCTION ✨
+    suspend fun signup(email: String, password: String, username: String, phone: String, age: String, country: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
             val json = gson.toJson(mapOf(
                 "email" to email,
-                "password" to password
+                "password" to password,
+                "name" to username,
+                "phone" to phone,
+                "age" to age.toIntOrNull(),
+                "country" to country
             ))
             val body = json.toRequestBody(JSON)
-
             val request = Request.Builder()
-                .url("$BASE_URL/auth/login")
+                .url("$BASE_URL/auth/register")
                 .post(body)
                 .build()
 
-            withContext(Dispatchers.IO) {
-                client.newCall(request).execute().use { response ->
-                    val responseBody = response.body?.string()
-                    val authResponse = gson.fromJson(responseBody, AuthResponse::class.java)
-
-                    if (!response.isSuccessful || authResponse.token.isNullOrBlank()) {
-                        val msg = authResponse.message ?: getErrorMessage(responseBody)
-                        throw ApiException("Login failed: $msg")
-                    }
-
-                    authToken = authResponse.token
-                    currentUserId = authResponse.userId
-
-                    prefs.edit()
-                        .putString("auth_token", authToken)
-                        .putString("user_id", currentUserId)
-                        .apply()
-
-                    Result.success(authResponse.token)
+            client.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string()
+                if (!response.isSuccessful) {
+                    throw ApiException(getErrorMessage(responseBody))
                 }
+                val authResponse = gson.fromJson(responseBody, AuthResponse::class.java)
+                if (authResponse.token.isNullOrBlank()) {
+                    throw ApiException("Signup succeeded but did not return a token.")
+                }
+                // Automatically log in
+                authToken = authResponse.token
+                currentUserId = authResponse.userId
+                prefs.edit()
+                    .putString("auth_token", authToken)
+                    .putString("user_id", currentUserId)
+                    .apply()
+                Result.success(Unit)
             }
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
+
+    suspend fun login(email: String, password: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val json = gson.toJson(mapOf(
+                "email" to email,
+                "password" to password
+            ))
+            val body = json.toRequestBody(JSON)
+            val request = Request.Builder()
+                .url("$BASE_URL/auth/login")
+                .post(body)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string()
+                if (!response.isSuccessful) {
+                    throw ApiException(getErrorMessage(responseBody))
+                }
+                val authResponse = gson.fromJson(responseBody, AuthResponse::class.java)
+                if (authResponse.token.isNullOrBlank()) {
+                    throw ApiException("Login succeeded but did not return a token.")
+                }
+                authToken = authResponse.token
+                currentUserId = authResponse.userId
+                prefs.edit()
+                    .putString("auth_token", authToken)
+                    .putString("user_id", currentUserId)
+                    .apply()
+                Result.success(Unit)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
 
     private fun getAuthToken(): String? = authToken
     fun getCurrentUserId(): String? = currentUserId
@@ -109,7 +145,6 @@ object ApiService {
                     return@withContext Result.failure(ApiException("Failed to open image file."))
                 }
 
-                // FIX: inputStream.use { it.readBytes() } is correct, the IDE error was likely due to missing InputStream import
                 val fileBytes = inputStream.use { it.readBytes() }
                 val requestBody = fileBytes.toRequestBody("image/*".toMediaTypeOrNull(), 0, fileBytes.size)
 
@@ -152,7 +187,6 @@ object ApiService {
                     return@withContext Result.failure(ApiException("Failed to open image file."))
                 }
 
-                // FIX: inputStream.use { it.readBytes() } is correct
                 val fileBytes = inputStream.use { it.readBytes() }
                 val requestBody = fileBytes.toRequestBody("image/*".toMediaTypeOrNull(), 0, fileBytes.size)
 
@@ -604,7 +638,6 @@ object ApiService {
                     return@withContext Result.failure(ApiException("Failed to open media file."))
                 }
 
-                // FIX: inputStream.use { it.readBytes() } is correct
                 val fileBytes = inputStream.use { it.readBytes() }
                 val requestBody = fileBytes.toRequestBody(mimeType.toMediaTypeOrNull())
 
