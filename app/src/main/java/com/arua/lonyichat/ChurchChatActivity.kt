@@ -168,7 +168,8 @@ fun ChurchChatScreen(
                     }
                 },
                 actions = {
-                    // Church Photo/Details Button
+                    // Church Photo/Details Button & Menu
+                    // ✨ FIX: Group AsyncImage and IconButton in a Row when creator, for proper alignment
                     Box(modifier = Modifier.padding(end = 8.dp).clickable(onClick = {
                         // Simplified: Directly offer photo update if creator, otherwise ignore click
                         if (isCreator) {
@@ -178,50 +179,52 @@ fun ChurchChatScreen(
                             Toast.makeText(context, "Group details coming soon!", Toast.LENGTH_SHORT).show()
                         }
                     })) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
-                                .data(currentChurch.photoUrl)
-                                .crossfade(true)
-                                .placeholder(R.drawable.ic_person_placeholder)
-                                .error(R.drawable.ic_person_placeholder)
-                                .build(),
-                            contentDescription = "Church Profile Photo",
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape),
-                            contentScale = ContentScale.Crop
-                        )
-                        // Menu for Creator
-                        if (isCreator) {
-                            IconButton(onClick = { showMenu = !showMenu }) {
-                                Icon(Icons.Default.MoreVert, contentDescription = "More options", tint = MaterialTheme.colorScheme.onSurface)
-                            }
-                            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                                DropdownMenuItem(
-                                    text = { Text("Change Group Photo") },
-                                    onClick = {
-                                        imagePickerLauncher.launch("image/*")
-                                        showMenu = false
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.AddAPhoto, contentDescription = null) }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Add Members (TODO)") },
-                                    onClick = {
-                                        Toast.makeText(context, "Member management feature pending.", Toast.LENGTH_SHORT).show()
-                                        showMenu = false
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.PersonAdd, contentDescription = null) }
-                                )
-                                Divider()
-                                DropdownMenuItem(
-                                    text = { Text("Delete Group") },
-                                    onClick = {
-                                        showDeleteConfirmDialog = true
-                                        showMenu = false
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
-                                )
+                        Row(verticalAlignment = Alignment.CenterVertically) { // ✨ ADDED: Row to align image and menu icon
+                            AsyncImage(
+                                model = ImageRequest.Builder(LocalContext.current)
+                                    .data(currentChurch.photoUrl)
+                                    .crossfade(true)
+                                    .placeholder(R.drawable.ic_person_placeholder)
+                                    .error(R.drawable.ic_person_placeholder)
+                                    .build(),
+                                contentDescription = "Church Profile Photo",
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape),
+                                contentScale = ContentScale.Crop
+                            )
+                            // Menu for Creator
+                            if (isCreator) {
+                                IconButton(onClick = { showMenu = !showMenu }) { // ✨ MOVED: IconButton is now next to the AsyncImage
+                                    Icon(Icons.Default.MoreVert, contentDescription = "More options", tint = MaterialTheme.colorScheme.onSurface)
+                                }
+                                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                                    DropdownMenuItem(
+                                        text = { Text("Change Group Photo") },
+                                        onClick = {
+                                            imagePickerLauncher.launch("image/*")
+                                            showMenu = false
+                                        },
+                                        leadingIcon = { Icon(Icons.Default.AddAPhoto, contentDescription = null) }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Add Members (TODO)") },
+                                        onClick = {
+                                            Toast.makeText(context, "Member management feature pending.", Toast.LENGTH_SHORT).show()
+                                            showMenu = false
+                                        },
+                                        leadingIcon = { Icon(Icons.Default.PersonAdd, contentDescription = null) }
+                                    )
+                                    Divider()
+                                    DropdownMenuItem(
+                                        text = { Text("Delete Group") },
+                                        onClick = {
+                                            showDeleteConfirmDialog = true
+                                            showMenu = false
+                                        },
+                                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
+                                    )
+                                }
                             }
                         }
                     }

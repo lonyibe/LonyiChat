@@ -725,23 +725,56 @@ fun GroupsChurchScreen(viewModel: ChurchesViewModel) {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+    // ✨ NEW: Search State
+    var searchQuery by remember { mutableStateOf("") }
+
+    // ✨ NEW: Filter the churches list based on the search query
+    val filteredChurches = remember(uiState.churches, searchQuery) {
+        if (searchQuery.isBlank()) {
+            uiState.churches
+        } else {
+            uiState.churches.filter {
+                it.name.contains(searchQuery, ignoreCase = true) ||
+                        it.description.contains(searchQuery, ignoreCase = true)
+            }
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) { // Removed vertical padding from Column
+        Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("Churches & Groups", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             TextButton(onClick = { createChurchLauncher.launch(Intent(context, CreateChurchActivity::class.java)) }) {
                 Icon(Icons.Default.Add, contentDescription = "Create Church"); Spacer(modifier = Modifier.width(4.dp)); Text("Create")
             }
         }
+        Spacer(modifier = Modifier.height(8.dp)) // Reduced spacing
+
+        // ✨ NEW: Search Bar
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            label = { Text("Search Church or Group") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            shape = RoundedCornerShape(24.dp)
+        )
         Spacer(modifier = Modifier.height(16.dp))
+
 
         when {
             uiState.isLoading && uiState.churches.isEmpty() -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             uiState.error != null -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Error: ${uiState.error}", color = MaterialTheme.colorScheme.error) }
             uiState.churches.isEmpty() -> EmptyChurchesView { createChurchLauncher.launch(Intent(context, CreateChurchActivity::class.java)) }
+            filteredChurches.isEmpty() -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No results found for \"$searchQuery\"", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                }
+            }
             else -> {
                 SwipeRefresh(state = rememberSwipeRefreshState(isRefreshing = uiState.isLoading), onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(uiState.churches, key = { it.id }) { church ->
+                        items(filteredChurches, key = { it.id }) { church ->
                             ChurchCard(
                                 church = church,
                                 onJoinClicked = { viewModel.joinChurch(church.id) },
