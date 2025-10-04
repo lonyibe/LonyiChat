@@ -1271,4 +1271,17 @@ object ApiService {
             Result.failure(e)
         }
     }
+
+    // ADDED: Accept a friend request (By following back) // ADDED
+    suspend fun acceptFriendRequest(senderId: String): Result<Unit> { // ADDED
+        // On the backend, mutual follow implies friendship. Calling sendFriendRequest // ADDED
+        // from the recipient to the sender completes the mutual follow. // ADDED
+        return sendFriendRequest(senderId) // ADDED
+    } // ADDED
+
+    // ADDED: Delete a friend request (i.e., dismiss the notification and don't follow back) // ADDED
+    suspend fun deleteFriendRequest(notificationId: String): Result<Unit> { // ADDED
+        // This dismisses the request by marking the notification as read. // ADDED
+        return markNotificationAsRead(notificationId) // ADDED
+    } // ADDED
 }
