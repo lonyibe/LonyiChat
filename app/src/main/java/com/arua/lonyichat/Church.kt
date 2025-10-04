@@ -7,7 +7,9 @@ import kotlinx.parcelize.Parcelize
 // Represents a Church object from your backend
 @Parcelize
 data class Church(
-    @SerializedName("_id") val id: String = "",
+    // ✨ FIX: Removed the @SerializedName("_id") annotation.
+    // The server API now correctly sends "id", so we just need to match that field name.
+    val id: String = "",
     val name: String = "",
     val description: String = "",
     val createdBy: String = "",
