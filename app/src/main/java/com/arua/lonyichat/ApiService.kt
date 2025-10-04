@@ -28,19 +28,12 @@ data class UserProfileResponse(
 )
 
 // ADDED: Data classes for chat functionality
-data class Message(
-    val id: String,
-    val chatId: String,
-    val senderId: String,
-    val text: String,
-    val timestamp: Date
-)
-
 data class MessagesResponse(val success: Boolean, val messages: List<Message>)
 data class SendMessageResponse(val success: Boolean, val message: Message)
 data class CreateChatResponse(val success: Boolean, val chatId: String)
 data class SearchUsersResponse(val success: Boolean, val users: List<Profile>)
 
+// ✨ NOTE: The NotificationResponse is now correctly defined only in Notification.kt ✨
 
 object ApiService {
     private val client = OkHttpClient()
@@ -1172,6 +1165,56 @@ object ApiService {
                 }
                 gson.fromJson(responseBody, SearchUsersResponse::class.java).users
             }
+        }
+    }
+
+    // ✨ ADDED: Get notifications for the logged-in user
+    suspend fun getNotifications(): Result<List<Notification>> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val request = Request.Builder()
+                .url("$BASE_URL/notifications")
+                .addHeader("Authorization", "Bearer $token")
+                .get()
+                .build()
+
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    val responseBody = response.body?.string()
+                    if (!response.isSuccessful) {
+                        throw ApiException("Failed to fetch notifications: ${getErrorMessage(responseBody)}")
+                    }
+                    val notificationResponse = gson.fromJson(responseBody, NotificationResponse::class.java)
+                    Result.success(notificationResponse.notifications)
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // ✨ ADDED: Mark a specific notification as read
+    suspend fun markNotificationAsRead(notificationId: String): Result<Unit> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val body = "".toRequestBody(null)
+            val request = Request.Builder()
+                .url("$BASE_URL/notifications/$notificationId/read")
+                .addHeader("Authorization", "Bearer $token")
+                .post(body)
+                .build()
+
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        // Don't throw an error for this, as it's not critical if it fails
+                        println("Failed to mark notification as read: ${response.body?.string()}")
+                    }
+                    Result.success(Unit)
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 }
