@@ -1,13 +1,14 @@
 package com.arua.lonyichat.data
 
 import android.os.Parcelable
-import com.google.gson.annotations.SerializedName
+// import com.google.gson.annotations.SerializedName // REMOVED: No longer needed after fixing the field name below
 import kotlinx.parcelize.Parcelize
 import kotlinx.parcelize.RawValue
 
 @Parcelize
 data class Event(
-    @SerializedName("_id") val id: String,
+    // FIX: Removed @SerializedName("_id"). Gson will now correctly map the backend's "id" field
+    val id: String,
     val title: String,
     val description: String,
     val imageUrl: String? = null,
