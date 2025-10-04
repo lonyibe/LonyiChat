@@ -75,6 +75,39 @@ class NotificationViewModel : ViewModel() {
         job.invokeOnCompletion { actionJobs.remove(job) } // ADDED: Remove job on completion
     }
 
+    // ✨ POWER FIX: New function to mark all currently loaded unread notifications as read.
+    // This is called when the user navigates away from the notification list, ensuring server update.
+    fun markAllVisibleAsRead() {
+        val unreadIds = _uiState.value.notifications
+            .filter { !it.read }
+            .map { it.id }
+
+        if (unreadIds.isEmpty()) return
+
+        // Optimistic update of all visible notifications
+        _uiState.update { currentState ->
+            currentState.copy(
+                notifications = currentState.notifications.map {
+                    if (!it.read) it.copy(read = true) else it
+                }
+            )
+        }
+        _unreadCount.value = 0 // Reset badge immediately
+
+        // Launch API calls for each unread notification
+        val jobs = unreadIds.map { notificationId ->
+            actionScope.launch {
+                ApiService.markNotificationAsRead(notificationId).onFailure {
+                    // Log the non-critical failure
+                    println("Non-critical failure marking notification $notificationId as read: ${it.localizedMessage}")
+                }
+            }
+        }
+        actionJobs.addAll(jobs)
+        jobs.forEach { job -> job.invokeOnCompletion { actionJobs.remove(job) } }
+    }
+
+
     fun acceptFriendRequest(notificationId: String, senderId: String) {
         val job = actionScope.launch { // CHANGED: Launch job in actionScope
             val wasUnread = _uiState.value.notifications.firstOrNull { it.id == notificationId }?.read == false
@@ -129,6 +162,7 @@ class NotificationViewModel : ViewModel() {
 
     // ADDED START
     // This function blocks until all pending MarkAsRead and Accept/Delete jobs are finished.
+    // Called from NotificationsActivity.onDestroy via runBlocking.
     suspend fun awaitAllPendingActions() {
         actionJobs.joinAll()
     }
