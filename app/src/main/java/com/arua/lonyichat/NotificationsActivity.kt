@@ -40,6 +40,7 @@ import com.arua.lonyichat.ui.theme.LonyiChatTheme
 import com.arua.lonyichat.ui.viewmodel.NotificationViewModel
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
+import kotlinx.coroutines.runBlocking // ADDED: Required for lifecycle synchronization
 
 class NotificationsActivity : ComponentActivity() {
 
@@ -56,6 +57,16 @@ class NotificationsActivity : ComponentActivity() {
             }
         }
     }
+
+    // ADDED START: Ensure actions are complete before the activity finishes
+    override fun onDestroy() {
+        super.onDestroy()
+        runBlocking {
+            // Await all markAsRead and accept/delete operations launched in the ViewModel
+            viewModel.awaitAllPendingActions()
+        }
+    }
+    // ADDED END
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -113,7 +124,8 @@ fun NotificationScreen(
                                         viewModel.markAsRead(notification.id)
                                     }
                                     // TODO: Navigate to the relevant post, event, etc.
-                                }
+                                },
+                                viewModel = viewModel
                             )
                             Divider()
                         }
@@ -125,7 +137,11 @@ fun NotificationScreen(
 }
 
 @Composable
-fun NotificationItem(notification: Notification, onClick: () -> Unit) {
+fun NotificationItem(
+    notification: Notification,
+    onClick: () -> Unit,
+    viewModel: NotificationViewModel // ADDED: Accept ViewModel
+) {
     val backgroundColor = if (notification.read) {
         MaterialTheme.colorScheme.surface
     } else {
@@ -194,6 +210,26 @@ fun NotificationItem(notification: Notification, onClick: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
             }
+
+            // ADDED: Action buttons for friend requests
+            if (notification.type == "friend_request" && notification.sender?.id.isNullOrBlank().not() && !notification.read) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { notification.sender?.id?.let { viewModel.acceptFriendRequest(notification.id, it) } }, // ADDED safe call
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Text("Accept", style = MaterialTheme.typography.labelLarge)
+                    }
+                    OutlinedButton(
+                        onClick = { viewModel.deleteFriendRequest(notification.id) },
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Text("Delete", style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+            }
+            // ADDED END
         }
     }
 }
@@ -203,6 +239,7 @@ private fun getNotificationIcon(type: String): ImageVector {
         "reaction" -> Icons.Default.ThumbUp
         "comment" -> Icons.Default.Comment
         "event" -> Icons.Default.Event
+        "friend_request", "friend_accepted", "friend_deleted" -> Icons.Default.Notifications // Use a relevant icon
         else -> Icons.Default.Notifications
     }
 }
@@ -212,6 +249,7 @@ private fun getNotificationIconColor(type: String): Color {
         "reaction" -> Color(0xFF1877F2) // Blue
         "comment" -> Color(0xFF4CAF50) // Green
         "event" -> Color(0xFFE91E63) // Pink
+        "friend_request" -> Color(0xFFFF9800) // Orange
         else -> Color.Gray
     }
 }
@@ -221,7 +259,9 @@ private fun getNotificationText(type: String): String {
         "reaction" -> "reacted to your post."
         "comment" -> "commented on your post."
         "event" -> "created a new event."
+        "friend_request" -> "sent you a friend request."
+        "friend_accepted" -> "accepted your friend request."
+        "friend_deleted" -> "dismissed your friend request."
         else -> "sent you a notification."
     }
 }
-
