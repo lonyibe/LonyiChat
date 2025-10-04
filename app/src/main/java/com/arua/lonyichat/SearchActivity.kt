@@ -100,6 +100,9 @@ fun UserSearchResultItem(
     onAddFriend: () -> Unit,
     onMessage: () -> Unit
 ) {
+    val userId = userWithStatus.user.userId // ADDED: Safely get the userId
+    val isActionable = userId.isNullOrBlank().not() // ADDED: Check if userId is not null and not blank
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -138,7 +141,10 @@ fun UserSearchResultItem(
                 }
             }
             else -> {
-                Button(onClick = onAddFriend) {
+                Button(
+                    onClick = onAddFriend, // The ViewModel access now happens only if the ID is valid
+                    enabled = isActionable // ADDED: Button disabled if ID is null/blank
+                ) {
                     Text("Add Friend")
                 }
             }
