@@ -7,13 +7,12 @@ import kotlinx.parcelize.Parcelize
 // Represents a Church object from your backend
 @Parcelize
 data class Church(
-    @SerializedName("_id") val id: String = "", // FIX: Added default value for safer Parcelable init
-    val name: String = "", // FIX: Added default value
-    val description: String = "", // FIX: Added default value
-    val createdBy: String = "", // FIX: Added default value
-    val members: List<String>,
-    val followerCount: Int,
-    // ✨ ADDED: New field for the Church's profile picture URL
+    @SerializedName("_id") val id: String = "",
+    val name: String = "",
+    val description: String = "",
+    val createdBy: String = "",
+    val members: List<String> = emptyList(),
+    val followerCount: Int = 0,
     val photoUrl: String? = null
 ) : Parcelable
 

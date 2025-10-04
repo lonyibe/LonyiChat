@@ -3,6 +3,7 @@ package com.arua.lonyichat
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -64,10 +65,17 @@ class ChurchChatActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // We receive the Church object as a Parcelable
-        val church = intent.getParcelableExtra<Church>("CHURCH_EXTRA")
+        // ✨ FIX: Use the modern, type-safe method for getting Parcelable extras.
+        // This is recommended for Android 13 (API 33) and above.
+        val church: Church? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra("CHURCH_EXTRA", Church::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra("CHURCH_EXTRA")
+        }
 
-        if (church == null || church.id.isBlank()) { // FIX: Added check for null or blank ID
+        // We receive the Church object as a Parcelable
+        if (church == null || church.id.isBlank()) {
             Toast.makeText(this, "Error: Church data not found or invalid.", Toast.LENGTH_LONG).show()
             finish()
             return

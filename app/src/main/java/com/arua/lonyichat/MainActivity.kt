@@ -866,11 +866,15 @@ fun GroupsChurchScreen(viewModel: ChurchesViewModel) {
 
     var searchQuery by remember { mutableStateOf("") }
 
-    val filteredChurches = remember(uiState.churches, searchQuery) {
+    // ✨ FIX: Filter out churches with blank IDs before they are used anywhere else.
+    // This prevents the IllegalArgumentException in the LazyColumn.
+    val validChurches = uiState.churches.filter { it.id.isNotBlank() }
+
+    val filteredChurches = remember(validChurches, searchQuery) {
         if (searchQuery.isBlank()) {
-            uiState.churches
+            validChurches
         } else {
-            uiState.churches.filter {
+            validChurches.filter {
                 it.name.contains(searchQuery, ignoreCase = true) ||
                         it.description.contains(searchQuery, ignoreCase = true)
             }
@@ -910,7 +914,7 @@ fun GroupsChurchScreen(viewModel: ChurchesViewModel) {
             else -> {
                 SwipeRefresh(state = rememberSwipeRefreshState(isRefreshing = uiState.isLoading), onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(filteredChurches, key = { it.id }) { church ->
+                        items(items = filteredChurches, key = { it.id }) { church ->
                             ChurchCard(
                                 church = church,
                                 onJoinClicked = { viewModel.joinChurch(church.id) },
