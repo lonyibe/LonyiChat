@@ -334,8 +334,6 @@ object ApiService {
         }
     }
 
-    // REMOVED: suspend fun getTrendingPosts() was here
-
     suspend fun updatePost(postId: String, content: String): Result<Unit> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {
@@ -396,7 +394,10 @@ object ApiService {
                 .build()
             withContext(Dispatchers.IO) {
                 client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) throw ApiException("Failed to react to post")
+                    if (!response.isSuccessful) {
+                        val errorBody = response.body?.string()
+                        throw ApiException(getErrorMessage(errorBody))
+                    }
                 }
             }
             Result.success(Unit)
@@ -418,7 +419,8 @@ object ApiService {
             withContext(Dispatchers.IO) {
                 client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) {
-                        throw ApiException("Failed to vote on poll")
+                        val errorBody = response.body?.string()
+                        throw ApiException("Failed to vote on poll: ${getErrorMessage(errorBody)}")
                     }
                     val responseBody = response.body!!.string()
                     val pollResponse = gson.fromJson(responseBody, PollVoteResponse::class.java)
@@ -459,7 +461,7 @@ object ApiService {
     suspend fun sharePost(postId: String): Result<Unit> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {
-            val body = "".toRequestBody(JSON) // Empty body for this POST request
+            val body = "".toRequestBody(JSON)
             val request = Request.Builder()
                 .url("$BASE_URL/posts/$postId/share")
                 .addHeader("Authorization", "Bearer $token")
@@ -467,7 +469,10 @@ object ApiService {
                 .build()
             withContext(Dispatchers.IO) {
                 client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) throw ApiException("Failed to share post")
+                    if (!response.isSuccessful) {
+                        val errorBody = response.body?.string()
+                        throw ApiException("Failed to share post: ${getErrorMessage(errorBody)}")
+                    }
                 }
             }
             Result.success(Unit)
@@ -487,7 +492,8 @@ object ApiService {
             withContext(Dispatchers.IO) {
                 client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) {
-                        throw ApiException("Failed to fetch comments")
+                        val errorBody = response.body?.string()
+                        throw ApiException("Failed to fetch comments: ${getErrorMessage(errorBody)}")
                     }
                     val responseBody = response.body?.string()
                     val commentsResponse = gson.fromJson(responseBody, CommentsResponse::class.java)
@@ -826,10 +832,6 @@ object ApiService {
         }
     }
 
-    // =========================================================================================
-    // CHAT & CHURCH API METHODS (Existing)
-    // =========================================================================================
-
     suspend fun deleteChurchMessage(churchId: String, messageId: String): Result<Unit> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {
@@ -974,10 +976,6 @@ object ApiService {
         }
     }
 
-    // =========================================================================================
-    // EVENT API METHODS
-    // =========================================================================================
-
     suspend fun uploadEventPhoto(uri: Uri, context: Activity): Result<String> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
 
@@ -994,7 +992,7 @@ object ApiService {
 
                 val multipartBody = MultipartBody.Builder()
                     .setType(MultipartBody.FORM)
-                    .addFormDataPart("eventImage", "event-image.jpg", requestBody) // Match backend field name
+                    .addFormDataPart("eventImage", "event-image.jpg", requestBody)
                     .build()
 
                 val request = Request.Builder()
@@ -1028,7 +1026,7 @@ object ApiService {
                 "title" to title,
                 "description" to description,
                 "imageUrl" to imageUrl,
-                "date" to date, // Milliseconds since epoch
+                "date" to date,
                 "location" to location
             )
 
@@ -1098,10 +1096,6 @@ object ApiService {
             Result.failure(e)
         }
     }
-
-    // =========================================================================================
-    // NEW CHAT API METHODS
-    // =========================================================================================
 
     suspend fun getMessages(chatId: String): List<Message> {
         val token = getAuthToken() ?: throw ApiException("User not authenticated.")
