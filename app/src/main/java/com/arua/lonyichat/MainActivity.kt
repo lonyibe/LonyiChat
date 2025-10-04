@@ -106,7 +106,7 @@ class MainActivity : ComponentActivity() {
     private val mediaViewModel: MediaViewModel by viewModels()
     private val profileViewModel: ProfileViewModel by viewModels()
     private val eventViewModel: EventViewModel by viewModels()
-    private val notificationViewModel: NotificationViewModel by viewModels() // ADDED: Notification ViewModel
+    private val notificationViewModel: NotificationViewModel by viewModels() // ADDED
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -138,6 +138,7 @@ class MainActivity : ComponentActivity() {
             profileViewModel.fetchProfile(it)
         }
         churchesViewModel.fetchChurches()
+        notificationViewModel.fetchNotifications() // ADDED: Refresh notifications and badge count on resume
     }
 }
 
