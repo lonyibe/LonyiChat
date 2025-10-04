@@ -443,7 +443,9 @@ fun EventCard(event: Event, onDelete: (String) -> Unit) {
             title = { Text("Delete Event") },
             text = { Text("Are you sure you want to permanently delete the event '${event.title}'? This cannot be undone.") },
             confirmButton = { Button(onClick = {
-                if (event.id.isNotBlank()) { // FIX: Ensure ID is not blank before calling delete (addresses NPE)
+                // FIX: Use runCatching to safely check if event.id is present
+                // and non-blank, preventing NullPointerException on platform types.
+                if (runCatching { event.id.isNotBlank() }.getOrDefault(false)) {
                     onDelete(event.id)
                 }
                 showDeleteConfirmDialog = false
