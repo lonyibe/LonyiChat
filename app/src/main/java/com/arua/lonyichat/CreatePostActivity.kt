@@ -78,7 +78,7 @@ fun CreatePostScreen(
 ) {
     var postContent by remember { mutableStateOf("") }
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
-    var postType by remember { mutableStateOf("post") }
+    var postType by remember { mutableStateOf("text") }
     var pollOptions by remember { mutableStateOf(listOf("", "")) }
 
     val uiState by viewModel.uiState.collectAsState()
@@ -123,7 +123,7 @@ fun CreatePostScreen(
                                     if (selectedImageUri != null) {
                                         viewModel.createPhotoPost(postContent, selectedImageUri!!, context)
                                     } else {
-                                        viewModel.createPost(postContent, "post")
+                                        viewModel.createPost(postContent, "text")
                                     }
                                 }
                             }
@@ -157,10 +157,10 @@ fun CreatePostScreen(
                     IconWithLabel(
                         icon = Icons.Default.PhotoLibrary,
                         label = "Photo",
-                        isSelected = postType == "post" && selectedImageUri != null,
+                        isSelected = postType == "text" && selectedImageUri != null,
                         onClick = {
                             selectedImageUri = null
-                            postType = "post"
+                            postType = "text"
                             imagePickerLauncher.launch("image/*")
                         }
                     )
@@ -169,7 +169,7 @@ fun CreatePostScreen(
                         label = "Poll",
                         isSelected = postType == "poll",
                         onClick = {
-                            postType = if (postType == "poll") "post" else "poll"
+                            postType = if (postType == "poll") "text" else "poll"
                             selectedImageUri = null
                         }
                     )
@@ -178,7 +178,7 @@ fun CreatePostScreen(
                         label = "Prayer",
                         isSelected = postType == "prayer",
                         onClick = {
-                            postType = if (postType == "prayer") "post" else "prayer"
+                            postType = if (postType == "prayer") "text" else "prayer"
                             selectedImageUri = null
                         }
                     )

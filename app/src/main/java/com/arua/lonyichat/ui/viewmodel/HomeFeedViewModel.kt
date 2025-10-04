@@ -100,7 +100,7 @@ class HomeFeedViewModel : ViewModel() {
             ApiService.uploadPostPhoto(imageUri, activity)
                 .onSuccess { imageUrl ->
                     // FIX: This call now correctly maps imageUrl to the updated createPost signature
-                    createPost(caption, "post", imageUrl = imageUrl)
+                    createPost(caption, "photo", imageUrl = imageUrl)
                 }
                 .onFailure { error ->
                     handleUploadFailure(error)
