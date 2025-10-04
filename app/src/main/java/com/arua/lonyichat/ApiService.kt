@@ -26,6 +26,21 @@ data class UserProfileResponse(
     val posts: List<Post>
 )
 
+// ADDED: Data classes for chat functionality
+data class Message(
+    val id: String,
+    val chatId: String,
+    val senderId: String,
+    val text: String,
+    val timestamp: Date
+)
+
+data class MessagesResponse(val success: Boolean, val messages: List<Message>)
+data class SendMessageResponse(val success: Boolean, val message: Message)
+data class CreateChatResponse(val success: Boolean, val chatId: String)
+data class SearchUsersResponse(val success: Boolean, val users: List<Profile>)
+
+
 object ApiService {
     private val client = OkHttpClient()
     private val gson = Gson()
@@ -1080,6 +1095,88 @@ object ApiService {
             }
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    // =========================================================================================
+    // NEW CHAT API METHODS
+    // =========================================================================================
+
+    suspend fun getMessages(chatId: String): List<Message> {
+        val token = getAuthToken() ?: throw ApiException("User not authenticated.")
+        val request = Request.Builder()
+            .url("$BASE_URL/chats/$chatId/messages")
+            .addHeader("Authorization", "Bearer $token")
+            .build()
+
+        return withContext(Dispatchers.IO) {
+            client.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string()
+                if (!response.isSuccessful) {
+                    throw ApiException("Failed to get messages: ${getErrorMessage(responseBody)}")
+                }
+                gson.fromJson(responseBody, MessagesResponse::class.java).messages
+            }
+        }
+    }
+
+    suspend fun sendMessage(chatId: String, text: String): Message {
+        val token = getAuthToken() ?: throw ApiException("User not authenticated.")
+        val json = gson.toJson(mapOf("text" to text))
+        val body = json.toRequestBody(JSON)
+        val request = Request.Builder()
+            .url("$BASE_URL/chats/$chatId/messages")
+            .addHeader("Authorization", "Bearer $token")
+            .post(body)
+            .build()
+
+        return withContext(Dispatchers.IO) {
+            client.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string()
+                if (!response.isSuccessful) {
+                    throw ApiException("Failed to send message: ${getErrorMessage(responseBody)}")
+                }
+                gson.fromJson(responseBody, SendMessageResponse::class.java).message
+            }
+        }
+    }
+
+    suspend fun createChat(otherUserId: String): String {
+        val token = getAuthToken() ?: throw ApiException("User not authenticated.")
+        val json = gson.toJson(mapOf("otherUserId" to otherUserId))
+        val body = json.toRequestBody(JSON)
+        val request = Request.Builder()
+            .url("$BASE_URL/chats")
+            .addHeader("Authorization", "Bearer $token")
+            .post(body)
+            .build()
+
+        return withContext(Dispatchers.IO) {
+            client.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string()
+                if (!response.isSuccessful) {
+                    throw ApiException("Failed to create chat: ${getErrorMessage(responseBody)}")
+                }
+                gson.fromJson(responseBody, CreateChatResponse::class.java).chatId
+            }
+        }
+    }
+
+    suspend fun searchUsers(query: String): List<Profile> {
+        val token = getAuthToken() ?: throw ApiException("User not authenticated.")
+        val request = Request.Builder()
+            .url("$BASE_URL/users/search?q=$query")
+            .addHeader("Authorization", "Bearer $token")
+            .build()
+
+        return withContext(Dispatchers.IO) {
+            client.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string()
+                if (!response.isSuccessful) {
+                    throw ApiException("Failed to search users: ${getErrorMessage(responseBody)}")
+                }
+                gson.fromJson(responseBody, SearchUsersResponse::class.java).users
+            }
         }
     }
 }

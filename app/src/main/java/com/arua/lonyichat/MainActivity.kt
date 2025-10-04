@@ -88,7 +88,6 @@ data class UserProfileState(
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     object Home : Screen("home", "Feed", Icons.Filled.Home)
-    // UPDATED: Replaced Trending with Events
     object Events : Screen("events", "Events", Icons.Filled.Event)
     object Groups : Screen("groups", "Churches", Icons.Filled.Group)
     object Bible : Screen("bible", "Bible", Icons.Filled.Book)
@@ -103,7 +102,6 @@ class MainActivity : ComponentActivity() {
     private val bibleViewModel: BibleViewModel by viewModels()
     private val mediaViewModel: MediaViewModel by viewModels()
     private val profileViewModel: ProfileViewModel by viewModels()
-    // ADDED: EventViewModel
     private val eventViewModel: EventViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -122,7 +120,7 @@ class MainActivity : ComponentActivity() {
                         bibleViewModel,
                         mediaViewModel,
                         profileViewModel,
-                        eventViewModel // ADDED
+                        eventViewModel
                     )
                 }
             }
@@ -134,7 +132,6 @@ class MainActivity : ComponentActivity() {
         ApiService.getCurrentUserId()?.let {
             profileViewModel.fetchProfile(it)
         }
-        // Refresh the churches list when the activity is resumed
         churchesViewModel.fetchChurches()
     }
 }
@@ -147,7 +144,7 @@ fun LonyiChatApp(
     bibleViewModel: BibleViewModel,
     mediaViewModel: MediaViewModel,
     profileViewModel: ProfileViewModel,
-    eventViewModel: EventViewModel // ADDED
+    eventViewModel: EventViewModel
 ) {
     val profileUiState by profileViewModel.uiState.collectAsState()
     val profileState = UserProfileState(
@@ -156,7 +153,6 @@ fun LonyiChatApp(
         isLoading = profileUiState.isLoading
     )
     var selectedItem: Screen by remember { mutableStateOf(Screen.Home) }
-    // UPDATED: Replaced Screen.Trending with Screen.Events
     val bottomBarItems = listOf(Screen.Home, Screen.Events, Screen.Groups, Screen.Bible, Screen.Chat, Screen.Media)
     val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
@@ -209,7 +205,7 @@ fun LonyiChatApp(
                 chatListViewModel = chatListViewModel,
                 bibleViewModel = bibleViewModel,
                 mediaViewModel = mediaViewModel,
-                eventViewModel = eventViewModel // ADDED
+                eventViewModel = eventViewModel
             )
         }
     }
@@ -272,7 +268,6 @@ fun LonyiChatBottomBar(items: List<Screen>, selectedItem: Screen, onItemSelected
     }
 }
 
-// UPDATED: ScreenContent signature
 @Composable
 fun ScreenContent(
     screen: Screen,
@@ -282,14 +277,14 @@ fun ScreenContent(
     chatListViewModel: ChatListViewModel,
     bibleViewModel: BibleViewModel,
     mediaViewModel: MediaViewModel,
-    eventViewModel: EventViewModel // ADDED
+    eventViewModel: EventViewModel
 ) {
     when (screen) {
         Screen.Home -> HomeFeedScreen(profileState, homeFeedViewModel)
-        Screen.Events -> EventsScreen(eventViewModel) // UPDATED: Pointed Events to new screen
+        Screen.Events -> EventsScreen(eventViewModel)
         Screen.Groups -> GroupsChurchScreen(churchesViewModel)
         Screen.Bible -> BibleStudyScreen(bibleViewModel)
-        Screen.Chat -> ChatScreen(chatListViewModel)
+        Screen.Chat -> com.arua.lonyichat.ChatScreen(chatListViewModel) // Explicitly call the correct ChatScreen
         Screen.Media -> MediaScreen(mediaViewModel)
     }
 }
@@ -371,9 +366,6 @@ fun HomeFeedScreen(profileState: UserProfileState, viewModel: HomeFeedViewModel)
     }
 }
 
-// REMOVED: TrendingFeedScreen (replaced by EventsScreen)
-
-// NEW: EventsScreen Composable (Modified for delete support)
 @Composable
 fun EventsScreen(viewModel: EventViewModel) {
     val uiState by viewModel.uiState.collectAsState()
@@ -419,7 +411,7 @@ fun EventsScreen(viewModel: EventViewModel) {
                         items(uiState.events, key = { it.id }) { event ->
                             EventCard(
                                 event = event,
-                                onDelete = { eventId -> viewModel.deleteEvent(eventId) } // Pass delete handler
+                                onDelete = { eventId -> viewModel.deleteEvent(eventId) }
                             )
                         }
                     }
@@ -429,22 +421,18 @@ fun EventsScreen(viewModel: EventViewModel) {
     }
 }
 
-// NEW: EventCard Composable (Modified for delete button)
 @Composable
 fun EventCard(event: Event, onDelete: (String) -> Unit) {
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     val currentUserId = ApiService.getCurrentUserId()
     val isAuthor = event.createdBy == currentUserId
 
-    // --- NEW: Delete Confirmation Dialog ---
     if (showDeleteConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmDialog = false },
             title = { Text("Delete Event") },
             text = { Text("Are you sure you want to permanently delete the event '${event.title}'? This cannot be undone.") },
             confirmButton = { Button(onClick = {
-                // FIX: Use runCatching to safely check if event.id is present
-                // and non-blank, preventing NullPointerException on platform types.
                 if (runCatching { event.id.isNotBlank() }.getOrDefault(false)) {
                     onDelete(event.id)
                 }
@@ -453,11 +441,9 @@ fun EventCard(event: Event, onDelete: (String) -> Unit) {
             dismissButton = { TextButton(onClick = { showDeleteConfirmDialog = false }) { Text("Cancel") } }
         )
     }
-    // --- END Dialog ---
 
     Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(4.dp)) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // Event Image
             event.imageUrl?.let { url ->
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current).data(url).build(),
@@ -478,7 +464,6 @@ fun EventCard(event: Event, onDelete: (String) -> Unit) {
             }
 
             Column(modifier = Modifier.padding(16.dp)) {
-                // Date & Time
                 Text(
                     text = SimpleDateFormat("EEEE, MMM dd, yyyy \u2022 h:mm a", Locale.getDefault()).format(event.date.toDate()),
                     style = MaterialTheme.typography.labelLarge,
@@ -486,24 +471,19 @@ fun EventCard(event: Event, onDelete: (String) -> Unit) {
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                // Title
                 Text(event.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
                 Spacer(modifier = Modifier.height(8.dp))
-                // Location
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.LocationOn, contentDescription = "Location", modifier = Modifier.size(16.dp), tint = Color.Gray)
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(event.location, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
                 }
                 Spacer(modifier = Modifier.height(8.dp))
-                // Description
                 Text(event.description, style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
 
                 Divider(Modifier.padding(vertical = 12.dp))
 
-                // Creator Info and Delete Button Row
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    // Creator Info
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         AsyncImage(
                             model = event.authorPhotoUrl,
@@ -517,7 +497,6 @@ fun EventCard(event: Event, onDelete: (String) -> Unit) {
                         Text("Posted by ${event.authorName}", style = MaterialTheme.typography.labelMedium)
                     }
 
-                    // Delete button, only visible to the creator
                     if (isAuthor) {
                         OutlinedButton(
                             onClick = { showDeleteConfirmDialog = true },
@@ -599,7 +578,6 @@ fun PostCard(post: Post, viewModel: HomeFeedViewModel, onCommentClicked: () -> U
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(post.authorName, fontWeight = FontWeight.Bold)
-                            // UPDATED: Use relative time formatter for posts on feed/trending
                             Text(post.createdAt.toDate().toRelativeTimeString(), style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                         }
                     }
@@ -868,10 +846,8 @@ fun GroupsChurchScreen(viewModel: ChurchesViewModel) {
         }
     }
 
-    // NEW: Search State
     var searchQuery by remember { mutableStateOf("") }
 
-    // NEW: Filter the churches list based on the search query
     val filteredChurches = remember(uiState.churches, searchQuery) {
         if (searchQuery.isBlank()) {
             uiState.churches
@@ -883,16 +859,15 @@ fun GroupsChurchScreen(viewModel: ChurchesViewModel) {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) { // Removed vertical padding from Column
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("Churches & Groups", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             TextButton(onClick = { createChurchLauncher.launch(Intent(context, CreateChurchActivity::class.java)) }) {
                 Icon(Icons.Default.Add, contentDescription = "Create Church"); Spacer(modifier = Modifier.width(4.dp)); Text("Create")
             }
         }
-        Spacer(modifier = Modifier.height(8.dp)) // Reduced spacing
+        Spacer(modifier = Modifier.height(8.dp))
 
-        // NEW: Search Bar
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
@@ -955,13 +930,11 @@ fun ChurchCard(church: Church, onJoinClicked: () -> Unit, onCardClicked: () -> U
 
     Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onCardClicked), elevation = CardDefaults.cardElevation(2.dp)) {
         Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-
-            // Display Church Photo
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(church.photoUrl)
                     .crossfade(true)
-                    .placeholder(R.drawable.ic_person_placeholder) // Using placeholder for lack of church icon
+                    .placeholder(R.drawable.ic_person_placeholder)
                     .error(R.drawable.ic_person_placeholder)
                     .build(),
                 contentDescription = "Church Profile Photo",
@@ -991,60 +964,6 @@ fun ChurchCard(church: Church, onJoinClicked: () -> Unit, onCardClicked: () -> U
             }
         }
     }
-}
-
-@Composable
-fun ChatScreen(viewModel: ChatListViewModel) {
-    val uiState by viewModel.uiState.collectAsState()
-    val currentUserId = ApiService.getCurrentUserId()
-    val onRefresh = { viewModel.fetchConversations() }
-
-    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(top = 16.dp)) {
-        Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), elevation = CardDefaults.cardElevation(2.dp)) {
-            Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Find other Christians", style = MaterialTheme.typography.titleMedium)
-                Row(modifier = Modifier.clickable { Log.d(TAG, "Find Christians clicked") }, verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.PersonAdd, contentDescription = "Find Friends", tint = MaterialTheme.colorScheme.primary)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Search", color = MaterialTheme.colorScheme.primary)
-                }
-            }
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        Text("Messages", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp))
-        Divider(modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp))
-        when {
-            uiState.isLoading && uiState.conversations.isEmpty() -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            uiState.error != null -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Error: ${uiState.error}", color = MaterialTheme.colorScheme.error) }
-            else -> {
-                SwipeRefresh(state = rememberSwipeRefreshState(isRefreshing = uiState.isLoading), onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
-                    LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(uiState.conversations) { chat ->
-                            val otherParticipantId = chat.participants.firstOrNull { it != currentUserId }
-                            val chatName = chat.participantNames[otherParticipantId] ?: "Unknown User"
-                            ChatThreadItem(chatName, chat.lastMessage, chat.lastMessageTimestamp)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun ChatThreadItem(chatName: String, lastMessage: String, timestamp: Date?) {
-    Row(modifier = Modifier.fillMaxWidth().clickable { /* TODO: Navigate to conversation screen */ }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(modifier = Modifier.size(50.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer), contentAlignment = Alignment.Center) {
-            Text(chatName.firstOrNull()?.toString() ?: " ", style = MaterialTheme.typography.titleLarge)
-        }
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(chatName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-            Text(lastMessage, style = MaterialTheme.typography.bodyMedium, color = Color.Gray, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        Text(timestamp?.toFormattedString() ?: "", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-    }
-    Divider(color = Color.Gray.copy(alpha = 0.3f))
 }
 
 @Composable
@@ -1100,8 +1019,6 @@ fun MediaScreen(viewModel: MediaViewModel) {
             uiState.isLoading && uiState.mediaItems.isEmpty() -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             uiState.error != null -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Error: ${uiState.error}", color = MaterialTheme.colorScheme.error) }
             else -> {
-                // If the app can connect to the backend but there's an error, this will show the Toast from MediaViewModel
-                // Assuming the API call succeeds, it should show the list.
                 SwipeRefresh(state = rememberSwipeRefreshState(isRefreshing = uiState.isLoading), onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         items(uiState.mediaItems) { mediaItem -> MediaItemCard(mediaItem = mediaItem) }
@@ -1128,7 +1045,6 @@ fun MediaItemCard(mediaItem: MediaItem) {
     }
 }
 
-// NEW: Utility function for relative time display on posts and profile feed
 fun Date.toRelativeTimeString(): String {
     val now = System.currentTimeMillis()
     val diff = now - this.time
@@ -1142,12 +1058,10 @@ fun Date.toRelativeTimeString(): String {
         minutes < 60 -> "$minutes min ago"
         hours < 24 -> "$hours hours ago"
         days < 7 -> "$days days ago"
-        // If more than 7 days, fall back to simple date format
         else -> SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(this)
     }
 }
 
-// Retained simple time format function for chat previews
 fun Date.toFormattedString(): String {
     val simpleDateFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
     return simpleDateFormat.format(this)
