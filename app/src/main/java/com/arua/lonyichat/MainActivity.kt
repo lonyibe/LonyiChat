@@ -98,6 +98,9 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object Media : Screen("media", "Media", Icons.Filled.LiveTv)
 }
 
+// ✨ NEW: Constant for the notification ID extra key (FCM payload key)
+private const val EXTRA_NOTIFICATION_ID = "notification_id"
+
 class MainActivity : ComponentActivity() {
     private val homeFeedViewModel: HomeFeedViewModel by viewModels()
     private val churchesViewModel: ChurchesViewModel by viewModels()
@@ -130,6 +133,8 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        // ✨ POWER ADDITION 1: Handle notification intent on initial launch
+        handleNotificationIntent(intent)
     }
 
     override fun onResume() {
@@ -139,6 +144,28 @@ class MainActivity : ComponentActivity() {
         }
         churchesViewModel.fetchChurches()
         notificationViewModel.fetchNotifications() // ADDED: Refresh notifications and badge count on resume
+    }
+
+    // ✨ POWER ADDITION 2: Handle new Intents when the activity is already running (launchMode="singleTop")
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent) // Important: update the activity's intent
+        intent?.let { handleNotificationIntent(it) }
+    }
+
+    // ✨ POWER ADDITION 3: Dedicated handler for notification payloads
+    private fun handleNotificationIntent(intent: Intent) {
+        // Step 1: Extract the notification ID from the incoming intent extras
+        val notificationId = intent.getStringExtra(EXTRA_NOTIFICATION_ID)
+
+        if (!notificationId.isNullOrBlank()) {
+            // Step 2: Use the ViewModel to mark the specific notification as read on the server.
+            // This is crucial for fixing the badge counter when navigating directly from a system notification.
+            notificationViewModel.markAsRead(notificationId)
+
+            // Step 3 (Best Practice): Clear the notification ID from the intent
+            intent.removeExtra(EXTRA_NOTIFICATION_ID)
+        }
     }
 }
 
