@@ -88,7 +88,7 @@ data class UserProfileState(
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     object Home : Screen("home", "Feed", Icons.Filled.Home)
-    // ✨ UPDATED: Replaced Trending with Events
+    // UPDATED: Replaced Trending with Events
     object Events : Screen("events", "Events", Icons.Filled.Event)
     object Groups : Screen("groups", "Churches", Icons.Filled.Group)
     object Bible : Screen("bible", "Bible", Icons.Filled.Book)
@@ -103,7 +103,7 @@ class MainActivity : ComponentActivity() {
     private val bibleViewModel: BibleViewModel by viewModels()
     private val mediaViewModel: MediaViewModel by viewModels()
     private val profileViewModel: ProfileViewModel by viewModels()
-    // ✨ ADDED: EventViewModel
+    // ADDED: EventViewModel
     private val eventViewModel: EventViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -122,7 +122,7 @@ class MainActivity : ComponentActivity() {
                         bibleViewModel,
                         mediaViewModel,
                         profileViewModel,
-                        eventViewModel // ✨ ADDED
+                        eventViewModel // ADDED
                     )
                 }
             }
@@ -147,7 +147,7 @@ fun LonyiChatApp(
     bibleViewModel: BibleViewModel,
     mediaViewModel: MediaViewModel,
     profileViewModel: ProfileViewModel,
-    eventViewModel: EventViewModel // ✨ ADDED
+    eventViewModel: EventViewModel // ADDED
 ) {
     val profileUiState by profileViewModel.uiState.collectAsState()
     val profileState = UserProfileState(
@@ -156,7 +156,7 @@ fun LonyiChatApp(
         isLoading = profileUiState.isLoading
     )
     var selectedItem: Screen by remember { mutableStateOf(Screen.Home) }
-    // ✨ UPDATED: Replaced Screen.Trending with Screen.Events
+    // UPDATED: Replaced Screen.Trending with Screen.Events
     val bottomBarItems = listOf(Screen.Home, Screen.Events, Screen.Groups, Screen.Bible, Screen.Chat, Screen.Media)
     val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
@@ -209,7 +209,7 @@ fun LonyiChatApp(
                 chatListViewModel = chatListViewModel,
                 bibleViewModel = bibleViewModel,
                 mediaViewModel = mediaViewModel,
-                eventViewModel = eventViewModel // ✨ ADDED
+                eventViewModel = eventViewModel // ADDED
             )
         }
     }
@@ -272,7 +272,7 @@ fun LonyiChatBottomBar(items: List<Screen>, selectedItem: Screen, onItemSelected
     }
 }
 
-// ✨ UPDATED: ScreenContent signature
+// UPDATED: ScreenContent signature
 @Composable
 fun ScreenContent(
     screen: Screen,
@@ -282,11 +282,11 @@ fun ScreenContent(
     chatListViewModel: ChatListViewModel,
     bibleViewModel: BibleViewModel,
     mediaViewModel: MediaViewModel,
-    eventViewModel: EventViewModel // ✨ ADDED
+    eventViewModel: EventViewModel // ADDED
 ) {
     when (screen) {
         Screen.Home -> HomeFeedScreen(profileState, homeFeedViewModel)
-        Screen.Events -> EventsScreen(eventViewModel) // ✨ UPDATED: Pointed Events to new screen
+        Screen.Events -> EventsScreen(eventViewModel) // UPDATED: Pointed Events to new screen
         Screen.Groups -> GroupsChurchScreen(churchesViewModel)
         Screen.Bible -> BibleStudyScreen(bibleViewModel)
         Screen.Chat -> ChatScreen(chatListViewModel)
@@ -373,7 +373,7 @@ fun HomeFeedScreen(profileState: UserProfileState, viewModel: HomeFeedViewModel)
 
 // REMOVED: TrendingFeedScreen (replaced by EventsScreen)
 
-// ✨ NEW: EventsScreen Composable
+// NEW: EventsScreen Composable (Modified for delete support)
 @Composable
 fun EventsScreen(viewModel: EventViewModel) {
     val uiState by viewModel.uiState.collectAsState()
@@ -417,7 +417,10 @@ fun EventsScreen(viewModel: EventViewModel) {
                 SwipeRefresh(state = rememberSwipeRefreshState(isRefreshing = uiState.isLoading), onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         items(uiState.events, key = { it.id }) { event ->
-                            EventCard(event = event)
+                            EventCard(
+                                event = event,
+                                onDelete = { eventId -> viewModel.deleteEvent(eventId) } // Pass delete handler
+                            )
                         }
                     }
                 }
@@ -426,9 +429,30 @@ fun EventsScreen(viewModel: EventViewModel) {
     }
 }
 
-// ✨ NEW: EventCard Composable
+// NEW: EventCard Composable (Modified for delete button)
 @Composable
-fun EventCard(event: Event) {
+fun EventCard(event: Event, onDelete: (String) -> Unit) {
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    val currentUserId = ApiService.getCurrentUserId()
+    val isAuthor = event.createdBy == currentUserId
+
+    // --- NEW: Delete Confirmation Dialog ---
+    if (showDeleteConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = false },
+            title = { Text("Delete Event") },
+            text = { Text("Are you sure you want to permanently delete the event '${event.title}'? This cannot be undone.") },
+            confirmButton = { Button(onClick = {
+                if (event.id.isNotBlank()) { // FIX: Ensure ID is not blank before calling delete (addresses NPE)
+                    onDelete(event.id)
+                }
+                showDeleteConfirmDialog = false
+            }) { Text("Delete") } },
+            dismissButton = { TextButton(onClick = { showDeleteConfirmDialog = false }) { Text("Cancel") } }
+        )
+    }
+    // --- END Dialog ---
+
     Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(4.dp)) {
         Column(modifier = Modifier.fillMaxWidth()) {
             // Event Image
@@ -475,18 +499,36 @@ fun EventCard(event: Event) {
 
                 Divider(Modifier.padding(vertical = 12.dp))
 
-                // Creator Info
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    AsyncImage(
-                        model = event.authorPhotoUrl,
-                        contentDescription = "Event Creator",
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clip(CircleShape),
-                        contentScale = ContentScale.Crop
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Posted by ${event.authorName}", style = MaterialTheme.typography.labelMedium)
+                // Creator Info and Delete Button Row
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    // Creator Info
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AsyncImage(
+                            model = event.authorPhotoUrl,
+                            contentDescription = "Event Creator",
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Posted by ${event.authorName}", style = MaterialTheme.typography.labelMedium)
+                    }
+
+                    // Delete button, only visible to the creator
+                    if (isAuthor) {
+                        OutlinedButton(
+                            onClick = { showDeleteConfirmDialog = true },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete Event", modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Delete", style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
                 }
             }
         }
@@ -824,10 +866,10 @@ fun GroupsChurchScreen(viewModel: ChurchesViewModel) {
         }
     }
 
-    // ✨ NEW: Search State
+    // NEW: Search State
     var searchQuery by remember { mutableStateOf("") }
 
-    // ✨ NEW: Filter the churches list based on the search query
+    // NEW: Filter the churches list based on the search query
     val filteredChurches = remember(uiState.churches, searchQuery) {
         if (searchQuery.isBlank()) {
             uiState.churches
@@ -848,7 +890,7 @@ fun GroupsChurchScreen(viewModel: ChurchesViewModel) {
         }
         Spacer(modifier = Modifier.height(8.dp)) // Reduced spacing
 
-        // ✨ NEW: Search Bar
+        // NEW: Search Bar
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
@@ -1056,6 +1098,8 @@ fun MediaScreen(viewModel: MediaViewModel) {
             uiState.isLoading && uiState.mediaItems.isEmpty() -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             uiState.error != null -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Error: ${uiState.error}", color = MaterialTheme.colorScheme.error) }
             else -> {
+                // If the app can connect to the backend but there's an error, this will show the Toast from MediaViewModel
+                // Assuming the API call succeeds, it should show the list.
                 SwipeRefresh(state = rememberSwipeRefreshState(isRefreshing = uiState.isLoading), onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         items(uiState.mediaItems) { mediaItem -> MediaItemCard(mediaItem = mediaItem) }
@@ -1089,13 +1133,12 @@ fun Date.toRelativeTimeString(): String {
     val seconds = diff / 1000
     val minutes = seconds / 60
     val hours = minutes / 60
-    val days = hours / 24
+    val days = minutes / (60 * 24)
 
     return when {
         seconds < 60 -> "Just now"
         minutes < 60 -> "$minutes min ago"
-        hours < 24 && days < 1 -> "$hours hours ago"
-        days == 1L -> "1 day ago"
+        hours < 24 -> "$hours hours ago"
         days < 7 -> "$days days ago"
         // If more than 7 days, fall back to simple date format
         else -> SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(this)

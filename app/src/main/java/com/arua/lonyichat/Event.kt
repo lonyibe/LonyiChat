@@ -11,7 +11,7 @@ data class Event(
     val title: String,
     val description: String,
     val imageUrl: String? = null,
-    // FIX: Removed the incorrect @field:RawValue annotation and applied @RawValue directly to the type.
+    // FIX: Correct Parcelize usage for Timestamp
     val date: @RawValue Timestamp,
     val location: String,
     val createdBy: String,

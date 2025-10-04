@@ -48,8 +48,8 @@ object ApiService {
     data class SingleCommentResponse(val success: Boolean, val comment: Comment)
     data class PollVoteResponse(val success: Boolean, val poll: Poll)
     data class ChurchMessageReactionResponse(val success: Boolean, val message: ChurchMessage)
-    data class EventResponse(val success: Boolean, val events: List<Event>) // ✨ ADDED
-    data class SingleEventResponse(val success: Boolean, val event: Event) // ✨ ADDED
+    data class EventResponse(val success: Boolean, val events: List<Event>)
+    data class SingleEventResponse(val success: Boolean, val event: Event)
 
     private fun getErrorMessage(responseBody: String?): String {
         return try {
@@ -959,7 +959,7 @@ object ApiService {
     }
 
     // =========================================================================================
-    // ✨ NEW: EVENT API METHODS ✨
+    // EVENT API METHODS
     // =========================================================================================
 
     suspend fun uploadEventPhoto(uri: Uri, context: Activity): Result<String> {
@@ -1057,6 +1057,29 @@ object ApiService {
             }
         } catch (e: Exception) {
             return Result.failure(e)
+        }
+    }
+
+    suspend fun deleteEvent(eventId: String): Result<Unit> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val request = Request.Builder()
+                .url("$BASE_URL/events/$eventId")
+                .addHeader("Authorization", "Bearer $token")
+                .delete()
+                .build()
+
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        val errorBody = response.body?.string()
+                        throw ApiException("Failed to delete event (${response.code}): ${getErrorMessage(errorBody)}")
+                    }
+                    Result.success(Unit)
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 }

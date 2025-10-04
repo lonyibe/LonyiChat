@@ -70,6 +70,27 @@ class EventViewModel : ViewModel() {
         }
     }
 
+    fun deleteEvent(eventId: String) {
+        viewModelScope.launch {
+            val originalEvents = _uiState.value.events
+            // 1. Optimistic update: remove the event immediately from the list
+            _uiState.update { currentState ->
+                currentState.copy(events = currentState.events.filterNot { it.id == eventId })
+            }
+
+            // 2. Perform API call
+            ApiService.deleteEvent(eventId).onFailure { error ->
+                // 3. Rollback on failure
+                _uiState.update {
+                    it.copy(
+                        events = originalEvents,
+                        error = "Failed to delete event: ${error.localizedMessage}"
+                    )
+                }
+            }
+        }
+    }
+
     fun resetSuccessState() {
         _uiState.update { it.copy(createSuccess = false) }
     }

@@ -38,7 +38,7 @@ import com.arua.lonyichat.ui.viewmodel.EventViewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
-import androidx.compose.foundation.background // Added missing import
+import androidx.compose.foundation.background
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 

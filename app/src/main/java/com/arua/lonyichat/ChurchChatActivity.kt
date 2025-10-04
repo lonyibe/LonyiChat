@@ -67,8 +67,8 @@ class ChurchChatActivity : ComponentActivity() {
         // We receive the Church object as a Parcelable
         val church = intent.getParcelableExtra<Church>("CHURCH_EXTRA")
 
-        if (church == null) {
-            Toast.makeText(this, "Error: Church data not found.", Toast.LENGTH_LONG).show()
+        if (church == null || church.id.isBlank()) { // FIX: Added check for null or blank ID
+            Toast.makeText(this, "Error: Church data not found or invalid.", Toast.LENGTH_LONG).show()
             finish()
             return
         }
