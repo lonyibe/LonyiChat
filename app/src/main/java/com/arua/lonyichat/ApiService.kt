@@ -32,6 +32,9 @@ data class MessagesResponse(val success: Boolean, val messages: List<Message>)
 data class SendMessageResponse(val success: Boolean, val message: Message)
 data class CreateChatResponse(val success: Boolean, val chatId: String)
 data class SearchUsersResponse(val success: Boolean, val users: List<Profile>)
+// ADDED: Data class for friendship status
+data class FriendshipStatusResponse(val success: Boolean, val status: String)
+
 
 // ✨ NOTE: The NotificationResponse is now correctly defined only in Notification.kt ✨
 
@@ -1211,6 +1214,57 @@ object ApiService {
                         println("Failed to mark notification as read: ${response.body?.string()}")
                     }
                     Result.success(Unit)
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // ADDED: Send a friend request
+    suspend fun sendFriendRequest(userId: String): Result<Unit> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val body = "".toRequestBody(null)
+            val request = Request.Builder()
+                .url("$BASE_URL/friends/add/$userId")
+                .addHeader("Authorization", "Bearer $token")
+                .post(body)
+                .build()
+
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        val errorBody = response.body?.string()
+                        throw ApiException("Failed to send friend request: ${getErrorMessage(errorBody)}")
+                    }
+                    Result.success(Unit)
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // ADDED: Get friendship status
+    suspend fun getFriendshipStatus(userId: String): Result<FriendshipStatusResponse> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val request = Request.Builder()
+                .url("$BASE_URL/friends/status/$userId")
+                .addHeader("Authorization", "Bearer $token")
+                .get()
+                .build()
+
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        val errorBody = response.body?.string()
+                        throw ApiException("Failed to get friendship status: ${getErrorMessage(errorBody)}")
+                    }
+                    val responseBody = response.body!!.string()
+                    val friendshipStatusResponse = gson.fromJson(responseBody, FriendshipStatusResponse::class.java)
+                    Result.success(friendshipStatusResponse)
                 }
             }
         } catch (e: Exception) {
