@@ -3,6 +3,8 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("kotlin-parcelize")
+    // Plugin for Ktor's serialization library
+    id("org.jetbrains.kotlin.plugin.serialization") version "1.9.22"
 }
 
 android {
@@ -56,13 +58,16 @@ dependencies {
 
     implementation("androidx.emoji2:emoji2:1.4.0")
 
-    // OkHttp for network calls
+    // Re-added OkHttp and Gson for the existing ApiService
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-
-    // ADDED: Gson for parsing JSON from your backend
     implementation("com.google.code.gson:gson:2.10.1")
 
-    // ADDED: Coil for image loading from URLs
+    // Ktor for Networking (for the new BibleRepository)
+    implementation("io.ktor:ktor-client-android:2.3.7")
+    implementation("io.ktor:ktor-client-content-negotiation:2.3.7")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.7")
+
+    // Coil for image loading from URLs
     implementation("io.coil-kt:coil-compose:2.6.0")
 
     implementation("com.google.accompanist:accompanist-swiperefresh:0.32.0")

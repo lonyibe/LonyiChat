@@ -50,9 +50,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.Dialog
@@ -988,43 +991,160 @@ fun ChurchCard(church: Church, onJoinClicked: () -> Unit, onCardClicked: () -> U
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BibleStudyScreen(viewModel: BibleViewModel) {
     val uiState by viewModel.uiState.collectAsState()
-    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
-        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), elevation = CardDefaults.cardElevation(4.dp)) {
-            when {
-                uiState.isLoading -> Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                uiState.error != null -> Text("Error: ${uiState.error}", modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error)
-                uiState.verseOfTheDay != null -> {
-                    val verse = uiState.verseOfTheDay!!
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Daily Bread: ${verse.reference}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("\"${verse.text}\"", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = { Log.d(TAG, "Read full chapter clicked") }) { Text("Read Full Chapter") }
+    var bookSelectorOpen by remember { mutableStateOf(false) }
+    var chapterSelectorOpen by remember { mutableStateOf(false) }
+    var versionSelectorOpen by remember { mutableStateOf(false) }
+    val chapterListState = rememberLazyListState()
+
+    // Scroll to top when chapter content changes
+    LaunchedEffect(uiState.chapterContent) {
+        if (uiState.chapterContent.isNotEmpty()) {
+            chapterListState.scrollToItem(0)
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface)
+    ) {
+        // --- Top Control Bar ---
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = CardDefaults.cardElevation(4.dp),
+            shape = RoundedCornerShape(0.dp)
+        ) {
+            Column(Modifier.padding(12.dp)) {
+                // Book and Chapter Dropdowns
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Book Selector
+                    ExposedDropdownMenuBox(
+                        expanded = bookSelectorOpen,
+                        onExpandedChange = { bookSelectorOpen = !bookSelectorOpen },
+                        modifier = Modifier.weight(1.5f)
+                    ) {
+                        OutlinedTextField(
+                            value = uiState.selectedBook,
+                            onValueChange = {},
+                            readOnly = true,
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = bookSelectorOpen) },
+                            modifier = Modifier.menuAnchor(),
+                            textStyle = MaterialTheme.typography.bodyMedium
+                        )
+                        ExposedDropdownMenu(
+                            expanded = bookSelectorOpen,
+                            onDismissRequest = { bookSelectorOpen = false }
+                        ) {
+                            uiState.books.forEach { book ->
+                                DropdownMenuItem(
+                                    text = { Text(book) },
+                                    onClick = {
+                                        viewModel.selectBook(book)
+                                        bookSelectorOpen = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    // Chapter Selector (Simplified)
+                    OutlinedButton(
+                        onClick = { /* TODO: Implement a grid selector for large chapter counts */ chapterSelectorOpen = true },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Ch. ${uiState.selectedChapter}")
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                // Version Selector
+                ExposedDropdownMenuBox(
+                    expanded = versionSelectorOpen,
+                    onExpandedChange = { versionSelectorOpen = !versionSelectorOpen }
+                ) {
+                    OutlinedTextField(
+                        value = uiState.availableVersions.find { it.first == uiState.selectedVersion }?.second ?: "Select Version",
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = versionSelectorOpen) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth(),
+                        textStyle = MaterialTheme.typography.bodyMedium
+                    )
+                    ExposedDropdownMenu(
+                        expanded = versionSelectorOpen,
+                        onDismissRequest = { versionSelectorOpen = false },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        uiState.availableVersions.forEach { version ->
+                            DropdownMenuItem(
+                                text = { Text(version.second) },
+                                onClick = {
+                                    viewModel.selectVersion(version.first)
+                                    versionSelectorOpen = false
+                                }
+                            )
+                        }
                     }
                 }
             }
         }
-        Spacer(modifier = Modifier.height(24.dp))
-        Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(2.dp)) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("Your Reading Plan Progress", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Currently reading: Genesis (Day 3 of 90)", style = MaterialTheme.typography.bodyMedium)
-                Spacer(modifier = Modifier.height(4.dp))
-                LinearProgressIndicator(progress = 0.03f, modifier = Modifier.fillMaxWidth().height(8.dp).clip(MaterialTheme.shapes.small), color = MaterialTheme.colorScheme.primary)
-            }
-        }
-        Spacer(modifier = Modifier.height(24.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            Button(onClick = { Log.d(TAG, "Bible Search clicked") }, modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-                Icon(Icons.Default.Search, contentDescription = "Search", Modifier.size(20.dp)); Spacer(Modifier.width(4.dp)); Text("Search Bible")
-            }
-            Button(onClick = { Log.d(TAG, "Browse Books clicked") }, modifier = Modifier.weight(1f).padding(start = 8.dp)) {
-                Icon(Icons.Default.Timeline, contentDescription = "Books", Modifier.size(20.dp)); Spacer(Modifier.width(4.dp)); Text("Books A-Z")
+
+        // --- Content Area ---
+        Box(modifier = Modifier.fillMaxSize().weight(1f)) {
+            val chapterError = uiState.chapterError // ✨ FIX: Assign to local variable
+            when {
+                uiState.isChapterLoading -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+                chapterError != null -> { // ✨ FIX: Use local variable
+                    Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.CloudOff, contentDescription = null, modifier = Modifier.size(48.dp))
+                            Spacer(Modifier.height(16.dp))
+                            Text(chapterError, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center) // ✨ FIX: Use local variable
+                            Spacer(Modifier.height(8.dp))
+                            Button(onClick = { viewModel.selectBook(uiState.selectedBook) }) { Text("Retry") }
+                        }
+                    }
+                }
+                else -> {
+                    LazyColumn(
+                        state = chapterListState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp)
+                    ) {
+                        item {
+                            Text(
+                                uiState.chapterReference,
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(bottom = 16.dp)
+                            )
+                        }
+                        items(uiState.chapterContent, key = { it.verse }) { verse ->
+                            Text(
+                                text = buildAnnotatedString {
+                                    withStyle(style = SpanStyle(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)) {
+                                        append("${verse.verse} ")
+                                    }
+                                    append(verse.text.replace("\n", "").trim())
+                                },
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.padding(bottom = 8.dp),
+                                lineHeight = 24.sp
+                            )
+                        }
+                    }
+                }
             }
         }
     }
