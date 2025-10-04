@@ -216,6 +216,7 @@ fun LonyiChatTopBar(title: String, onProfileClicked: () -> Unit, scrollBehavior:
     val isDarkTheme = isSystemInDarkTheme()
     val view = LocalView.current
     val headerColor = if (isDarkTheme) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.primary
+    val context = LocalContext.current // Get context for launching activities
 
     if (!view.isInEditMode) {
         SideEffect {
@@ -228,6 +229,23 @@ fun LonyiChatTopBar(title: String, onProfileClicked: () -> Unit, scrollBehavior:
     TopAppBar(
         title = { Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.headlineSmall) },
         actions = {
+            // ✨ ADDED: Search Icon Button ✨
+            IconButton(onClick = {
+                Toast.makeText(context, "Search clicked", Toast.LENGTH_SHORT).show()
+                context.startActivity(Intent(context, SearchActivity::class.java))
+            }) {
+                Icon(imageVector = Icons.Default.Search, contentDescription = "Search")
+            }
+
+            // ✨ ADDED: Notifications Icon Button ✨
+            IconButton(onClick = {
+                Toast.makeText(context, "Notifications clicked", Toast.LENGTH_SHORT).show()
+                context.startActivity(Intent(context, NotificationsActivity::class.java))
+            }) {
+                Icon(imageVector = Icons.Default.Notifications, contentDescription = "Notifications")
+            }
+
+            // Existing Profile Icon Button
             IconButton(onClick = onProfileClicked) {
                 Icon(imageVector = Icons.Default.AccountCircle, contentDescription = "Profile", modifier = Modifier.size(28.dp))
             }

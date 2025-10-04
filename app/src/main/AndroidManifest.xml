@@ -17,6 +17,16 @@
         android:usesCleartextTraffic="true">
 
         <activity
+            android:name=".SearchActivity"
+            android:exported="false"
+            android:theme="@style/Theme.LonyiChat.AppCompat" />
+
+        <activity
+            android:name=".NotificationsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.LonyiChat.AppCompat" />
+
+        <activity
             android:name=".NewConversationActivity"
             android:exported="false"
             android:theme="@style/Theme.LonyiChat.AppCompat" />
