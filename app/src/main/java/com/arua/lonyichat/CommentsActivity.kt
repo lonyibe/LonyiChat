@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.arua.lonyichat.data.Comment
@@ -39,6 +40,7 @@ class CommentsActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // This enables edge-to-edge display
         enableEdgeToEdge()
 
         val postId = intent.getStringExtra("POST_ID")
@@ -49,6 +51,7 @@ class CommentsActivity : ComponentActivity() {
             return
         }
 
+        // We are letting Compose handle the insets, so no need for setDecorFitsSystemWindows here
         setContent {
             LonyiChatTheme {
                 CommentsScreen(
@@ -70,17 +73,19 @@ fun CommentsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var commentText by remember { mutableStateOf("") }
-    // ✨ ADDED: Controllers for keyboard and focus
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
 
-    // Fetch comments when the screen is first composed
     LaunchedEffect(postId) {
         viewModel.fetchComments(postId)
     }
 
     Scaffold(
-        modifier = Modifier.fillMaxSize(),
+        // ✨ FIX 1: Apply safe drawing padding to the entire scaffold.
+        // This respects the status bar and navigation bar areas.
+        modifier = Modifier
+            .fillMaxSize()
+            .safeDrawingPadding(),
         topBar = {
             TopAppBar(
                 title = { Text("Comments") },
@@ -95,23 +100,16 @@ fun CommentsScreen(
             )
         },
         bottomBar = {
+            // The bottom bar now correctly uses imePadding to move up with the keyboard.
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shadowElevation = 8.dp
             ) {
-                val textFieldColors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                )
-
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .imePadding()
-                        .padding(8.dp),
+                        .padding(8.dp)
+                        .imePadding(), // imePadding is correctly placed here
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedTextField(
@@ -119,16 +117,14 @@ fun CommentsScreen(
                         onValueChange = { commentText = it },
                         modifier = Modifier.weight(1f),
                         placeholder = { Text("Add a comment...") },
-                        colors = textFieldColors
                     )
                     IconButton(
                         onClick = {
                             if (commentText.isNotBlank()) {
                                 viewModel.addComment(postId, commentText)
-                                // ✨ THIS IS THE FIX: Hide keyboard and clear focus after sending
                                 keyboardController?.hide()
                                 focusManager.clearFocus()
-                                commentText = "" // Clear the input field
+                                commentText = ""
                             }
                         },
                         enabled = commentText.isNotBlank()
@@ -143,6 +139,8 @@ fun CommentsScreen(
             }
         }
     ) { innerPadding ->
+        // ✨ FIX 2: Use the innerPadding provided by Scaffold for the main content.
+        // This ensures the list of comments doesn't go under the top or bottom bars.
         Box(
             modifier = Modifier
                 .padding(innerPadding)
