@@ -26,9 +26,37 @@ import com.arua.lonyichat.data.Profile
 import com.arua.lonyichat.ui.theme.LonyiChatTheme
 import com.arua.lonyichat.ui.viewmodel.SearchViewModel
 import com.arua.lonyichat.ui.viewmodel.UserWithFriendshipStatus
+import android.content.Intent // ADDED
+import androidx.lifecycle.lifecycleScope // ADDED
+import com.arua.lonyichat.data.ApiService // ADDED
+import android.widget.Toast // ADDED
+import kotlinx.coroutines.launch // ADDED
 
 class SearchActivity : ComponentActivity() {
     private val viewModel: SearchViewModel by viewModels()
+
+    // ADDED START
+    private fun startChat(user: Profile, friendshipStatus: String) {
+        // Use lifecycleScope for Coroutines in Activities
+        lifecycleScope.launch {
+            try {
+                // The existing API call will create a chat if one doesn't exist, and return the ID.
+                val chatId = com.arua.lonyichat.data.ApiService.createChat(user.userId)
+                val intent = Intent(this@SearchActivity, MessageActivity::class.java).apply {
+                    putExtra("CHAT_ID", chatId)
+                    // Pass other user details for ChatScreen UI and friendship check
+                    putExtra("OTHER_USER_ID", user.userId)
+                    putExtra("FRIENDSHIP_STATUS", friendshipStatus)
+                    putExtra("OTHER_USER_NAME", user.name)
+                }
+                startActivity(intent)
+            } catch (e: Exception) {
+                // Log and show error if chat creation or navigation fails
+                Toast.makeText(this@SearchActivity, "Failed to start chat: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    // ADDED END
 
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -37,6 +65,7 @@ class SearchActivity : ComponentActivity() {
             LonyiChatTheme {
                 val uiState by viewModel.uiState.collectAsState()
                 var searchQuery by remember { mutableStateOf("") }
+                val context = LocalContext.current // ADDED
 
                 Scaffold(
                     topBar = {
@@ -81,7 +110,8 @@ class SearchActivity : ComponentActivity() {
                                         UserSearchResultItem(
                                             userWithStatus = userWithStatus,
                                             onAddFriend = { viewModel.sendFriendRequest(userWithStatus.user.userId) },
-                                            onMessage = { /* TODO: Implement messaging functionality */ }
+                                            // MODIFIED: Correctly call startChat with the required user details
+                                            onMessage = { startChat(userWithStatus.user, userWithStatus.friendshipStatus) }
                                         )
                                     }
                                 }
@@ -102,11 +132,18 @@ fun UserSearchResultItem(
 ) {
     val userId = userWithStatus.user.userId // ADDED: Safely get the userId
     val isActionable = userId.isNullOrBlank().not() // ADDED: Check if userId is not null and not blank
+    val context = LocalContext.current // ADDED: Context for navigation/Toast
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { /* TODO: Navigate to user profile */ }
+            .clickable {
+                // MODIFIED: Navigate to ProfileActivity with the correct USER_ID
+                val intent = Intent(context, ProfileActivity::class.java).apply {
+                    putExtra("USER_ID", userWithStatus.user.userId)
+                }
+                context.startActivity(intent)
+            }
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
@@ -138,6 +175,14 @@ fun UserSearchResultItem(
             "request_sent" -> {
                 OutlinedButton(onClick = {}, enabled = false) {
                     Text("Request Sent")
+                }
+            }
+            "request_received" -> { // ADDED: Respond button for incoming requests
+                Button(onClick = {
+                    val intent = Intent(context, NotificationsActivity::class.java)
+                    context.startActivity(intent)
+                }) {
+                    Text("Respond")
                 }
             }
             else -> {

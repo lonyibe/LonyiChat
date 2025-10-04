@@ -52,13 +52,21 @@ class SearchViewModel : ViewModel() {
 
     fun sendFriendRequest(userId: String) {
         viewModelScope.launch {
+            // ADDED: Find the current status of the user before sending
+            val currentStatus = _uiState.value.searchResults.find { it.user.userId == userId }?.friendshipStatus ?: "none"
+
             val result = ApiService.sendFriendRequest(userId)
             result.onSuccess {
+                // ADDED: Determine the new status based on the current status
+                // If the status was 'request_received', accepting it makes it 'friends'.
+                val newStatus = if (currentStatus == "request_received") "friends" else "request_sent"
+
                 // Update the friendship status of the user in the search results
                 _uiState.update { currentState ->
                     val updatedResults = currentState.searchResults.map { userWithStatus ->
                         if (userWithStatus.user.userId == userId) {
-                            userWithStatus.copy(friendshipStatus = "request_sent")
+                            // MODIFIED: Use the determined newStatus
+                            userWithStatus.copy(friendshipStatus = newStatus)
                         } else {
                             userWithStatus
                         }

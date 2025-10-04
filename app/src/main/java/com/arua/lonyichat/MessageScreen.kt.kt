@@ -15,16 +15,31 @@ import com.arua.lonyichat.data.ApiService
 import com.arua.lonyichat.ui.viewmodel.MessageViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.ui.text.style.TextAlign // ADDED
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MessageScreen(
     chatId: String,
     viewModel: MessageViewModel,
+    // ADDED START: Accept new parameters
+    otherUserId: String?,
+    friendshipStatus: String,
+    otherUserName: String,
+    // ADDED END
     onBackPressed: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var newMessageText by remember { mutableStateOf("") }
+    // ADDED: Check if chat functions should be enabled
+    val isChatEnabled = friendshipStatus == "friends"
+    // ADDED: Message to display if chat is disabled
+    val disabledMessage = when (friendshipStatus) {
+        "none" -> "You need to be friends with $otherUserName to chat."
+        "request_sent" -> "Friend request sent. Wait for $otherUserName to accept before chatting."
+        "request_received" -> "Accept $otherUserName's friend request in Notifications to chat."
+        else -> "Chat is disabled."
+    }
 
     LaunchedEffect(chatId) {
         viewModel.loadMessages(chatId)
@@ -33,7 +48,7 @@ fun MessageScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Chat") }, // You can enhance this with the other user's name
+                title = { Text(otherUserName) }, // MODIFIED: Use otherUserName
                 navigationIcon = {
                     IconButton(onClick = onBackPressed) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -42,27 +57,42 @@ fun MessageScreen(
             )
         },
         bottomBar = {
-            BottomAppBar {
-                Row(
+            if (isChatEnabled) { // MODIFIED: Only show input bar if chat is enabled
+                BottomAppBar {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = newMessageText,
+                            onValueChange = { newMessageText = it },
+                            modifier = Modifier.weight(1f),
+                            placeholder = { Text("Type a message...") }
+                        )
+                        IconButton(onClick = {
+                            if (newMessageText.isNotBlank()) {
+                                viewModel.sendMessage(chatId, newMessageText)
+                                newMessageText = ""
+                            }
+                        }) {
+                            Icon(Icons.Default.Send, contentDescription = "Send Message")
+                        }
+                    }
+                }
+            } else { // ADDED: Show disabled message if not friends
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    OutlinedTextField(
-                        value = newMessageText,
-                        onValueChange = { newMessageText = it },
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text("Type a message...") }
+                    Text(
+                        text = disabledMessage,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        textAlign = TextAlign.Center
                     )
-                    IconButton(onClick = {
-                        if (newMessageText.isNotBlank()) {
-                            viewModel.sendMessage(chatId, newMessageText)
-                            newMessageText = ""
-                        }
-                    }) {
-                        Icon(Icons.Default.Send, contentDescription = "Send Message")
-                    }
                 }
             }
         }

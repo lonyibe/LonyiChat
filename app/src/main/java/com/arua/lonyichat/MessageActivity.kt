@@ -14,6 +14,11 @@ class MessageActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val chatId = intent.getStringExtra("CHAT_ID")
+        // ADDED START: Extract new extras
+        val otherUserId = intent.getStringExtra("OTHER_USER_ID")
+        val friendshipStatus = intent.getStringExtra("FRIENDSHIP_STATUS") ?: "none"
+        val otherUserName = intent.getStringExtra("OTHER_USER_NAME") ?: "Chat"
+        // ADDED END
 
         if (chatId == null) {
             // Handle the error, maybe finish the activity
@@ -26,6 +31,11 @@ class MessageActivity : ComponentActivity() {
                 MessageScreen(
                     chatId = chatId,
                     viewModel = viewModel,
+                    // ADDED START: Pass new required parameters
+                    otherUserId = otherUserId,
+                    friendshipStatus = friendshipStatus,
+                    otherUserName = otherUserName,
+                    // ADDED END
                     onBackPressed = { finish() }
                 )
             }
