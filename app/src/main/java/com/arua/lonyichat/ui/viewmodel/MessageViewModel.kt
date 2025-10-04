@@ -3,7 +3,7 @@ package com.arua.lonyichat.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arua.lonyichat.data.ApiService
-import com.arua.lonyichat.data.Message
+import com.arua.lonyichat.Message
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

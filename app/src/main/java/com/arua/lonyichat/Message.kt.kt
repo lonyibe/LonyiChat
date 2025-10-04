@@ -1,4 +1,4 @@
-package com.arua.lonyichat.data
+package com.arua.lonyichat
 
 import java.util.Date
 
