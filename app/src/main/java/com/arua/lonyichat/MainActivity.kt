@@ -106,6 +106,7 @@ class MainActivity : ComponentActivity() {
     private val mediaViewModel: MediaViewModel by viewModels()
     private val profileViewModel: ProfileViewModel by viewModels()
     private val eventViewModel: EventViewModel by viewModels()
+    private val notificationViewModel: NotificationViewModel by viewModels() // ADDED: Notification ViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -123,7 +124,8 @@ class MainActivity : ComponentActivity() {
                         bibleViewModel,
                         mediaViewModel,
                         profileViewModel,
-                        eventViewModel
+                        eventViewModel,
+                        notificationViewModel // ADDED: Pass notification ViewModel
                     )
                 }
             }
@@ -147,9 +149,11 @@ fun LonyiChatApp(
     bibleViewModel: BibleViewModel,
     mediaViewModel: MediaViewModel,
     profileViewModel: ProfileViewModel,
-    eventViewModel: EventViewModel
+    eventViewModel: EventViewModel,
+    notificationViewModel: NotificationViewModel // ADDED: Accept notification ViewModel
 ) {
     val profileUiState by profileViewModel.uiState.collectAsState()
+    val unreadCount by notificationViewModel.unreadCount.collectAsState() // ADDED: Collect unread count state
     val profileState = UserProfileState(
         userName = profileUiState.profile?.name ?: "Loading...",
         photoUrl = profileUiState.profile?.photoUrl,
@@ -183,7 +187,8 @@ fun LonyiChatApp(
                     }
                     context.startActivity(intent)
                 },
-                scrollBehavior = scrollBehavior
+                scrollBehavior = scrollBehavior,
+                unreadCount = unreadCount // ADDED: Pass unread count
             )
         },
         bottomBar = {
@@ -215,7 +220,12 @@ fun LonyiChatApp(
 }
 
 @Composable
-fun LonyiChatTopBar(title: String, onProfileClicked: () -> Unit, scrollBehavior: TopAppBarScrollBehavior) {
+fun LonyiChatTopBar(
+    title: String,
+    onProfileClicked: () -> Unit,
+    scrollBehavior: TopAppBarScrollBehavior,
+    unreadCount: Int // ADDED: Accept unread count
+) {
     val isDarkTheme = isSystemInDarkTheme()
     val view = LocalView.current
     val headerColor = if (isDarkTheme) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.primary
@@ -240,13 +250,24 @@ fun LonyiChatTopBar(title: String, onProfileClicked: () -> Unit, scrollBehavior:
                 Icon(imageVector = Icons.Default.Search, contentDescription = "Search")
             }
 
-            // ✨ ADDED: Notifications Icon Button ✨
-            IconButton(onClick = {
-                Toast.makeText(context, "Notifications clicked", Toast.LENGTH_SHORT).show()
-                context.startActivity(Intent(context, NotificationsActivity::class.java))
-            }) {
-                Icon(imageVector = Icons.Default.Notifications, contentDescription = "Notifications")
-            }
+            // ✨ ADDED: Notifications Icon Button with Badge ✨
+            BadgedBox( // ADDED: Use BadgedBox to wrap the icon and badge
+                badge = {
+                    if (unreadCount > 0) {
+                        Badge(containerColor = Color.Red) { // ADDED: Red badge container
+                            // ADDED: Display count, limiting to '99+'
+                            Text(text = if (unreadCount > 99) "99+" else unreadCount.toString())
+                        }
+                    }
+                }
+            ) { // ADDED
+                IconButton(onClick = {
+                    Toast.makeText(context, "Notifications clicked", Toast.LENGTH_SHORT).show()
+                    context.startActivity(Intent(context, NotificationsActivity::class.java))
+                }) {
+                    Icon(imageVector = Icons.Default.Notifications, contentDescription = "Notifications")
+                }
+            } // ADDED
 
             // Existing Profile Icon Button
             IconButton(onClick = onProfileClicked) {
@@ -1213,6 +1234,6 @@ fun Date.toFormattedString(): String {
 @Composable
 fun LonyiChatPreview() {
     LonyiChatTheme {
-        LonyiChatApp(HomeFeedViewModel(), ChurchesViewModel(), ChatListViewModel(), BibleViewModel(), MediaViewModel(), ProfileViewModel(), EventViewModel())
+        LonyiChatApp(HomeFeedViewModel(), ChurchesViewModel(), ChatListViewModel(), BibleViewModel(), MediaViewModel(), ProfileViewModel(), EventViewModel(), NotificationViewModel())
     }
 }
