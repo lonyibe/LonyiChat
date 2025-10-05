@@ -18,7 +18,6 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -32,9 +31,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.VerticalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -67,7 +71,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Popup
 import androidx.core.view.WindowCompat
-import androidx.media3.common.MediaItem as Media3MediaItem
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
@@ -75,10 +79,6 @@ import coil.request.ImageRequest
 import com.arua.lonyichat.data.*
 import com.arua.lonyichat.ui.theme.LonyiChatTheme
 import com.arua.lonyichat.ui.viewmodel.*
-import com.google.accompanist.pager.ExperimentalPagerApi
-import com.google.accompanist.pager.HorizontalPager
-import com.google.accompanist.pager.VerticalPager // ADDED: Import for vertical feed
-import com.google.accompanist.pager.rememberPagerState
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import kotlinx.coroutines.delay
@@ -94,24 +94,23 @@ val LonyiReactions = listOf(
     // ... (rest of LonyiReactions)
 )
 
-private const val TAG = "MainActivity"
-
 data class UserProfileState(
     val userName: String = "Loading...",
     val photoUrl: String? = null,
     val isLoading: Boolean = true
 )
 
-sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
-    object Home : Screen("home", "Feed", Icons.Filled.Home)
-    object Events : Screen("events", "Events", Icons.Filled.Event)
-    object Groups : Screen("groups", "Churches", Icons.Filled.Group)
-    object Bible : Screen("bible", "Bible", Icons.Filled.Book)
-    object Chat : Screen("chat", "Chat", Icons.Filled.Message)
-    object Media : Screen("media", "Media", Icons.Filled.LiveTv)
+// ✨ FIX: Removed unused 'route' property
+sealed class Screen(val title: String, val icon: ImageVector) {
+    object Home : Screen("Feed", Icons.Filled.Home)
+    object Events : Screen("Events", Icons.Filled.Event)
+    object Groups : Screen("Churches", Icons.Filled.Group)
+    object Bible : Screen("Bible", Icons.Filled.Book)
+    // ✨ FIX: Used AutoMirrored icon for better RTL support
+    object Chat : Screen("Chat", Icons.AutoMirrored.Filled.Message)
+    object Media : Screen("Media", Icons.Filled.LiveTv)
 }
 
-// ✨ NEW: Constant for the notification ID extra key (FCM payload key)
 private const val EXTRA_NOTIFICATION_ID = "notification_id"
 
 class MainActivity : ComponentActivity() {
@@ -122,7 +121,7 @@ class MainActivity : ComponentActivity() {
     private val mediaViewModel: MediaViewModel by viewModels()
     private val profileViewModel: ProfileViewModel by viewModels()
     private val eventViewModel: EventViewModel by viewModels()
-    private val notificationViewModel: NotificationViewModel by viewModels() // ADDED
+    private val notificationViewModel: NotificationViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -141,12 +140,11 @@ class MainActivity : ComponentActivity() {
                         mediaViewModel,
                         profileViewModel,
                         eventViewModel,
-                        notificationViewModel // ADDED: Pass notification ViewModel
+                        notificationViewModel
                     )
                 }
             }
         }
-        // ✨ POWER ADDITION 1: Handle notification intent on initial launch
         handleNotificationIntent(intent)
     }
 
@@ -156,33 +154,24 @@ class MainActivity : ComponentActivity() {
             profileViewModel.fetchProfile(it)
         }
         churchesViewModel.fetchChurches()
-        notificationViewModel.fetchNotifications() // ADDED: Refresh notifications and badge count on resume
+        notificationViewModel.fetchNotifications()
     }
 
-    // ✨ POWER ADDITION 2: Handle new Intents when the activity is already running (launchMode="singleTop")
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
-        setIntent(intent) // Important: update the activity's intent
+        setIntent(intent)
         intent?.let { handleNotificationIntent(it) }
     }
 
-    // ✨ POWER ADDITION 3: Dedicated handler for notification payloads
     private fun handleNotificationIntent(intent: Intent) {
-        // Step 1: Extract the notification ID from the incoming intent extras
         val notificationId = intent.getStringExtra(EXTRA_NOTIFICATION_ID)
-
         if (!notificationId.isNullOrBlank()) {
-            // Step 2: Use the ViewModel to mark the specific notification as read on the server.
-            // This is crucial for fixing the badge counter when navigating directly from a system notification.
             notificationViewModel.markAsRead(notificationId)
-
-            // Step 3 (Best Practice): Clear the notification ID from the intent
             intent.removeExtra(EXTRA_NOTIFICATION_ID)
         }
     }
 }
 
-@OptIn(ExperimentalPagerApi::class)
 @Composable
 fun LonyiChatApp(
     homeFeedViewModel: HomeFeedViewModel,
@@ -192,10 +181,10 @@ fun LonyiChatApp(
     mediaViewModel: MediaViewModel,
     profileViewModel: ProfileViewModel,
     eventViewModel: EventViewModel,
-    notificationViewModel: NotificationViewModel // ADDED: Accept notification ViewModel
+    notificationViewModel: NotificationViewModel
 ) {
     val profileUiState by profileViewModel.uiState.collectAsState()
-    val unreadCount by notificationViewModel.unreadCount.collectAsState() // ADDED: Collect unread count state
+    val unreadCount by notificationViewModel.unreadCount.collectAsState()
     val profileState = UserProfileState(
         userName = profileUiState.profile?.name ?: "Loading...",
         photoUrl = profileUiState.profile?.photoUrl,
@@ -206,11 +195,10 @@ fun LonyiChatApp(
     val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
 
-    // Hoisted state for MediaScreen
-    val pagerState = rememberPagerState()
+    // ✨ FIX: Migrated to Foundation Pager. 'pageCount' is now a required lambda.
+    val pagerState = rememberPagerState(pageCount = { 2 })
     val scope = rememberCoroutineScope()
 
-    // Launcher for CreateMediaActivity
     val createMediaLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -218,7 +206,6 @@ fun LonyiChatApp(
             mediaViewModel.fetchMedia()
         }
     }
-
 
     LaunchedEffect(ApiService.getCurrentUserId()) {
         if (ApiService.getCurrentUserId() == null) {
@@ -282,7 +269,7 @@ fun LonyiChatApp(
                     onClick = {
                         createMediaLauncher.launch(Intent(context, CreateMediaActivity::class.java))
                     },
-                    containerColor = MaterialTheme.colorScheme.primary // ✨ MODIFIED: Themed color
+                    containerColor = MaterialTheme.colorScheme.primary
                 ) {
                     Icon(Icons.Default.Videocam, contentDescription = "Upload Video")
                 }
@@ -309,17 +296,18 @@ fun LonyiChatApp(
     }
 }
 
+@Suppress("DEPRECATION") // ✨ FIX: Suppress deprecation for statusBarColor as its usage is intentional here.
 @Composable
 fun LonyiChatTopBar(
     title: String,
     onProfileClicked: () -> Unit,
     scrollBehavior: TopAppBarScrollBehavior,
-    unreadCount: Int // ADDED: Accept unread count
+    unreadCount: Int
 ) {
     val isDarkTheme = isSystemInDarkTheme()
     val view = LocalView.current
     val headerColor = if (isDarkTheme) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.primary
-    val context = LocalContext.current // Get context for launching activities
+    val context = LocalContext.current
 
     if (!view.isInEditMode) {
         SideEffect {
@@ -332,34 +320,28 @@ fun LonyiChatTopBar(
     TopAppBar(
         title = { Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.headlineSmall) },
         actions = {
-            // ✨ ADDED: Search Icon Button ✨
             IconButton(onClick = {
-                Toast.makeText(context, "Search clicked", Toast.LENGTH_SHORT).show()
                 context.startActivity(Intent(context, SearchActivity::class.java))
             }) {
                 Icon(imageVector = Icons.Default.Search, contentDescription = "Search")
             }
 
-            // ✨ ADDED: Notifications Icon Button with Badge ✨
-            BadgedBox( // ADDED: Use BadgedBox to wrap the icon and badge
+            BadgedBox(
                 badge = {
                     if (unreadCount > 0) {
-                        Badge(containerColor = Color.Red) { // ADDED: Red badge container
-                            // ADDED: Display count, limiting to '99+'
+                        Badge(containerColor = Color.Red) {
                             Text(text = if (unreadCount > 99) "99+" else unreadCount.toString())
                         }
                     }
                 }
-            ) { // ADDED
+            ) {
                 IconButton(onClick = {
-                    Toast.makeText(context, "Notifications clicked", Toast.LENGTH_SHORT).show()
                     context.startActivity(Intent(context, NotificationsActivity::class.java))
                 }) {
                     Icon(imageVector = Icons.Default.Notifications, contentDescription = "Notifications")
                 }
-            } // ADDED
+            }
 
-            // Existing Profile Icon Button
             IconButton(onClick = onProfileClicked) {
                 Icon(imageVector = Icons.Default.AccountCircle, contentDescription = "Profile", modifier = Modifier.size(28.dp))
             }
@@ -400,7 +382,6 @@ fun LonyiChatBottomBar(items: List<Screen>, selectedItem: Screen, onItemSelected
     }
 }
 
-@OptIn(ExperimentalPagerApi::class)
 @Composable
 fun ScreenContent(
     screen: Screen,
@@ -411,14 +392,14 @@ fun ScreenContent(
     bibleViewModel: BibleViewModel,
     mediaViewModel: MediaViewModel,
     eventViewModel: EventViewModel,
-    pagerState: com.google.accompanist.pager.PagerState
+    pagerState: PagerState // ✨ FIX: Updated type to Foundation PagerState
 ) {
     when (screen) {
         Screen.Home -> HomeFeedScreen(profileState, homeFeedViewModel)
         Screen.Events -> EventsScreen(eventViewModel)
         Screen.Groups -> GroupsChurchScreen(churchesViewModel)
         Screen.Bible -> BibleStudyScreen(bibleViewModel)
-        Screen.Chat -> com.arua.lonyichat.ChatScreen(chatListViewModel) // Explicitly call the correct ChatScreen
+        Screen.Chat -> com.arua.lonyichat.ChatScreen(chatListViewModel)
         Screen.Media -> MediaScreen(mediaViewModel, pagerState)
     }
 }
@@ -982,8 +963,6 @@ fun GroupsChurchScreen(viewModel: ChurchesViewModel) {
 
     var searchQuery by remember { mutableStateOf("") }
 
-    // ✨ FIX: Filter out churches with blank IDs before they are used anywhere else.
-    // This prevents the IllegalArgumentException in the LazyColumn.
     val validChurches = uiState.churches.filter { it.id.isNotBlank() }
 
     val filteredChurches = remember(validChurches, searchQuery) {
@@ -1113,7 +1092,6 @@ fun BibleStudyScreen(viewModel: BibleViewModel) {
     var versionSelectorOpen by remember { mutableStateOf(false) }
     val chapterListState = rememberLazyListState()
 
-    // Scroll to top when chapter content changes
     LaunchedEffect(uiState.chapterContent) {
         if (uiState.chapterContent.isNotEmpty()) {
             chapterListState.scrollToItem(0)
@@ -1125,20 +1103,17 @@ fun BibleStudyScreen(viewModel: BibleViewModel) {
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.surface)
     ) {
-        // --- Top Control Bar ---
         Card(
             modifier = Modifier.fillMaxWidth(),
             elevation = CardDefaults.cardElevation(4.dp),
             shape = RoundedCornerShape(0.dp)
         ) {
             Column(Modifier.padding(12.dp)) {
-                // Book and Chapter Dropdowns
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Book Selector
                     ExposedDropdownMenuBox(
                         expanded = bookSelectorOpen,
                         onExpandedChange = { bookSelectorOpen = !bookSelectorOpen },
@@ -1168,16 +1143,14 @@ fun BibleStudyScreen(viewModel: BibleViewModel) {
                         }
                     }
 
-                    // Chapter Selector (Simplified)
                     OutlinedButton(
-                        onClick = { /* TODO: Implement a grid selector for large chapter counts */ chapterSelectorOpen = true },
+                        onClick = { chapterSelectorOpen = true },
                         modifier = Modifier.weight(1f)
                     ) {
                         Text("Ch. ${uiState.selectedChapter}")
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                // Version Selector
                 ExposedDropdownMenuBox(
                     expanded = versionSelectorOpen,
                     onExpandedChange = { versionSelectorOpen = !versionSelectorOpen }
@@ -1209,21 +1182,20 @@ fun BibleStudyScreen(viewModel: BibleViewModel) {
             }
         }
 
-        // --- Content Area ---
         Box(modifier = Modifier.fillMaxSize().weight(1f)) {
-            val chapterError = uiState.chapterError // ✨ FIX: Assign to local variable
+            val chapterError = uiState.chapterError
             when {
                 uiState.isChapterLoading -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
                     }
                 }
-                chapterError != null -> { // ✨ FIX: Use local variable
+                chapterError != null -> {
                     Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(Icons.Default.CloudOff, contentDescription = null, modifier = Modifier.size(48.dp))
                             Spacer(Modifier.height(16.dp))
-                            Text(chapterError, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center) // ✨ FIX: Use local variable
+                            Text(chapterError, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
                             Spacer(Modifier.height(8.dp))
                             Button(onClick = { viewModel.selectBook(uiState.selectedBook) }) { Text("Retry") }
                         }
@@ -1263,15 +1235,13 @@ fun BibleStudyScreen(viewModel: BibleViewModel) {
     }
 }
 
-@OptIn(ExperimentalPagerApi::class)
 @Composable
 fun MediaScreen(
     viewModel: MediaViewModel,
-    pagerState: com.google.accompanist.pager.PagerState
+    pagerState: PagerState // ✨ FIX: Updated type
 ) {
     HorizontalPager(
-        count = 2,
-        state = pagerState,
+        state = pagerState, // ✨ FIX: 'pageCount' is now in the state
         modifier = Modifier.fillMaxSize()
     ) { page ->
         when (page) {
@@ -1281,21 +1251,16 @@ fun MediaScreen(
     }
 }
 
-@OptIn(ExperimentalPagerApi::class)
 @Composable
 fun ChurchVibesScreen(viewModel: MediaViewModel) {
     val uiState by viewModel.uiState.collectAsState()
-    // Filter to only include video media
     val mediaItems = remember(uiState.mediaItems) {
         uiState.mediaItems.filter { it.mediaType == "video" }
     }
-    val pagerState = rememberPagerState()
-    val scope = rememberCoroutineScope()
-
-    // ✨ ADDED: Get the PlayerManager instance from the ViewModel
+    // ✨ FIX: Migrated to Foundation Pager. 'pageCount' is now a required lambda.
+    val pagerState = rememberPagerState(pageCount = { mediaItems.size })
     val playerManager = viewModel.getPlayerManager()
 
-    // ✨ ADDED: Logic to control playback based on scroll state for seamless experience
     LaunchedEffect(pagerState.currentPage, mediaItems.size) {
         if (mediaItems.isNotEmpty()) {
             playerManager.updatePlayers(pagerState.currentPage, mediaItems.size)
@@ -1313,52 +1278,23 @@ fun ChurchVibesScreen(viewModel: MediaViewModel) {
                     Text("Error loading media: ${uiState.error}", color = MaterialTheme.colorScheme.error)
                 }
             }
-            mediaItems.isEmpty() -> {
+            mediaItems.isEmpty() && !uiState.isLoading -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("No vibes yet. Be the first to upload!", style = MaterialTheme.typography.titleMedium)
                 }
             }
             else -> {
-                // ✨ MODIFIED: Wrap VerticalPager in a Box with pointerInput for sensitivity
-                Box(modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(Unit) {
-                        detectDragGestures { change, dragAmount ->
-                            change.consume()
-                            val (_, y) = dragAmount
-                            if (y > 2) { // Swiping down
-                                scope.launch {
-                                    pagerState.animateScrollToPage(
-                                        (pagerState.currentPage - 1).coerceAtLeast(
-                                            0
-                                        ),
-                                        animationSpec = tween(durationMillis = 300)
-                                    )
-                                }
-                            } else if (y < -2) { // Swiping up
-                                scope.launch {
-                                    pagerState.animateScrollToPage(
-                                        (pagerState.currentPage + 1).coerceAtMost(
-                                            mediaItems.size - 1
-                                        ),
-                                        animationSpec = tween(durationMillis = 300)
-                                    )
-                                }
-                            }
-                        }
-                    }) {
-                    VerticalPager(
-                        count = mediaItems.size,
-                        state = pagerState,
-                        modifier = Modifier.fillMaxSize()
-                    ) { page ->
-                        // ✨ MODIFIED: Pass the player directly from the PlayerManager
-                        VideoPlayerItem(
-                            player = playerManager.getPlayer(page, mediaItems[page]),
-                            mediaItem = mediaItems[page],
-                            viewModel = viewModel
-                        )
-                    }
+                // ✨ FIX: Removed the custom pointerInput. The default fling behavior of the
+                // new Foundation Pager is smooth and fluid.
+                VerticalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize()
+                ) { page ->
+                    VideoPlayerItem(
+                        player = playerManager.getPlayer(page, mediaItems[page]),
+                        mediaItem = mediaItems[page],
+                        viewModel = viewModel
+                    )
                 }
             }
         }
@@ -1366,6 +1302,7 @@ fun ChurchVibesScreen(viewModel: MediaViewModel) {
 }
 
 
+@OptIn(UnstableApi::class) // ✨ FIX: Add OptIn for Unstable Media3 API usage
 @Composable
 fun VideoPlayerItem(
     player: ExoPlayer,
@@ -1373,15 +1310,12 @@ fun VideoPlayerItem(
     viewModel: MediaViewModel
 ) {
     val context = LocalContext.current
-    // State to manage the visibility of our custom play/pause indicator
     var showIndicator by remember { mutableStateOf(false) }
-    // Remember the player's playing state, which will recompose the icon
     val isPlaying by remember { derivedStateOf { player.isPlaying } }
 
-    // This effect will automatically hide the indicator after a short delay
     LaunchedEffect(showIndicator) {
         if (showIndicator) {
-            delay(800) // Keep indicator on screen for 800ms
+            delay(800)
             showIndicator = false
         }
     }
@@ -1394,9 +1328,7 @@ fun VideoPlayerItem(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
             ) {
-                // Toggle player state
                 player.playWhenReady = !player.playWhenReady
-                // Show our custom indicator for feedback
                 showIndicator = true
             }
     ) {
@@ -1404,7 +1336,6 @@ fun VideoPlayerItem(
             factory = { ctx ->
                 PlayerView(ctx).apply {
                     this.player = player
-                    // MODIFICATION: Disable the default controller
                     useController = false
                     setBackgroundColor(android.graphics.Color.BLACK)
                 }
@@ -1412,7 +1343,6 @@ fun VideoPlayerItem(
             modifier = Modifier.fillMaxSize()
         )
 
-        // Custom animated play/pause indicator
         AnimatedVisibility(
             visible = showIndicator,
             enter = fadeIn(),
@@ -1427,14 +1357,12 @@ fun VideoPlayerItem(
             )
         }
 
-
-        // ✨ MODIFIED: Side Action Buttons layout
         Column(
             modifier = Modifier
-                .align(Alignment.BottomEnd) // Align to bottom end
-                .padding(end = 16.dp, bottom = 80.dp), // Adjust padding
+                .align(Alignment.BottomEnd)
+                .padding(end = 16.dp, bottom = 80.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(20.dp) // Reduced spacing
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             VideoActionButton(
                 icon = if (mediaItem.isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
@@ -1447,10 +1375,6 @@ fun VideoPlayerItem(
                 text = mediaItem.comments.toString(),
                 onClick = {
                     Toast.makeText(context, "Comments for media coming soon!", Toast.LENGTH_SHORT).show()
-                    // TODO: When backend is ready, navigate to a CommentsActivity for media
-                    // val intent = Intent(context, CommentsActivity::class.java)
-                    // intent.putExtra("MEDIA_ID", mediaItem.id)
-                    // context.startActivity(intent)
                 }
             )
             VideoActionButton(
@@ -1465,7 +1389,6 @@ fun VideoPlayerItem(
             )
         }
 
-        // Video Info at the bottom
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
