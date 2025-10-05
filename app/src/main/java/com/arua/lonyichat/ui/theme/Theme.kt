@@ -60,7 +60,17 @@ fun LonyiChatTheme(
             val window = (view.context as Activity).window
             // Use the surface color for the status bar for a seamless header
             window.statusBarColor = colorScheme.surface.toArgb()
+
+            // ADDED START: Fix for System Navigation Bar Inconsistency
+            // Set Navigation Bar color to match the general background (LonyiDarkBackground)
+            window.navigationBarColor = colorScheme.background.toArgb()
+
+            // Set status bar icons appearance (light icons for dark theme, dark icons for light theme)
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+
+            // Set navigation bar icons appearance (light icons for dark theme, dark icons for light theme)
+            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !darkTheme
+            // ADDED END
         }
     }
 
