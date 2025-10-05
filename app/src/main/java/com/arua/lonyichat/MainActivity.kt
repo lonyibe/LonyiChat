@@ -1343,8 +1343,9 @@ fun VideoPlayerItem(player: ExoPlayer, mediaItem: com.arua.lonyichat.data.MediaI
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
-                    this.player = player // ✨ MODIFIED: Use the passed player
-                    useController = true // Shows the default controls (Play/Pause/Seek)
+                    this.player = player
+                    useController = true
+                    controllerAutoShow = false // THIS IS THE FIX
 
                     // Hides all other unnecessary UI elements to simplify the experience
                     setShowNextButton(false)
