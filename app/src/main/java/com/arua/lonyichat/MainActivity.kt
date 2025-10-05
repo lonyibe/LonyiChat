@@ -1257,20 +1257,14 @@ fun ChurchVibesScreen(viewModel: MediaViewModel) {
     val mediaItems = remember(uiState.mediaItems) {
         uiState.mediaItems.filter { it.mediaType == "video" }
     }
-    // ✨ FIX: Migrated to Foundation Pager. 'pageCount' is now a required lambda.
     val pagerState = rememberPagerState(pageCount = { mediaItems.size })
     val playerManager = viewModel.getPlayerManager()
 
-    // This is the core of the fix. The LaunchedEffect now also observes the mediaItems list.
-    // This ensures that when a new video is added, the player manager is correctly updated.
     LaunchedEffect(pagerState.currentPage, mediaItems) {
         if (mediaItems.isNotEmpty()) {
-            // We now pass the entire list of media items to the player manager.
-            // This allows it to use the stable, unique ID of each video instead of its unstable position.
             playerManager.updatePlayers(pagerState.currentPage, mediaItems)
         }
     }
-
 
     SwipeRefresh(
         state = rememberSwipeRefreshState(isRefreshing = uiState.isLoading),
@@ -1289,14 +1283,12 @@ fun ChurchVibesScreen(viewModel: MediaViewModel) {
                 }
             }
             else -> {
-                // ✨ FIX: Removed the custom pointerInput. The default fling behavior of the
-                // new Foundation Pager is smooth and fluid.
                 VerticalPager(
                     state = pagerState,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    // This key is crucial. It tells Compose that each video is a distinct entity.
+                    key = { index -> mediaItems[index].id }
                 ) { page ->
-                    // The player is now retrieved using the stable MediaItem object,
-                    // which contains the unique ID. This is the second part of the fix.
                     VideoPlayerItem(
                         player = playerManager.getPlayer(mediaItems[page]),
                         mediaItem = mediaItems[page],
@@ -1309,7 +1301,7 @@ fun ChurchVibesScreen(viewModel: MediaViewModel) {
 }
 
 
-@OptIn(UnstableApi::class) // ✨ FIX: Add OptIn for Unstable Media3 API usage
+@OptIn(UnstableApi::class)
 @Composable
 fun VideoPlayerItem(
     player: ExoPlayer,
@@ -1346,6 +1338,10 @@ fun VideoPlayerItem(
                     useController = false
                     setBackgroundColor(android.graphics.Color.BLACK)
                 }
+            },
+            // This update block ensures the PlayerView always has the correct player instance.
+            update = { view ->
+                view.player = player
             },
             modifier = Modifier.fillMaxSize()
         )
