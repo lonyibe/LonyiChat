@@ -178,10 +178,7 @@ fun UserSearchResultItem(
                 }
             }
             "request_received" -> { // ADDED: Respond button for incoming requests
-                Button(onClick = {
-                    val intent = Intent(context, NotificationsActivity::class.java)
-                    context.startActivity(intent)
-                }) {
+                Button(onClick = onAddFriend) { // MODIFIED: Call onAddFriend to trigger mutual follow/accept
                     Text("Respond")
                 }
             }
