@@ -1267,7 +1267,7 @@ fun MediaScreen(viewModel: MediaViewModel) {
 
 // NEW HELPER: Vertical button for modern short-form video UI
 @Composable
-fun VerticalActionButton(icon: ImageVector, text: String, count: Int, onClick: () -> Unit) {
+fun VerticalActionButton(icon: ImageVector, text: String, count: Int, tint: Color = Color.White, onClick: () -> Unit) { // MODIFIED: Added tint parameter
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
@@ -1277,16 +1277,23 @@ fun VerticalActionButton(icon: ImageVector, text: String, count: Int, onClick: (
         Icon(
             imageVector = icon,
             contentDescription = text,
-            tint = Color.White,
+            tint = tint, // MODIFIED: Use tint parameter
             modifier = Modifier.size(36.dp)
         )
         Spacer(Modifier.height(4.dp))
         Text(
-            text = if (count > 0) count.toString() else text,
+            text = if (count > 0) formatCount(count) else text, // MODIFIED: Use formatCount
             color = Color.White,
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.labelSmall
         )
+    }
+}
+// NEW HELPER: For formatting large numbers (e.g., 12000 -> 12K)
+fun formatCount(count: Int): String {
+    return when {
+        count >= 1000 -> String.format(Locale.getDefault(), "%.1fK", count / 1000.0)
+        else -> count.toString()
     }
 }
 
@@ -1294,11 +1301,10 @@ fun VerticalActionButton(icon: ImageVector, text: String, count: Int, onClick: (
 @Composable
 fun ChurchVibesScreen(viewModel: MediaViewModel) {
     val uiState by viewModel.uiState.collectAsState()
-    // Filter videos and audios, as VideoPlayerItem currently only handles videos
+    // Filter to only include video media
     val mediaItems = remember(uiState.mediaItems) {
-        uiState.mediaItems.filter { it.mediaType == "video" || it.mediaType == "audio" }
+        uiState.mediaItems.filter { it.mediaType == "video" }
     }
-    // Correctly initialize state for VerticalPager
     val pagerState = rememberPagerState()
 
     SwipeRefresh(
@@ -1318,26 +1324,14 @@ fun ChurchVibesScreen(viewModel: MediaViewModel) {
                 }
             }
             else -> {
-                // MODIFIED: Changed to VerticalPager for a modern, swipe-up short-form video feed experience.
+                // MODIFIED: Retained VerticalPager (correctly) for a modern, swipe-up short-form video feed experience.
                 // FIX: Removed the invalid 'verticalAlignment' parameter.
                 VerticalPager(
                     count = mediaItems.size,
                     state = pagerState,
                     modifier = Modifier.fillMaxSize()
                 ) { page ->
-                    // Only display video player for video types
-                    val mediaItem = mediaItems[page]
-                    if (mediaItem.mediaType == "video") {
-                        VideoPlayerItem(mediaItem = mediaItem)
-                    } else {
-                        // Placeholder for non-video files
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(
-                                "Audio Content: ${mediaItem.title}",
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
+                    VideoPlayerItem(mediaItem = mediaItems[page], viewModel = viewModel) // MODIFIED: Pass ViewModel
                 }
             }
         }
@@ -1347,11 +1341,12 @@ fun ChurchVibesScreen(viewModel: MediaViewModel) {
 
 // Replace VideoPlayerItem implementation
 @Composable
-fun VideoPlayerItem(mediaItem: com.arua.lonyichat.data.MediaItem) {
+fun VideoPlayerItem(mediaItem: com.arua.lonyichat.data.MediaItem, viewModel: MediaViewModel) { // MODIFIED: Accept ViewModel
     val context = LocalContext.current
     val exoPlayer = remember { ExoPlayer.Builder(context).build() }
     val mediaSource = remember(mediaItem.url) {
-        Media3MediaItem.fromUri(mediaItem.url)
+        // Use the streaming route for videos
+        Media3MediaItem.fromUri("${ApiService.BASE_URL}/uploads/videos/${mediaItem.url.split("/").last()}")
     }
 
     DisposableEffect(key1 = mediaItem.url) {
@@ -1369,80 +1364,27 @@ fun VideoPlayerItem(mediaItem: com.arua.lonyichat.data.MediaItem) {
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // 1. Video Player View (The background content)
+        // 1. Video Player View (The core content - only controls play/pause/seek)
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
                     player = exoPlayer
-                    useController = true // Show controls
+                    useController = true // Shows the default controls (Play/Pause/Seek)
+                    // Hides all other unnecessary UI elements to simplify the experience
+                    setShowNextButton(false)
+                    setShowPreviousButton(false)
+                    setShowFastForwardButton(false)
+                    setShowRewindButton(false)
                     // Set the PlayerView's background to Black to ensure seamless look
                     setBackgroundColor(android.graphics.Color.BLACK)
                 }
             },
+            // Apply full screen modifier including status/navigation bar space
             modifier = Modifier.fillMaxSize()
         )
 
-        // 2. Video Metadata (Bottom Left Overlay - Modern Layout)
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .fillMaxWidth(0.8f) // Give enough space for action buttons on the right
-                .navigationBarsPadding() // Ensure it stays above system navigation bar
-                .padding(bottom = 16.dp, start = 16.dp)
-        ) {
-            // Uploader/Author Row
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // AsyncImage for Uploader Photo (Placeholder logic if not available in MediaItem)
-                AsyncImage(
-                    model = R.drawable.ic_person_placeholder, // Using local placeholder since MediaItem lacks uploader photoUrl
-                    contentDescription = "Uploader Photo",
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary)
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = "Uploader (${mediaItem.uploaderId})", // Use placeholder if uploaderName not available
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.bodyLarge
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            // Title and Description
-            Text(
-                text = mediaItem.title,
-                color = Color.White,
-                fontWeight = FontWeight.SemiBold,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = mediaItem.description,
-                color = Color.White.copy(alpha = 0.8f),
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-
-        // 3. Interaction Buttons (Bottom Right - Modern Vertical Bar)
-        // Positioned slightly higher to separate from bottom text but still integrated with the feed style
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .navigationBarsPadding()
-                .padding(end = 16.dp, bottom = 100.dp), // Pushed up above the text block
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Using placeholder counts as MediaItem doesn't contain reaction counts
-            VerticalActionButton(Icons.Default.Favorite, "Like", 120, onClick = { /* TODO: Handle Like */ })
-            VerticalActionButton(Icons.Default.Comment, "Comment", 25, onClick = { /* TODO: Handle Comment */ })
-            VerticalActionButton(Icons.Default.Share, "Share", 7, onClick = { /* TODO: Handle Share */ })
-            VerticalActionButton(Icons.Default.Download, "Save", 0, onClick = { /* TODO: Handle Download */ })
-        }
+        // All previous UI Overlays (metadata, interaction buttons, top title) are REMOVED
+        // from here to comply with the request for only pause/play to be visible.
     }
 }
 

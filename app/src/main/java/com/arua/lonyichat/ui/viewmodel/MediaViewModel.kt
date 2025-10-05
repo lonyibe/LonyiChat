@@ -50,4 +50,71 @@ class MediaViewModel : ViewModel() {
                 }
         }
     }
+
+    // ✨ ADDED: Interaction logic with Optimistic UI Update for Liking
+    fun likeMedia(mediaId: String) {
+        viewModelScope.launch {
+            // 1. Optimistic Update
+            _uiState.update { currentState ->
+                currentState.copy(
+                    mediaItems = currentState.mediaItems.map { item ->
+                        if (item.id == mediaId) {
+                            val newIsLiked = !item.isLiked
+                            val newLikes = item.likes + if (newIsLiked) 1 else -1
+                            item.copy(isLiked = newIsLiked, likes = newLikes)
+                        } else {
+                            item
+                        }
+                    }
+                )
+            }
+
+            // 2. API Call
+            ApiService.likeMedia(mediaId).onFailure { error ->
+                // 3. Rollback on failure (force refresh)
+                fetchMedia()
+                _uiState.update { it.copy(error = "Failed to like media: ${error.localizedMessage}") }
+            }
+        }
+    }
+
+    // ✨ ADDED: Interaction logic for Sharing
+    fun shareMedia(mediaId: String) {
+        viewModelScope.launch {
+            // Optimistic Update for share count
+            _uiState.update { currentState ->
+                currentState.copy(
+                    mediaItems = currentState.mediaItems.map { item ->
+                        if (item.id == mediaId) item.copy(shareCount = item.shareCount + 1) else item
+                    }
+                )
+            }
+
+            ApiService.shareMedia(mediaId).onFailure { error ->
+                _uiState.update { it.copy(error = "Failed to share media: ${error.localizedMessage}") }
+                fetchMedia() // Revert state
+            }
+        }
+    }
+
+    // ✨ ADDED: Interaction logic for Downloading (simulated as an internal count)
+    fun downloadMedia(mediaId: String) {
+        viewModelScope.launch {
+            // Optimistic Update for download count
+            _uiState.update { currentState ->
+                currentState.copy(
+                    mediaItems = currentState.mediaItems.map { item ->
+                        if (item.id == mediaId) item.copy(downloadCount = item.downloadCount + 1) else item
+                    }
+                )
+            }
+
+            ApiService.downloadMedia(mediaId).onFailure { error ->
+                _uiState.update { it.copy(error = "Failed to download media: ${error.localizedMessage}") }
+                fetchMedia() // Revert state
+            }
+        }
+    }
+
+    // TODO: Implement comment function that launches CommentsActivity
 }

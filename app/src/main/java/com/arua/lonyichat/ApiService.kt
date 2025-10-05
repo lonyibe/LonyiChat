@@ -63,6 +63,9 @@ object ApiService {
     data class EventResponse(val success: Boolean, val events: List<Event>)
     data class SingleEventResponse(val success: Boolean, val event: Event)
 
+    // MODIFIED: MediaResponse is now defined in MediaItem.kt, but we'll include a helper response for interactions
+    data class MediaInteractionResponse(val success: Boolean, val message: String)
+
     private fun getErrorMessage(responseBody: String?): String {
         return try {
             val json = gson.fromJson(responseBody, Map::class.java)
@@ -1321,4 +1324,56 @@ object ApiService {
         // This dismisses the request by marking the notification as read. // ADDED
         return markNotificationAsRead(notificationId) // ADDED
     } // ADDED
+
+    // ✨ ADDED: Media Interaction API Calls ✨
+    suspend fun likeMedia(mediaId: String): Result<Unit> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val request = Request.Builder()
+                .url("$BASE_URL/media/$mediaId/like")
+                .addHeader("Authorization", "Bearer $token")
+                .post("".toRequestBody(null))
+                .build()
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) throw ApiException(getErrorMessage(response.body?.string()))
+                    Result.success(Unit)
+                }
+            }
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun shareMedia(mediaId: String): Result<Unit> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val request = Request.Builder()
+                .url("$BASE_URL/media/$mediaId/share")
+                .addHeader("Authorization", "Bearer $token")
+                .post("".toRequestBody(null))
+                .build()
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) throw ApiException(getErrorMessage(response.body?.string()))
+                    Result.success(Unit)
+                }
+            }
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun downloadMedia(mediaId: String): Result<Unit> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val request = Request.Builder()
+                .url("$BASE_URL/media/$mediaId/download")
+                .addHeader("Authorization", "Bearer $token")
+                .post("".toRequestBody(null))
+                .build()
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) throw ApiException(getErrorMessage(response.body?.string()))
+                    Result.success(Unit)
+                }
+            }
+        } catch (e: Exception) { Result.failure(e) }
+    }
 }
