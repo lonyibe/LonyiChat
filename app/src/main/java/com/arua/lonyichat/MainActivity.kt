@@ -1331,38 +1331,28 @@ fun ChurchVibesScreen(viewModel: MediaViewModel) {
 
 // Replace VideoPlayerItem implementation
 @Composable
-// ✨ MODIFIED: Accepts ExoPlayer instance instead of creating one internally
 fun VideoPlayerItem(player: ExoPlayer, mediaItem: com.arua.lonyichat.data.MediaItem, viewModel: MediaViewModel) {
-
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // 1. Video Player View (The core content - only controls play/pause/seek)
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
                     this.player = player
                     useController = true
-                    controllerAutoShow = false // THIS IS THE FIX
-
-                    // Hides all other unnecessary UI elements to simplify the experience
-                    setShowNextButton(false)
-                    setShowPreviousButton(false)
-                    setShowFastForwardButton(false)
-                    setShowRewindButton(false)
-                    setShowSubtitleButton(false)
-
+                    // THIS IS THE FIX: Post a runnable to the view's message queue
+                    // to hide the controller after the view is attached and laid out.
+                    post { hideController() }
                     setBackgroundColor(android.graphics.Color.BLACK)
                 }
             },
-            // Apply full screen modifier including status/navigation bar space
             modifier = Modifier.fillMaxSize()
         )
-        // ⚠️ REMOVED: All overlays (metadata, buttons, top title) for maximum immersion.
     }
 }
+
 
 @Composable
 fun LivestreamsScreen() {
