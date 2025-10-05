@@ -62,7 +62,7 @@ class NotificationsActivity : ComponentActivity() {
     // This immediately updates the local badge counter and starts the server update process.
     override fun onPause() {
         super.onPause()
-        viewModel.markAllVisibleAsRead()
+        // viewModel.markAllVisibleAsRead() // REMOVED
     }
 
     // ADDED START: Ensure actions are complete before the activity finishes
@@ -128,8 +128,9 @@ fun NotificationScreen(
                             NotificationItem(
                                 notification = notification,
                                 onClick = {
-                                    // Removed the individual markAsRead here to rely on the bulk read in onPause.
-                                    // This prevents concurrent server calls if the user rapidly clicks/backs out.
+                                    if (!notification.read) {
+                                        viewModel.markAsRead(notification.id)
+                                    }
                                     // TODO: Implement navigation to the relevant post, event, etc.
                                 },
                                 viewModel = viewModel
