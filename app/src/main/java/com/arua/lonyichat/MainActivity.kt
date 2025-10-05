@@ -277,9 +277,12 @@ fun LonyiChatApp(
         },
         floatingActionButton = {
             if (selectedItem == Screen.Media && pagerState.currentPage == 0) {
-                FloatingActionButton(onClick = {
-                    createMediaLauncher.launch(Intent(context, CreateMediaActivity::class.java))
-                }) {
+                FloatingActionButton(
+                    onClick = {
+                        createMediaLauncher.launch(Intent(context, CreateMediaActivity::class.java))
+                    },
+                    containerColor = MaterialTheme.colorScheme.primary // ✨ MODIFIED: Themed color
+                ) {
                     Icon(Icons.Default.Videocam, contentDescription = "Upload Video")
                 }
             }
@@ -1315,7 +1318,7 @@ fun ChurchVibesScreen(viewModel: MediaViewModel) {
                 }
             }
             else -> {
-                // MODIFIED: Wrap VerticalPager in a Box with pointerInput for sensitivity
+                // ✨ MODIFIED: Wrap VerticalPager in a Box with pointerInput for sensitivity
                 Box(modifier = Modifier
                     .fillMaxSize()
                     .pointerInput(Unit) {
@@ -1422,13 +1425,13 @@ fun VideoPlayerItem(
         }
 
 
-        // Side Action Buttons
+        // ✨ MODIFIED: Side Action Buttons layout
         Column(
             modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .padding(16.dp),
+                .align(Alignment.BottomEnd) // Align to bottom end
+                .padding(end = 16.dp, bottom = 80.dp), // Adjust padding
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+            verticalArrangement = Arrangement.spacedBy(20.dp) // Reduced spacing
         ) {
             VideoActionButton(
                 icon = if (mediaItem.isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
