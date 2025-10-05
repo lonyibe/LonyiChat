@@ -1377,23 +1377,7 @@ object ApiService {
         } catch (e: Exception) { Result.failure(e) }
     }
 
-    suspend fun deleteMedia(mediaId: String): Result<Unit> {
-        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
-        return try {
-            val request = Request.Builder()
-                .url("$BASE_URL/media/$mediaId")
-                .addHeader("Authorization", "Bearer $token")
-                .delete()
-                .build()
-            withContext(Dispatchers.IO) {
-                client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) throw ApiException(getErrorMessage(response.body?.string()))
-                    Result.success(Unit)
-                }
-            }
-        } catch (e: Exception) { Result.failure(e) }
-    }
-
+    // NEWLY ADDED
     suspend fun getCommentsForMedia(mediaId: String): Result<List<Comment>> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {
@@ -1406,7 +1390,7 @@ object ApiService {
                 client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) {
                         val errorBody = response.body?.string()
-                        throw ApiException("Failed to fetch comments: ${getErrorMessage(errorBody)}")
+                        throw ApiException("Failed to fetch media comments: ${getErrorMessage(errorBody)}")
                     }
                     val responseBody = response.body?.string()
                     val commentsResponse = gson.fromJson(responseBody, CommentsResponse::class.java)
@@ -1418,7 +1402,8 @@ object ApiService {
         }
     }
 
-    suspend fun addCommentToMedia(mediaId: String, content: String): Result<Comment> {
+    // NEWLY ADDED
+    suspend fun addMediaComment(mediaId: String, content: String): Result<Comment> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {
             val json = gson.toJson(mapOf("content" to content))
@@ -1432,11 +1417,34 @@ object ApiService {
                 client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) {
                         val errorBody = response.body?.string()
-                        throw ApiException("Failed to add comment: ${getErrorMessage(errorBody)}")
+                        throw ApiException("Failed to add media comment: ${getErrorMessage(errorBody)}")
                     }
                     val responseBody = response.body!!.string()
                     val singleCommentResponse = gson.fromJson(responseBody, SingleCommentResponse::class.java)
                     Result.success(singleCommentResponse.comment)
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // NEWLY ADDED
+    suspend fun deleteMedia(mediaId: String): Result<Unit> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val request = Request.Builder()
+                .url("$BASE_URL/media/$mediaId")
+                .addHeader("Authorization", "Bearer $token")
+                .delete()
+                .build()
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        val errorBody = response.body?.string()
+                        throw ApiException("Failed to delete media: ${getErrorMessage(errorBody)}")
+                    }
+                    Result.success(Unit)
                 }
             }
         } catch (e: Exception) {
