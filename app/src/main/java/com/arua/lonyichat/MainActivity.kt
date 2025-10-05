@@ -58,15 +58,22 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.*
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Popup
 import androidx.core.view.WindowCompat
+import androidx.media3.common.MediaItem as Media3MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.arua.lonyichat.data.*
 import com.arua.lonyichat.ui.theme.LonyiChatTheme
 import com.arua.lonyichat.ui.viewmodel.*
+import com.google.accompanist.pager.ExperimentalPagerApi
+import com.google.accompanist.pager.HorizontalPager
+import com.google.accompanist.pager.rememberPagerState
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import kotlinx.coroutines.launch
@@ -1199,39 +1206,166 @@ fun BibleStudyScreen(viewModel: BibleViewModel) {
     }
 }
 
+@OptIn(ExperimentalPagerApi::class)
 @Composable
 fun MediaScreen(viewModel: MediaViewModel) {
-    val uiState by viewModel.uiState.collectAsState()
-    val onRefresh = { viewModel.fetchMedia() }
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Media & Testimonies", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(16.dp))
-        when {
-            uiState.isLoading && uiState.mediaItems.isEmpty() -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            uiState.error != null -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Error: ${uiState.error}", color = MaterialTheme.colorScheme.error) }
-            else -> {
-                SwipeRefresh(state = rememberSwipeRefreshState(isRefreshing = uiState.isLoading), onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(uiState.mediaItems) { mediaItem -> MediaItemCard(mediaItem = mediaItem) }
-                    }
+    val pagerState = rememberPagerState()
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    val createMediaLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            viewModel.fetchMedia()
+        }
+    }
+
+    Scaffold(
+        floatingActionButton = {
+            if (pagerState.currentPage == 0) { // Only show FAB on "Church Vibes" tab
+                FloatingActionButton(onClick = {
+                    createMediaLauncher.launch(Intent(context, CreateMediaActivity::class.java))
+                }) {
+                    Icon(Icons.Default.Videocam, contentDescription = "Upload Video")
+                }
+            }
+        }
+    ) { paddingValues ->
+        Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+            TabRow(
+                selectedTabIndex = pagerState.currentPage,
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface
+            ) {
+                Tab(
+                    selected = pagerState.currentPage == 0,
+                    onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
+                    text = { Text("Church Vibes") }
+                )
+                Tab(
+                    selected = pagerState.currentPage == 1,
+                    onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
+                    text = { Text("Livestreams") }
+                )
+            }
+
+            HorizontalPager(
+                count = 2,
+                state = pagerState,
+                modifier = Modifier.fillMaxSize()
+            ) { page ->
+                when (page) {
+                    0 -> ChurchVibesScreen(viewModel)
+                    1 -> LivestreamsScreen()
                 }
             }
         }
     }
 }
 
+@OptIn(ExperimentalPagerApi::class)
 @Composable
-fun MediaItemCard(mediaItem: MediaItem) {
-    Card(modifier = Modifier.fillMaxWidth().clickable { /* TODO: Open video player or testimony text */ }, elevation = CardDefaults.cardElevation(2.dp)) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            val icon = when (mediaItem.mediaType) { "video" -> Icons.Default.Videocam; "livestream" -> Icons.Default.LiveTv; "testimony" -> Icons.Default.Book; else -> Icons.Default.PlayCircle }
-            Icon(imageVector = icon, contentDescription = mediaItem.mediaType, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
-            Spacer(modifier = Modifier.width(16.dp))
-            Column {
-                Text(mediaItem.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(mediaItem.description, style = MaterialTheme.typography.bodyMedium, color = Color.Gray, maxLines = 2, overflow = TextOverflow.Ellipsis)
+fun ChurchVibesScreen(viewModel: MediaViewModel) {
+    val uiState by viewModel.uiState.collectAsState()
+    val videos = remember(uiState.mediaItems) {
+        uiState.mediaItems.filter { it.mediaType == "video" }
+    }
+    val pagerState = rememberPagerState()
+
+    if (uiState.isLoading && videos.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+    } else if (videos.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No vibes yet. Be the first to upload!", style = MaterialTheme.typography.titleMedium)
+        }
+    } else {
+        HorizontalPager(
+            count = videos.size,
+            state = pagerState,
+            modifier = Modifier.fillMaxSize(),
+            verticalAlignment = Alignment.CenterVertically
+        ) { page ->
+            VideoPlayerItem(mediaItem = videos[page])
+        }
+    }
+}
+
+@Composable
+fun VideoPlayerItem(mediaItem: com.arua.lonyichat.data.MediaItem) {
+    val context = LocalContext.current
+    val exoPlayer = remember { ExoPlayer.Builder(context).build() }
+    val mediaSource = remember(mediaItem.url) {
+        Media3MediaItem.fromUri(mediaItem.url)
+    }
+
+    DisposableEffect(key1 = mediaItem.url) {
+        exoPlayer.setMediaItem(mediaSource)
+        exoPlayer.prepare()
+        exoPlayer.playWhenReady = true // Autoplay
+        onDispose {
+            exoPlayer.release()
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+    ) {
+        AndroidView(
+            factory = { ctx ->
+                PlayerView(ctx).apply {
+                    player = exoPlayer
+                    useController = true // Show controls
+                }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+        // Overlay for video information and actions
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(16.dp)
+                .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                .padding(8.dp)
+        ) {
+            Text(mediaItem.title, color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+            Text(mediaItem.description, color = Color.White.copy(alpha = 0.8f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        // Interaction Buttons (Like, Comment, Share)
+        Column(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            IconButton(onClick = { /* TODO: Handle Like */ }) {
+                Icon(Icons.Default.Favorite, contentDescription = "Like", tint = Color.White, modifier = Modifier.size(32.dp))
             }
+            IconButton(onClick = { /* TODO: Handle Comment */ }) {
+                Icon(Icons.Default.Comment, contentDescription = "Comment", tint = Color.White, modifier = Modifier.size(32.dp))
+            }
+            IconButton(onClick = { /* TODO: Handle Share */ }) {
+                Icon(Icons.Default.Share, contentDescription = "Share", tint = Color.White, modifier = Modifier.size(32.dp))
+            }
+            IconButton(onClick = { /* TODO: Handle Download */ }) {
+                Icon(Icons.Default.Download, contentDescription = "Download", tint = Color.White, modifier = Modifier.size(32.dp))
+            }
+        }
+    }
+}
+
+@Composable
+fun LivestreamsScreen() {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(Icons.Default.LiveTv, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Livestreams Coming Soon!", style = MaterialTheme.typography.headlineSmall)
         }
     }
 }

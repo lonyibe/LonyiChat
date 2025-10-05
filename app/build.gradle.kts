@@ -18,10 +18,7 @@ android {
         versionCode = 1
         versionName = "1.0"
 
-        testInstrumentationRunner =
-            "androidx.test.runner.AndroidJUnitRunner"
-
-
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -32,11 +29,9 @@ android {
                 "proguard-rules.pro"
             )
         }
-
     }
 
-
-    compileOptions  {
+    compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
@@ -50,12 +45,9 @@ android {
 
 dependencies {
     implementation("androidx.core:core-splashscreen:1.0.1")
-
-    // UPDATED FOR
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("com.google.android.material:material:1.12.0")
-
     implementation("androidx.emoji2:emoji2:1.4.0")
 
     // Re-added OkHttp and Gson for the existing ApiService
@@ -71,6 +63,13 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.6.0")
 
     implementation("com.google.accompanist:accompanist-swiperefresh:0.32.0")
+
+    // ADDED: Accompanist Pager for Tab Layout
+    implementation("com.google.accompanist:accompanist-pager:0.32.0")
+
+    // ADDED: Media3 ExoPlayer for Video Playback
+    implementation("androidx.media3:media3-exoplayer:1.3.1")
+    implementation("androidx.media3:media3-ui:1.3.1")
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
