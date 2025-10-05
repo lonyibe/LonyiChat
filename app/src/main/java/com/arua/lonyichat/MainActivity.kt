@@ -1286,6 +1286,7 @@ fun ChurchVibesScreen(viewModel: MediaViewModel) {
         uiState.mediaItems.filter { it.mediaType == "video" }
     }
     val pagerState = rememberPagerState()
+    val scope = rememberCoroutineScope()
 
     // ✨ ADDED: Get the PlayerManager instance from the ViewModel
     val playerManager = viewModel.getPlayerManager()
@@ -1314,18 +1315,44 @@ fun ChurchVibesScreen(viewModel: MediaViewModel) {
                 }
             }
             else -> {
-                // VerticalPager for a TikTok-style feed
-                VerticalPager(
-                    count = mediaItems.size,
-                    state = pagerState,
-                    modifier = Modifier.fillMaxSize()
-                ) { page ->
-                    // ✨ MODIFIED: Pass the player directly from the PlayerManager
-                    VideoPlayerItem(
-                        player = playerManager.getPlayer(page, mediaItems[page]),
-                        mediaItem = mediaItems[page],
-                        viewModel = viewModel
-                    )
+                // MODIFIED: Wrap VerticalPager in a Box with pointerInput for sensitivity
+                Box(modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectDragGestures { change, dragAmount ->
+                            change.consume()
+                            val (_, y) = dragAmount
+                            if (y > 2) { // Swiping down
+                                scope.launch {
+                                    pagerState.animateScrollToPage(
+                                        (pagerState.currentPage - 1).coerceAtLeast(
+                                            0
+                                        )
+                                    )
+                                }
+                            } else if (y < -2) { // Swiping up
+                                scope.launch {
+                                    pagerState.animateScrollToPage(
+                                        (pagerState.currentPage + 1).coerceAtMost(
+                                            mediaItems.size - 1
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }) {
+                    VerticalPager(
+                        count = mediaItems.size,
+                        state = pagerState,
+                        modifier = Modifier.fillMaxSize()
+                    ) { page ->
+                        // ✨ MODIFIED: Pass the player directly from the PlayerManager
+                        VideoPlayerItem(
+                            player = playerManager.getPlayer(page, mediaItems[page]),
+                            mediaItem = mediaItems[page],
+                            viewModel = viewModel
+                        )
+                    }
                 }
             }
         }
