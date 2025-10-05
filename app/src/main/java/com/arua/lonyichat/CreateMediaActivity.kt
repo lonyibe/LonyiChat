@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.arua.lonyichat.ui.theme.LonyiChatTheme
 import com.arua.lonyichat.ui.viewmodel.MediaViewModel
+import androidx.lifecycle.lifecycleScope // ADDED: Import for lifecycleScope extension property
 
 class CreateMediaActivity : ComponentActivity() {
 
