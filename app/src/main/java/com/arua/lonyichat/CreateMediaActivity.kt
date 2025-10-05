@@ -1,6 +1,7 @@
 package com.arua.lonyichat
 
 import android.app.Activity
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
@@ -81,6 +82,10 @@ fun CreateMediaScreen(
     ) { uri: Uri? ->
         selectedMediaUri = uri
         uri?.let {
+            // ✨ FIX: Persist URI permission for reliable background access
+            val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+            context.contentResolver.takePersistableUriPermission(it, flags)
+
             // Get the file name from the URI
             context.contentResolver.query(it, null, null, null, null)?.use { cursor ->
                 val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
