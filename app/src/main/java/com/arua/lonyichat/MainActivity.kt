@@ -5,7 +5,6 @@ package com.arua.lonyichat
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -91,7 +90,6 @@ data class AppReaction(val type: String, val emoji: String, val label: String)
 val LonyiReactions = listOf(
     AppReaction("amen", "🙏", "Amen"),
     AppReaction("hallelujah", "🥳", "Hallelujah")
-    // ... (rest of LonyiReactions)
 )
 
 data class UserProfileState(
@@ -100,13 +98,11 @@ data class UserProfileState(
     val isLoading: Boolean = true
 )
 
-// ✨ FIX: Removed unused 'route' property
 sealed class Screen(val title: String, val icon: ImageVector) {
     object Home : Screen("Feed", Icons.Filled.Home)
     object Events : Screen("Events", Icons.Filled.Event)
     object Groups : Screen("Churches", Icons.Filled.Group)
     object Bible : Screen("Bible", Icons.Filled.Book)
-    // ✨ FIX: Used AutoMirrored icon for better RTL support
     object Chat : Screen("Chat", Icons.AutoMirrored.Filled.Message)
     object Media : Screen("Media", Icons.Filled.LiveTv)
 }
@@ -157,6 +153,12 @@ class MainActivity : ComponentActivity() {
         notificationViewModel.fetchNotifications()
     }
 
+    override fun onPause() {
+        super.onPause()
+        mediaViewModel.releaseAllPlayers()
+    }
+
+
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -195,7 +197,6 @@ fun LonyiChatApp(
     val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
 
-    // ✨ FIX: Migrated to Foundation Pager. 'pageCount' is now a required lambda.
     val pagerState = rememberPagerState(pageCount = { 2 })
     val scope = rememberCoroutineScope()
 
@@ -204,6 +205,12 @@ fun LonyiChatApp(
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             mediaViewModel.fetchMedia()
+        }
+    }
+
+    LaunchedEffect(selectedItem) {
+        if (selectedItem != Screen.Media) {
+            mediaViewModel.pauseAllPlayers()
         }
     }
 
@@ -216,11 +223,18 @@ fun LonyiChatApp(
         }
     }
 
+    val containerColor = if (selectedItem == Screen.Media) {
+        Color.Black
+    } else {
+        MaterialTheme.colorScheme.background
+    }
+
+
     Scaffold(
         modifier = Modifier
             .fillMaxSize()
             .nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = containerColor,
         topBar = {
             val isDarkTheme = isSystemInDarkTheme()
             val headerColor = if (isDarkTheme) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.primary
@@ -296,7 +310,7 @@ fun LonyiChatApp(
     }
 }
 
-@Suppress("DEPRECATION") // ✨ FIX: Suppress deprecation for statusBarColor as its usage is intentional here.
+@Suppress("DEPRECATION")
 @Composable
 fun LonyiChatTopBar(
     title: String,
@@ -392,7 +406,7 @@ fun ScreenContent(
     bibleViewModel: BibleViewModel,
     mediaViewModel: MediaViewModel,
     eventViewModel: EventViewModel,
-    pagerState: PagerState // ✨ FIX: Updated type to Foundation PagerState
+    pagerState: PagerState
 ) {
     when (screen) {
         Screen.Home -> HomeFeedScreen(profileState, homeFeedViewModel)
@@ -1238,10 +1252,10 @@ fun BibleStudyScreen(viewModel: BibleViewModel) {
 @Composable
 fun MediaScreen(
     viewModel: MediaViewModel,
-    pagerState: PagerState // ✨ FIX: Updated type
+    pagerState: PagerState
 ) {
     HorizontalPager(
-        state = pagerState, // ✨ FIX: 'pageCount' is now in the state
+        state = pagerState,
         modifier = Modifier.fillMaxSize()
     ) { page ->
         when (page) {
@@ -1286,7 +1300,6 @@ fun ChurchVibesScreen(viewModel: MediaViewModel) {
                 VerticalPager(
                     state = pagerState,
                     modifier = Modifier.fillMaxSize(),
-                    // This key is crucial. It tells Compose that each video is a distinct entity.
                     key = { index -> mediaItems[index].id }
                 ) { page ->
                     VideoPlayerItem(
@@ -1322,7 +1335,7 @@ fun VideoPlayerItem(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(Color.Transparent)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
@@ -1336,10 +1349,9 @@ fun VideoPlayerItem(
                 PlayerView(ctx).apply {
                     this.player = player
                     useController = false
-                    setBackgroundColor(android.graphics.Color.BLACK)
+                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 }
             },
-            // This update block ensures the PlayerView always has the correct player instance.
             update = { view ->
                 view.player = player
             },
@@ -1489,3 +1501,4 @@ fun LonyiChatPreview() {
         LonyiChatApp(HomeFeedViewModel(), ChurchesViewModel(), ChatListViewModel(), BibleViewModel(), MediaViewModel(), ProfileViewModel(), EventViewModel(), NotificationViewModel())
     }
 }
+

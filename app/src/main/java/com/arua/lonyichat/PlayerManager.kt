@@ -70,11 +70,17 @@ class PlayerManager(private val context: Context) {
     }
 
     /**
-     * Releases all players to free up resources. This should be called when the
-     * video feed is no longer visible (e.g., in onPause).
+     * Pauses all managed player instances.
+     * This is useful for when the media screen is no longer visible but the app is still in the foreground.
      */
+    fun pauseAllPlayers() {
+        playerMap.values.forEach { it.pause() }
+    }
+
+
     fun releaseAllPlayers() {
         playerMap.values.forEach { it.release() }
         playerMap.clear()
     }
 }
+
