@@ -13,10 +13,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -77,6 +80,7 @@ import com.google.accompanist.pager.VerticalPager // ADDED: Import for vertical 
 import com.google.accompanist.pager.rememberPagerState
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -1329,27 +1333,159 @@ fun ChurchVibesScreen(viewModel: MediaViewModel) {
 }
 
 
-// Replace VideoPlayerItem implementation
 @Composable
-fun VideoPlayerItem(player: ExoPlayer, mediaItem: com.arua.lonyichat.data.MediaItem, viewModel: MediaViewModel) {
+fun VideoPlayerItem(
+    player: ExoPlayer,
+    mediaItem: com.arua.lonyichat.data.MediaItem,
+    viewModel: MediaViewModel
+) {
+    val context = LocalContext.current
+    // State to manage the visibility of our custom play/pause indicator
+    var showIndicator by remember { mutableStateOf(false) }
+    // Remember the player's playing state, which will recompose the icon
+    val isPlaying by remember { derivedStateOf { player.isPlaying } }
+
+    // This effect will automatically hide the indicator after a short delay
+    LaunchedEffect(showIndicator) {
+        if (showIndicator) {
+            delay(800) // Keep indicator on screen for 800ms
+            showIndicator = false
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                // Toggle player state
+                player.playWhenReady = !player.playWhenReady
+                // Show our custom indicator for feedback
+                showIndicator = true
+            }
     ) {
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
                     this.player = player
-                    useController = true
-                    // THIS IS THE FIX: Post a runnable to the view's message queue
-                    // to hide the controller after the view is attached and laid out.
-                    post { hideController() }
+                    // MODIFICATION: Disable the default controller
+                    useController = false
                     setBackgroundColor(android.graphics.Color.BLACK)
                 }
             },
             modifier = Modifier.fillMaxSize()
         )
+
+        // Custom animated play/pause indicator
+        AnimatedVisibility(
+            visible = showIndicator,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.Center)
+        ) {
+            Icon(
+                imageVector = if (isPlaying) Icons.Filled.PauseCircle else Icons.Filled.PlayCircle,
+                contentDescription = "Playback Status",
+                tint = Color.White.copy(alpha = 0.7f),
+                modifier = Modifier.size(72.dp)
+            )
+        }
+
+
+        // Side Action Buttons
+        Column(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            VideoActionButton(
+                icon = if (mediaItem.isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                text = mediaItem.likes.toString(),
+                onClick = { viewModel.likeMedia(mediaItem.id) },
+                tint = if (mediaItem.isLiked) Color.Red else Color.White
+            )
+            VideoActionButton(
+                icon = Icons.Filled.Comment,
+                text = mediaItem.comments.toString(),
+                onClick = {
+                    Toast.makeText(context, "Comments for media coming soon!", Toast.LENGTH_SHORT).show()
+                    // TODO: When backend is ready, navigate to a CommentsActivity for media
+                    // val intent = Intent(context, CommentsActivity::class.java)
+                    // intent.putExtra("MEDIA_ID", mediaItem.id)
+                    // context.startActivity(intent)
+                }
+            )
+            VideoActionButton(
+                icon = Icons.Filled.Share,
+                text = mediaItem.shareCount.toString(),
+                onClick = { viewModel.shareMedia(mediaItem.id) }
+            )
+            VideoActionButton(
+                icon = Icons.Filled.Download,
+                text = mediaItem.downloadCount.toString(),
+                onClick = { viewModel.downloadMedia(mediaItem.id) }
+            )
+        }
+
+        // Video Info at the bottom
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                AsyncImage(
+                    model = mediaItem.uploaderPhotoUrl,
+                    contentDescription = "Uploader",
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color.White),
+                    contentScale = ContentScale.Crop
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = mediaItem.uploaderName,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = mediaItem.description,
+                color = Color.White,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+
+@Composable
+fun VideoActionButton(
+    icon: ImageVector,
+    text: String,
+    onClick: () -> Unit,
+    tint: Color = Color.White
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable(onClick = onClick)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(32.dp)
+        )
+        Text(text, color = Color.White, fontSize = 12.sp)
     }
 }
 
