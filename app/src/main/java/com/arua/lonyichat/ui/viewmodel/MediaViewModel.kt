@@ -1,7 +1,10 @@
 package com.arua.lonyichat.ui.viewmodel
 
 import android.app.Activity
+import android.app.DownloadManager
+import android.content.Context
 import android.net.Uri
+import android.os.Environment
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arua.lonyichat.LonyiChatApp
@@ -114,19 +117,43 @@ class MediaViewModel : ViewModel() {
         }
     }
 
-    fun downloadMedia(mediaId: String) {
+    fun downloadMedia(context: Context, mediaItem: MediaItem) {
         viewModelScope.launch {
+            val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            val uri = Uri.parse(mediaItem.url)
+            val request = DownloadManager.Request(uri)
+                .setTitle(mediaItem.title)
+                .setDescription("Downloading")
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "${mediaItem.title}.mp4")
+
+            downloadManager.enqueue(request)
+
             _uiState.update { currentState ->
                 currentState.copy(
                     mediaItems = currentState.mediaItems.map { item ->
-                        if (item.id == mediaId) item.copy(downloadCount = item.downloadCount + 1) else item
+                        if (item.id == mediaItem.id) item.copy(downloadCount = item.downloadCount + 1) else item
                     }
                 )
             }
 
-            ApiService.downloadMedia(mediaId).onFailure { error ->
-                _uiState.update { it.copy(error = "Failed to download media: ${error.localizedMessage}") }
+            ApiService.downloadMedia(mediaItem.id).onFailure { error ->
+                _uiState.update { it.copy(error = "Failed to update download count: ${error.localizedMessage}") }
                 fetchMedia()
+            }
+        }
+    }
+
+    fun deleteMedia(mediaId: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            ApiService.deleteMedia(mediaId).onSuccess {
+                _uiState.update { currentState ->
+                    val updatedMediaItems = currentState.mediaItems.filter { it.id != mediaId }
+                    currentState.copy(mediaItems = updatedMediaItems, isLoading = false)
+                }
+            }.onFailure { error ->
+                _uiState.update { it.copy(error = "Failed to delete media: ${error.localizedMessage}", isLoading = false) }
             }
         }
     }

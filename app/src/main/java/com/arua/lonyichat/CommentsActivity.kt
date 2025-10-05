@@ -19,18 +19,17 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.core.view.WindowCompat
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.arua.lonyichat.data.Comment
 import com.arua.lonyichat.ui.theme.LonyiChatTheme
 import com.arua.lonyichat.ui.viewmodel.CommentsViewModel
+import com.arua.lonyichat.ui.viewmodel.CommentType
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -40,23 +39,29 @@ class CommentsActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // This enables edge-to-edge display
         enableEdgeToEdge()
 
         val postId = intent.getStringExtra("POST_ID")
+        val mediaId = intent.getStringExtra("MEDIA_ID")
 
-        if (postId == null) {
-            Toast.makeText(this, "Error: Post ID not found.", Toast.LENGTH_LONG).show()
+        val (id, type) = when {
+            postId != null -> postId to CommentType.POST
+            mediaId != null -> mediaId to CommentType.MEDIA
+            else -> null to null
+        }
+
+        if (id == null || type == null) {
+            Toast.makeText(this, "Error: Content ID not found.", Toast.LENGTH_LONG).show()
             finish()
             return
         }
 
-        // We are letting Compose handle the insets, so no need for setDecorFitsSystemWindows here
         setContent {
             LonyiChatTheme {
                 CommentsScreen(
                     viewModel = viewModel,
-                    postId = postId,
+                    contentId = id,
+                    commentType = type,
                     onNavigateUp = { finish() }
                 )
             }
@@ -68,7 +73,8 @@ class CommentsActivity : ComponentActivity() {
 @Composable
 fun CommentsScreen(
     viewModel: CommentsViewModel,
-    postId: String,
+    contentId: String,
+    commentType: CommentType,
     onNavigateUp: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -76,13 +82,11 @@ fun CommentsScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
 
-    LaunchedEffect(postId) {
-        viewModel.fetchComments(postId)
+    LaunchedEffect(contentId, commentType) {
+        viewModel.fetchComments(contentId, commentType)
     }
 
     Scaffold(
-        // ✨ FIX 1: Apply safe drawing padding to the entire scaffold.
-        // This respects the status bar and navigation bar areas.
         modifier = Modifier
             .fillMaxSize()
             .safeDrawingPadding(),
@@ -100,7 +104,6 @@ fun CommentsScreen(
             )
         },
         bottomBar = {
-            // The bottom bar now correctly uses imePadding to move up with the keyboard.
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shadowElevation = 8.dp
@@ -109,7 +112,7 @@ fun CommentsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(8.dp)
-                        .imePadding(), // imePadding is correctly placed here
+                        .imePadding(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedTextField(
@@ -121,7 +124,7 @@ fun CommentsScreen(
                     IconButton(
                         onClick = {
                             if (commentText.isNotBlank()) {
-                                viewModel.addComment(postId, commentText)
+                                viewModel.addComment(contentId, commentText, commentType)
                                 keyboardController?.hide()
                                 focusManager.clearFocus()
                                 commentText = ""
@@ -139,8 +142,6 @@ fun CommentsScreen(
             }
         }
     ) { innerPadding ->
-        // ✨ FIX 2: Use the innerPadding provided by Scaffold for the main content.
-        // This ensures the list of comments doesn't go under the top or bottom bars.
         Box(
             modifier = Modifier
                 .padding(innerPadding)

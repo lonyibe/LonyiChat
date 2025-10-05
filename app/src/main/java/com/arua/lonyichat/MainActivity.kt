@@ -1279,6 +1279,7 @@ fun ChurchVibesScreen(viewModel: MediaViewModel) {
     }
     val pagerState = rememberPagerState(pageCount = { mediaItems.size })
     val playerManager = viewModel.getPlayerManager()
+    val currentUserId = ApiService.getCurrentUserId()
 
     LaunchedEffect(pagerState.currentPage, mediaItems) {
         if (mediaItems.isNotEmpty()) {
@@ -1308,10 +1309,13 @@ fun ChurchVibesScreen(viewModel: MediaViewModel) {
                     modifier = Modifier.fillMaxSize(),
                     key = { index -> mediaItems[index].id }
                 ) { page ->
+                    val mediaItem = mediaItems[page]
                     VideoPlayerItem(
-                        player = playerManager.getPlayer(mediaItems[page]),
-                        mediaItem = mediaItems[page],
-                        viewModel = viewModel
+                        player = playerManager.getPlayer(mediaItem),
+                        mediaItem = mediaItem,
+                        viewModel = viewModel,
+                        isMyVideo = mediaItem.uploaderId == currentUserId,
+                        onDelete = { videoId -> viewModel.deleteMedia(videoId) }
                     )
                 }
             }
@@ -1325,12 +1329,27 @@ fun ChurchVibesScreen(viewModel: MediaViewModel) {
 fun VideoPlayerItem(
     player: ExoPlayer,
     mediaItem: com.arua.lonyichat.data.MediaItem,
-    viewModel: MediaViewModel
+    viewModel: MediaViewModel,
+    isMyVideo: Boolean,
+    onDelete: (String) -> Unit
 ) {
     val context = LocalContext.current
     var showIndicator by remember { mutableStateOf(false) }
     val isPlaying by remember { derivedStateOf { player.isPlaying } }
     var progress by remember { mutableStateOf(0f) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
+    // Coroutine to smoothly update the progress bar
+    LaunchedEffect(player) {
+        while (true) {
+            progress = if (player.duration > 0) {
+                player.currentPosition.toFloat() / player.duration.toFloat()
+            } else {
+                0f
+            }
+            delay(50) // Update every 50ms for a smooth progress bar
+        }
+    }
 
     DisposableEffect(player) {
         val listener = object : Player.Listener {
@@ -1356,6 +1375,27 @@ fun VideoPlayerItem(
             delay(800)
             showIndicator = false
         }
+    }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Delete Video") },
+            text = { Text("Are you sure you want to delete this video?") },
+            confirmButton = {
+                Button(onClick = {
+                    onDelete(mediaItem.id)
+                    showDeleteDialog = false
+                }) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     Box(
@@ -1415,7 +1455,9 @@ fun VideoPlayerItem(
                 icon = Icons.Filled.Comment,
                 text = mediaItem.comments.toString(),
                 onClick = {
-                    Toast.makeText(context, "Comments for media coming soon!", Toast.LENGTH_SHORT).show()
+                    val intent = Intent(context, CommentsActivity::class.java)
+                    intent.putExtra("POST_ID", mediaItem.id) // We can reuse POST_ID for media ID
+                    context.startActivity(intent)
                 }
             )
             VideoActionButton(
@@ -1426,8 +1468,15 @@ fun VideoPlayerItem(
             VideoActionButton(
                 icon = Icons.Filled.Download,
                 text = mediaItem.downloadCount.toString(),
-                onClick = { viewModel.downloadMedia(mediaItem.id) }
+                onClick = { viewModel.downloadMedia(context, mediaItem) }
             )
+            if (isMyVideo) {
+                VideoActionButton(
+                    icon = Icons.Filled.Delete,
+                    text = "Delete",
+                    onClick = { showDeleteDialog = true }
+                )
+            }
         }
 
         Column(
@@ -1462,7 +1511,7 @@ fun VideoPlayerItem(
             )
             Spacer(modifier = Modifier.height(8.dp))
             LinearProgressIndicator(
-                progress = { progress },
+                progress = progress,
                 modifier = Modifier.fillMaxWidth(),
                 color = Color.White,
                 trackColor = Color.White.copy(alpha = 0.3f)

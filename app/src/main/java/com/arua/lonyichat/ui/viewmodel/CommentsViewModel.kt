@@ -6,6 +6,7 @@ import com.arua.lonyichat.data.ApiService
 import com.arua.lonyichat.data.Comment
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -17,33 +18,43 @@ data class CommentsUiState(
 
 class CommentsViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(CommentsUiState())
-    val uiState: StateFlow<CommentsUiState> = _uiState
+    val uiState: StateFlow<CommentsUiState> = _uiState.asStateFlow()
 
-    fun fetchComments(postId: String) {
+    fun fetchComments(id: String, type: CommentType) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            ApiService.getCommentsForPost(postId)
-                .onSuccess { comments ->
-                    _uiState.update { it.copy(comments = comments, isLoading = false) }
-                }
-                .onFailure { error ->
-                    _uiState.update { it.copy(error = error.localizedMessage, isLoading = false) }
-                }
+            _uiState.update { it.copy(isLoading = true, error = null) }
+            val result = when (type) {
+                CommentType.POST -> ApiService.getCommentsForPost(id)
+                CommentType.MEDIA -> ApiService.getCommentsForMedia(id)
+            }
+
+            result.onSuccess { comments ->
+                _uiState.update { it.copy(comments = comments, isLoading = false) }
+            }.onFailure { error ->
+                _uiState.update { it.copy(error = error.localizedMessage, isLoading = false) }
+            }
         }
     }
 
-    fun addComment(postId: String, content: String) {
+    fun addComment(id: String, content: String, type: CommentType) {
         viewModelScope.launch {
-            ApiService.addComment(postId, content)
-                .onSuccess { newComment ->
-                    // ✨ OPTIMISTIC UPDATE: Add the new comment directly to the list
-                    _uiState.update { currentState ->
-                        currentState.copy(comments = currentState.comments + newComment)
-                    }
+            val result = when (type) {
+                CommentType.POST -> ApiService.addComment(id, content)
+                CommentType.MEDIA -> ApiService.addMediaComment(id, content)
+            }
+
+            result.onSuccess { newComment ->
+                // Optimistically update the UI
+                _uiState.update { currentState ->
+                    currentState.copy(comments = currentState.comments + newComment)
                 }
-                .onFailure { error ->
-                    _uiState.update { it.copy(error = "Failed to post comment: ${error.localizedMessage}") }
-                }
+            }.onFailure { error ->
+                _uiState.update { it.copy(error = "Failed to post comment: ${error.localizedMessage}") }
+            }
         }
     }
+}
+
+enum class CommentType {
+    POST, MEDIA
 }
