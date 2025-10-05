@@ -18,6 +18,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -1331,7 +1332,7 @@ fun ChurchVibesScreen(viewModel: MediaViewModel) {
                                         (pagerState.currentPage - 1).coerceAtLeast(
                                             0
                                         ),
-                                        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy)
+                                        animationSpec = tween(durationMillis = 300)
                                     )
                                 }
                             } else if (y < -2) { // Swiping up
@@ -1340,7 +1341,7 @@ fun ChurchVibesScreen(viewModel: MediaViewModel) {
                                         (pagerState.currentPage + 1).coerceAtMost(
                                             mediaItems.size - 1
                                         ),
-                                        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy)
+                                        animationSpec = tween(durationMillis = 300)
                                     )
                                 }
                             }
