@@ -1330,7 +1330,8 @@ fun ChurchVibesScreen(viewModel: MediaViewModel) {
                                     pagerState.animateScrollToPage(
                                         (pagerState.currentPage - 1).coerceAtLeast(
                                             0
-                                        )
+                                        ),
+                                        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy)
                                     )
                                 }
                             } else if (y < -2) { // Swiping up
@@ -1338,7 +1339,8 @@ fun ChurchVibesScreen(viewModel: MediaViewModel) {
                                     pagerState.animateScrollToPage(
                                         (pagerState.currentPage + 1).coerceAtMost(
                                             mediaItems.size - 1
-                                        )
+                                        ),
+                                        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy)
                                     )
                                 }
                             }
