@@ -116,6 +116,43 @@ object ApiService {
         }
     }
 
+    suspend fun signupWithProfilePhoto(
+        email: String,
+        password: String,
+        username: String,
+        phone: String,
+        age: String,
+        country: String,
+        imageUri: Uri?,
+        context: Activity
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            // First, sign up the user
+            val signupResult = signup(email, password, username, phone, age, country)
+            if (signupResult.isFailure) {
+                return@withContext signupResult
+            }
+
+            // If an image is provided, upload it
+            if (imageUri != null) {
+                val uploadResult = uploadProfilePhoto(imageUri, context)
+                if (uploadResult.isSuccess) {
+                    // If upload is successful, update the user's profile with the new photo URL
+                    val photoUrl = uploadResult.getOrNull()
+                    updateProfile(username, phone, age, country, photoUrl)
+                } else {
+                    // If upload fails, you might want to return a partial success or a specific error
+                    return@withContext Result.failure(uploadResult.exceptionOrNull() ?: ApiException("Profile photo upload failed."))
+                }
+            }
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+
     suspend fun login(email: String, password: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val json = gson.toJson(mapOf(

@@ -1,33 +1,42 @@
 package com.arua.lonyichat
 
+import android.app.Activity
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.arua.lonyichat.data.ApiService
 import com.arua.lonyichat.ui.theme.LonyiChatTheme
 import kotlinx.coroutines.launch
@@ -69,8 +78,14 @@ fun SignupScreen(
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
 
-    // ✨ ADDED: Separate visibility states for each password field
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        selectedImageUri = uri
+    }
+
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmPasswordVisible by remember { mutableStateOf(false) }
 
@@ -86,16 +101,37 @@ fun SignupScreen(
                 .fillMaxSize()
                 .safeContentPadding()
                 .padding(horizontal = 24.dp)
-                .verticalScroll(rememberScrollState()), // Added scroll for smaller screens
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Image(
-                painter = painterResource(id = R.drawable.logo),
-                contentDescription = "LonyiChat Logo",
+            // Profile Picture Picker
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth(0.4f)
-                    .padding(top = 32.dp, bottom = 16.dp)
-            )
+                    .size(120.dp)
+                    .padding(top = 16.dp, bottom = 8.dp)
+                    .clickable { imagePickerLauncher.launch("image/*") }
+            ) {
+                AsyncImage(
+                    model = selectedImageUri ?: R.drawable.ic_person_placeholder,
+                    contentDescription = "Profile Photo",
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentScale = ContentScale.Crop
+                )
+                Icon(
+                    imageVector = Icons.Default.AddAPhoto,
+                    contentDescription = "Add Photo",
+                    tint = Color.White,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                        .padding(6.dp)
+                )
+            }
 
             Text(
                 "Create Account",
@@ -107,7 +143,7 @@ fun SignupScreen(
                 if (currentPage == 1) "Step 1: Personal Details" else "Step 2: Account Security",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-                modifier = Modifier.padding(bottom = 32.dp)
+                modifier = Modifier.padding(bottom = 24.dp)
             )
 
             // Page 1: Personal Details
@@ -133,11 +169,9 @@ fun SignupScreen(
                         onValueChange = { password = it },
                         label = { Text("Password") },
                         modifier = Modifier.fillMaxWidth(),
-                        // ✨ MODIFIED: Toggle visual transformation for password
                         visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         singleLine = true,
-                        // ✨ ADDED: Trailing icon for password
                         trailingIcon = {
                             val image = if (passwordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
                             IconButton(onClick = { passwordVisible = !passwordVisible }) {
@@ -151,11 +185,9 @@ fun SignupScreen(
                         onValueChange = { confirmPassword = it },
                         label = { Text("Confirm Password") },
                         modifier = Modifier.fillMaxWidth(),
-                        // ✨ MODIFIED: Toggle visual transformation for confirm password
                         visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         singleLine = true,
-                        // ✨ ADDED: Trailing icon for confirm password
                         trailingIcon = {
                             val image = if (confirmPasswordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
                             IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
@@ -166,7 +198,6 @@ fun SignupScreen(
                 }
             }
 
-            // This Spacer will be small on scrollable content, which is fine
             Spacer(Modifier.weight(1f, fill = false))
 
             // Navigation and Action Buttons
@@ -198,7 +229,10 @@ fun SignupScreen(
                                 else -> {
                                     isLoading = true
                                     scope.launch {
-                                        val result = ApiService.signup(email, password, username, phone, age, country)
+                                        val activity = context as Activity
+                                        val result = ApiService.signupWithProfilePhoto(
+                                            email, password, username, phone, age, country, selectedImageUri, activity
+                                        )
                                         result.onSuccess {
                                             isLoading = false
                                             Toast.makeText(context, "Signup Successful", Toast.LENGTH_SHORT).show()
