@@ -15,31 +15,18 @@ import com.arua.lonyichat.data.ApiService
 import com.arua.lonyichat.ui.viewmodel.MessageViewModel
 import java.text.SimpleDateFormat
 import java.util.*
-import androidx.compose.ui.text.style.TextAlign // ADDED
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MessageScreen(
     chatId: String,
     viewModel: MessageViewModel,
-    // ADDED START: Accept new parameters
-    otherUserId: String?,
-    friendshipStatus: String,
+    otherUserId: String,
     otherUserName: String,
-    // ADDED END
     onBackPressed: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var newMessageText by remember { mutableStateOf("") }
-    // ADDED: Check if chat functions should be enabled
-    val isChatEnabled = friendshipStatus == "friends"
-    // ADDED: Message to display if chat is disabled
-    val disabledMessage = when (friendshipStatus) {
-        "none" -> "You need to be friends with $otherUserName to chat."
-        "request_sent" -> "Friend request sent. Wait for $otherUserName to accept before chatting."
-        "request_received" -> "Accept $otherUserName's friend request in Notifications to chat."
-        else -> "Chat is disabled."
-    }
 
     LaunchedEffect(chatId) {
         viewModel.loadMessages(chatId)
@@ -48,7 +35,7 @@ fun MessageScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(otherUserName) }, // MODIFIED: Use otherUserName
+                title = { Text(otherUserName) },
                 navigationIcon = {
                     IconButton(onClick = onBackPressed) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -57,42 +44,27 @@ fun MessageScreen(
             )
         },
         bottomBar = {
-            if (isChatEnabled) { // MODIFIED: Only show input bar if chat is enabled
-                BottomAppBar {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = newMessageText,
-                            onValueChange = { newMessageText = it },
-                            modifier = Modifier.weight(1f),
-                            placeholder = { Text("Type a message...") }
-                        )
-                        IconButton(onClick = {
-                            if (newMessageText.isNotBlank()) {
-                                viewModel.sendMessage(chatId, newMessageText)
-                                newMessageText = ""
-                            }
-                        }) {
-                            Icon(Icons.Default.Send, contentDescription = "Send Message")
-                        }
-                    }
-                }
-            } else { // ADDED: Show disabled message if not friends
-                Box(
+            BottomAppBar {
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
+                        .padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = disabledMessage,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                        textAlign = TextAlign.Center
+                    OutlinedTextField(
+                        value = newMessageText,
+                        onValueChange = { newMessageText = it },
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("Type a message...") }
                     )
+                    IconButton(onClick = {
+                        if (newMessageText.isNotBlank()) {
+                            viewModel.sendMessage(chatId, newMessageText)
+                            newMessageText = ""
+                        }
+                    }) {
+                        Icon(Icons.Default.Send, contentDescription = "Send Message")
+                    }
                 }
             }
         }
@@ -126,7 +98,7 @@ fun MessageScreen(
                         .padding(horizontal = 8.dp),
                     reverseLayout = true
                 ) {
-                    items(uiState.messages) { message ->
+                    items(uiState.messages.reversed()) { message ->
                         MessageBubble(message = message)
                     }
                 }
@@ -137,7 +109,6 @@ fun MessageScreen(
 
 @Composable
 fun MessageBubble(message: Message) {
-    // Correctly check if the message is from the current user
     val isFromCurrentUser = message.senderId == ApiService.getCurrentUserId()
     val alignment = if (isFromCurrentUser) Alignment.CenterEnd else Alignment.CenterStart
     val bubbleColor = if (isFromCurrentUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer
@@ -152,7 +123,7 @@ fun MessageBubble(message: Message) {
             shape = MaterialTheme.shapes.medium,
             colors = CardDefaults.cardColors(containerColor = bubbleColor)
         ) {
-            Column(modifier = Modifier.padding(8.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                 Text(text = message.text)
                 Text(
                     text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(message.timestamp),
