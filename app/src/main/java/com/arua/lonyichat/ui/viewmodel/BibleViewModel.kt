@@ -22,6 +22,7 @@ data class BibleUiState(
     val selectedChapter: Int = 1,
     val selectedVersion: String = "kjv",
     val chapterReference: String = "Genesis 1",
+    val chapterCount: Int = 0,
 
 
     val readingPlans: List<ReadingPlan> = emptyList()
@@ -41,6 +42,7 @@ class BibleViewModel : ViewModel() {
             books = BibleRepository.getBooks(),
             availableVersions = BibleRepository.getVersions(),
             readingPlans = BibleRepository.getReadingPlans(),
+            chapterCount = BibleRepository.getChapterCountForBook("Genesis")
         )
         fetchChapterContent()
     }
@@ -48,7 +50,8 @@ class BibleViewModel : ViewModel() {
     fun selectBook(name: String) {
         _uiState.value = _uiState.value.copy(
             selectedBook = name,
-            selectedChapter = 1 // Reset to chapter 1 when a new book is selected
+            selectedChapter = 1, // Reset to chapter 1 when a new book is selected
+            chapterCount = BibleRepository.getChapterCountForBook(name)
         )
         fetchChapterContent()
     }

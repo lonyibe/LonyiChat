@@ -28,6 +28,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
@@ -1118,6 +1120,17 @@ fun BibleStudyScreen(viewModel: BibleViewModel) {
         }
     }
 
+    if (chapterSelectorOpen) {
+        ChapterSelectorDialog(
+            chapterCount = uiState.chapterCount,
+            onDismiss = { chapterSelectorOpen = false },
+            onChapterSelected = {
+                viewModel.selectChapter(it)
+                chapterSelectorOpen = false
+            }
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1254,6 +1267,47 @@ fun BibleStudyScreen(viewModel: BibleViewModel) {
         }
     }
 }
+
+@Composable
+fun ChapterSelectorDialog(
+    chapterCount: Int,
+    onDismiss: () -> Unit,
+    onChapterSelected: (Int) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Select a Chapter") },
+        text = {
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 64.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                items(chapterCount) { chapter ->
+                    Box(
+                        modifier = Modifier
+                            .padding(4.dp)
+                            .clip(CircleShape)
+                            .clickable { onChapterSelected(chapter + 1) }
+                            .background(MaterialTheme.colorScheme.primaryContainer)
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "${chapter + 1}",
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
 
 @Composable
 fun MediaScreen(
