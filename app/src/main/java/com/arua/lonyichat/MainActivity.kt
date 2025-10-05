@@ -1261,11 +1261,16 @@ fun ChurchVibesScreen(viewModel: MediaViewModel) {
     val pagerState = rememberPagerState(pageCount = { mediaItems.size })
     val playerManager = viewModel.getPlayerManager()
 
-    LaunchedEffect(pagerState.currentPage, mediaItems.size) {
+    // This is the core of the fix. The LaunchedEffect now also observes the mediaItems list.
+    // This ensures that when a new video is added, the player manager is correctly updated.
+    LaunchedEffect(pagerState.currentPage, mediaItems) {
         if (mediaItems.isNotEmpty()) {
-            playerManager.updatePlayers(pagerState.currentPage, mediaItems.size)
+            // We now pass the entire list of media items to the player manager.
+            // This allows it to use the stable, unique ID of each video instead of its unstable position.
+            playerManager.updatePlayers(pagerState.currentPage, mediaItems)
         }
     }
+
 
     SwipeRefresh(
         state = rememberSwipeRefreshState(isRefreshing = uiState.isLoading),
@@ -1290,8 +1295,10 @@ fun ChurchVibesScreen(viewModel: MediaViewModel) {
                     state = pagerState,
                     modifier = Modifier.fillMaxSize()
                 ) { page ->
+                    // The player is now retrieved using the stable MediaItem object,
+                    // which contains the unique ID. This is the second part of the fix.
                     VideoPlayerItem(
-                        player = playerManager.getPlayer(page, mediaItems[page]),
+                        player = playerManager.getPlayer(mediaItems[page]),
                         mediaItem = mediaItems[page],
                         viewModel = viewModel
                     )

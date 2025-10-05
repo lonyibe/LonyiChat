@@ -1,78 +1,77 @@
 package com.arua.lonyichat.data
 
 import android.content.Context
-import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.common.MediaItem as Media3MediaItem
 import androidx.media3.common.Player
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory // FIX: Correct Factory Type
-import androidx.media3.common.util.UnstableApi // FIX: Opt-In Annotation
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.arua.lonyichat.LonyiChatApp
 
-// FIX: Apply the Opt-In annotation for unstable API usage
 @UnstableApi
-/**
- * Manages the ExoPlayer instances for the Vertical Video Feed (Church Vibes).
- * It uses the 'Player Pooling' pattern to allow for seamless switching between videos
- * by keeping the current and next players ready and uses caching for instant replay.
- */
 class PlayerManager(private val context: Context) {
 
-    // Store players in a map where the key is the index of the video (page index)
-    private val playerMap = mutableMapOf<Int, ExoPlayer>()
+    // The key is now the unique ID of the media item (a String) instead of its position.
+    private val playerMap = mutableMapOf<String, ExoPlayer>()
 
-    // FIX: Get the global Caching DataSource Factory and wrap it in DefaultMediaSourceFactory
     private val mediaSourceFactory = DefaultMediaSourceFactory(LonyiChatApp.getCacheDataSourceFactory())
 
-
     /**
-     * Retrieves an existing player for the given index or creates a new one.
-     * Initializes the player with the media item and uses caching.
+     * Retrieves an existing player for the given media item or creates a new one.
+     * The media item's unique ID is used as the key for reliable player management.
      */
-    fun getPlayer(index: Int, mediaItem: MediaItem): ExoPlayer {
-        return playerMap.getOrPut(index) {
+    fun getPlayer(mediaItem: MediaItem): ExoPlayer {
+        return playerMap.getOrPut(mediaItem.id) { // Use the stable mediaItem.id as the key
             ExoPlayer.Builder(context)
-                .setMediaSourceFactory(mediaSourceFactory) // FIX: Pass the MediaSource.Factory
+                .setMediaSourceFactory(mediaSourceFactory)
                 .build().apply {
                     val media3Item = Media3MediaItem.fromUri("${ApiService.BASE_URL}/uploads/videos/${mediaItem.url.split("/").last()}")
                     setMediaItem(media3Item)
                     prepare()
                     repeatMode = Player.REPEAT_MODE_ONE
-                    playWhenReady = false // Start paused, let the manager handle playback
+                    playWhenReady = false
                 }
         }
     }
 
     /**
-     * Updates playback state based on the current page index.
+     * This is the core of the fix. It now intelligently manages players based on a sliding
+     * window of videos around the current one, using their unique IDs. This prevents crashes
+     * when the list order changes.
      */
-    fun updatePlayers(currentPage: Int, totalItems: Int) {
-        val keysToDispose = mutableListOf<Int>()
+    fun updatePlayers(currentPage: Int, mediaItems: List<MediaItem>) {
+        if (mediaItems.isEmpty()) return
 
-        playerMap.forEach { (index, player) ->
-            when {
-                // If it's the current page, ensure it plays
-                index == currentPage -> {
-                    if (player.playbackState == Player.STATE_READY || player.playbackState == Player.STATE_BUFFERING) {
-                        player.play()
-                    }
+        val currentMediaId = mediaItems[currentPage].id
+        // Preload the players for the videos immediately before and after the current one.
+        val preloadIds = setOf(
+            mediaItems.getOrNull(currentPage - 1)?.id,
+            currentMediaId,
+            mediaItems.getOrNull(currentPage + 1)?.id
+        ).filterNotNull()
+
+        // Release players that are no longer in the preload window to conserve memory.
+        val playersToRelease = playerMap.filterKeys { it !in preloadIds }
+        playersToRelease.forEach { (id, player) ->
+            player.release()
+            playerMap.remove(id)
+        }
+
+        // Ensure only the current video is playing and the preloaded ones are paused.
+        playerMap.forEach { (id, player) ->
+            if (id == currentMediaId) {
+                if (player.playbackState == Player.STATE_READY || player.playbackState == Player.STATE_BUFFERING) {
+                    player.play()
                 }
-                // If it's outside the preload range (currentPage - 1 to currentPage + 1)
-                index < currentPage - 1 || index > currentPage + 1 -> {
-                    keysToDispose.add(index)
-                    player.release()
-                }
-                // If it's a neighboring page (preload), ensure it's paused
-                else -> {
-                    player.pause()
-                }
+            } else {
+                player.pause()
             }
         }
-
-        keysToDispose.forEach { playerMap.remove(it) }
     }
 
     /**
-     * Must be called when the main screen composable is disposed.
+     * Releases all players to free up resources. This should be called when the
+     * video feed is no longer visible (e.g., in onPause).
      */
     fun releaseAllPlayers() {
         playerMap.values.forEach { it.release() }
