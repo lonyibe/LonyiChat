@@ -4,10 +4,10 @@ import android.app.Activity
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.arua.lonyichat.LonyiChatApp // Assuming this provides the application context
+import com.arua.lonyichat.LonyiChatApp
 import com.arua.lonyichat.data.ApiService
 import com.arua.lonyichat.data.MediaItem
-import com.arua.lonyichat.data.PlayerManager // IMPORTANT: Import the new PlayerManager
+import com.arua.lonyichat.data.PlayerManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,20 +25,25 @@ class MediaViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(MediaUiState())
     val uiState: StateFlow<MediaUiState> = _uiState.asStateFlow()
 
-    // ✨ ADDED: Player Manager instance, initialized using application context
     private val playerManager = PlayerManager(LonyiChatApp.appContext)
 
     init {
         fetchMedia()
     }
 
-    // ✨ ADDED: Expose PlayerManager for use in the composable
     fun getPlayerManager(): PlayerManager = playerManager
 
-    // ✨ ADDED: Release all players when ViewModel is cleared to prevent memory leaks
     override fun onCleared() {
         super.onCleared()
         playerManager.releaseAllPlayers()
+    }
+
+    fun releaseAllPlayers() {
+        playerManager.releaseAllPlayers()
+    }
+
+    fun pauseAllPlayers() {
+        playerManager.pauseAllPlayers()
     }
 
     fun fetchMedia() {
@@ -57,7 +62,6 @@ class MediaViewModel : ViewModel() {
             _uiState.update { it.copy(isLoading = true, error = null, uploadSuccessful = false) }
             ApiService.uploadMedia(uri, title, description, context)
                 .onSuccess {
-                    // Refresh the media list to show the new item
                     fetchMedia()
                     _uiState.update { it.copy(isLoading = false, uploadSuccessful = true) }
                 }
@@ -72,7 +76,6 @@ class MediaViewModel : ViewModel() {
 
     fun likeMedia(mediaId: String) {
         viewModelScope.launch {
-            // 1. Optimistic Update
             _uiState.update { currentState ->
                 currentState.copy(
                     mediaItems = currentState.mediaItems.map { item ->
@@ -87,9 +90,7 @@ class MediaViewModel : ViewModel() {
                 )
             }
 
-            // 2. API Call
             ApiService.likeMedia(mediaId).onFailure { error ->
-                // 3. Rollback on failure (force refresh)
                 fetchMedia()
                 _uiState.update { it.copy(error = "Failed to like media: ${error.localizedMessage}") }
             }
@@ -98,7 +99,6 @@ class MediaViewModel : ViewModel() {
 
     fun shareMedia(mediaId: String) {
         viewModelScope.launch {
-            // Optimistic Update for share count
             _uiState.update { currentState ->
                 currentState.copy(
                     mediaItems = currentState.mediaItems.map { item ->
@@ -109,14 +109,13 @@ class MediaViewModel : ViewModel() {
 
             ApiService.shareMedia(mediaId).onFailure { error ->
                 _uiState.update { it.copy(error = "Failed to share media: ${error.localizedMessage}") }
-                fetchMedia() // Revert state
+                fetchMedia()
             }
         }
     }
 
     fun downloadMedia(mediaId: String) {
         viewModelScope.launch {
-            // Optimistic Update for download count
             _uiState.update { currentState ->
                 currentState.copy(
                     mediaItems = currentState.mediaItems.map { item ->
@@ -127,10 +126,8 @@ class MediaViewModel : ViewModel() {
 
             ApiService.downloadMedia(mediaId).onFailure { error ->
                 _uiState.update { it.copy(error = "Failed to download media: ${error.localizedMessage}") }
-                fetchMedia() // Revert state
+                fetchMedia()
             }
         }
     }
-
-    // TODO: Implement comment function that launches CommentsActivity
 }

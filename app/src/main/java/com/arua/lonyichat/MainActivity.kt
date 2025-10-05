@@ -70,6 +70,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Popup
 import androidx.core.view.WindowCompat
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
@@ -155,6 +156,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        mediaViewModel.pauseAllPlayers()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
         mediaViewModel.releaseAllPlayers()
     }
 
@@ -1324,6 +1330,26 @@ fun VideoPlayerItem(
     val context = LocalContext.current
     var showIndicator by remember { mutableStateOf(false) }
     val isPlaying by remember { derivedStateOf { player.isPlaying } }
+    var progress by remember { mutableStateOf(0f) }
+
+    DisposableEffect(player) {
+        val listener = object : Player.Listener {
+            override fun onEvents(player: Player, events: Player.Events) {
+                super.onEvents(player, events)
+                progress = if (player.duration > 0) {
+                    player.currentPosition.toFloat() / player.duration.toFloat()
+                } else {
+                    0f
+                }
+            }
+        }
+        player.addListener(listener)
+
+        onDispose {
+            player.removeListener(listener)
+        }
+    }
+
 
     LaunchedEffect(showIndicator) {
         if (showIndicator) {
@@ -1408,7 +1434,7 @@ fun VideoPlayerItem(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(start = 16.dp, end = 80.dp, bottom = 16.dp, top = 16.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 AsyncImage(
@@ -1433,6 +1459,13 @@ fun VideoPlayerItem(
                 color = Color.White,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier.fillMaxWidth(),
+                color = Color.White,
+                trackColor = Color.White.copy(alpha = 0.3f)
             )
         }
     }
@@ -1501,4 +1534,3 @@ fun LonyiChatPreview() {
         LonyiChatApp(HomeFeedViewModel(), ChurchesViewModel(), ChatListViewModel(), BibleViewModel(), MediaViewModel(), ProfileViewModel(), EventViewModel(), NotificationViewModel())
     }
 }
-
