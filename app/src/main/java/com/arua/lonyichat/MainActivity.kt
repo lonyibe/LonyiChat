@@ -177,6 +177,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalPagerApi::class)
 @Composable
 fun LonyiChatApp(
     homeFeedViewModel: HomeFeedViewModel,
@@ -200,6 +201,20 @@ fun LonyiChatApp(
     val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
 
+    // Hoisted state for MediaScreen
+    val pagerState = rememberPagerState()
+    val scope = rememberCoroutineScope()
+
+    // Launcher for CreateMediaActivity
+    val createMediaLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            mediaViewModel.fetchMedia()
+        }
+    }
+
+
     LaunchedEffect(ApiService.getCurrentUserId()) {
         if (ApiService.getCurrentUserId() == null) {
             val intent = Intent(context, LoginActivity::class.java).apply {
@@ -215,17 +230,39 @@ fun LonyiChatApp(
             .nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            LonyiChatTopBar(
-                title = "LonyiChat",
-                onProfileClicked = {
-                    val intent = Intent(context, ProfileActivity::class.java).apply {
-                        putExtra("USER_ID", ApiService.getCurrentUserId())
+            val isDarkTheme = isSystemInDarkTheme()
+            val headerColor = if (isDarkTheme) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.primary
+            Column {
+                LonyiChatTopBar(
+                    title = "LonyiChat",
+                    onProfileClicked = {
+                        val intent = Intent(context, ProfileActivity::class.java).apply {
+                            putExtra("USER_ID", ApiService.getCurrentUserId())
+                        }
+                        context.startActivity(intent)
+                    },
+                    scrollBehavior = scrollBehavior,
+                    unreadCount = unreadCount
+                )
+                if (selectedItem == Screen.Media) {
+                    TabRow(
+                        selectedTabIndex = pagerState.currentPage,
+                        containerColor = headerColor,
+                        contentColor = if (isDarkTheme) MaterialTheme.colorScheme.onSurface else Color.White
+                    ) {
+                        Tab(
+                            selected = pagerState.currentPage == 0,
+                            onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
+                            text = { Text("Church Vibes") }
+                        )
+                        Tab(
+                            selected = pagerState.currentPage == 1,
+                            onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
+                            text = { Text("Livestreams") }
+                        )
                     }
-                    context.startActivity(intent)
-                },
-                scrollBehavior = scrollBehavior,
-                unreadCount = unreadCount // ADDED: Pass unread count
-            )
+                }
+            }
         },
         bottomBar = {
             LonyiChatBottomBar(
@@ -234,7 +271,15 @@ fun LonyiChatApp(
                 onItemSelected = { selectedItem = it }
             )
         },
-        floatingActionButton = {}
+        floatingActionButton = {
+            if (selectedItem == Screen.Media && pagerState.currentPage == 0) {
+                FloatingActionButton(onClick = {
+                    createMediaLauncher.launch(Intent(context, CreateMediaActivity::class.java))
+                }) {
+                    Icon(Icons.Default.Videocam, contentDescription = "Upload Video")
+                }
+            }
+        }
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -249,7 +294,8 @@ fun LonyiChatApp(
                 chatListViewModel = chatListViewModel,
                 bibleViewModel = bibleViewModel,
                 mediaViewModel = mediaViewModel,
-                eventViewModel = eventViewModel
+                eventViewModel = eventViewModel,
+                pagerState = pagerState
             )
         }
     }
@@ -346,6 +392,7 @@ fun LonyiChatBottomBar(items: List<Screen>, selectedItem: Screen, onItemSelected
     }
 }
 
+@OptIn(ExperimentalPagerApi::class)
 @Composable
 fun ScreenContent(
     screen: Screen,
@@ -355,7 +402,8 @@ fun ScreenContent(
     chatListViewModel: ChatListViewModel,
     bibleViewModel: BibleViewModel,
     mediaViewModel: MediaViewModel,
-    eventViewModel: EventViewModel
+    eventViewModel: EventViewModel,
+    pagerState: com.google.accompanist.pager.PagerState
 ) {
     when (screen) {
         Screen.Home -> HomeFeedScreen(profileState, homeFeedViewModel)
@@ -363,7 +411,7 @@ fun ScreenContent(
         Screen.Groups -> GroupsChurchScreen(churchesViewModel)
         Screen.Bible -> BibleStudyScreen(bibleViewModel)
         Screen.Chat -> com.arua.lonyichat.ChatScreen(chatListViewModel) // Explicitly call the correct ChatScreen
-        Screen.Media -> MediaScreen(mediaViewModel)
+        Screen.Media -> MediaScreen(mediaViewModel, pagerState)
     }
 }
 
@@ -1209,58 +1257,18 @@ fun BibleStudyScreen(viewModel: BibleViewModel) {
 
 @OptIn(ExperimentalPagerApi::class)
 @Composable
-fun MediaScreen(viewModel: MediaViewModel) {
-    val pagerState = rememberPagerState()
-    val scope = rememberCoroutineScope()
-    val context = LocalContext.current
-
-    val createMediaLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            viewModel.fetchMedia()
-        }
-    }
-
-    Scaffold(
-        floatingActionButton = {
-            if (pagerState.currentPage == 0) { // Only show FAB on "Church Vibes" tab
-                FloatingActionButton(onClick = {
-                    createMediaLauncher.launch(Intent(context, CreateMediaActivity::class.java))
-                }) {
-                    Icon(Icons.Default.Videocam, contentDescription = "Upload Video")
-                }
-            }
-        }
-    ) { paddingValues ->
-        Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-            TabRow(
-                selectedTabIndex = pagerState.currentPage,
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface
-            ) {
-                Tab(
-                    selected = pagerState.currentPage == 0,
-                    onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
-                    text = { Text("Church Vibes") }
-                )
-                Tab(
-                    selected = pagerState.currentPage == 1,
-                    onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
-                    text = { Text("Livestreams") }
-                )
-            }
-
-            HorizontalPager( // HorizontalPager is used here to select the tab screen
-                count = 2,
-                state = pagerState,
-                modifier = Modifier.fillMaxSize()
-            ) { page ->
-                when (page) {
-                    0 -> ChurchVibesScreen(viewModel)
-                    1 -> LivestreamsScreen()
-                }
-            }
+fun MediaScreen(
+    viewModel: MediaViewModel,
+    pagerState: com.google.accompanist.pager.PagerState
+) {
+    HorizontalPager(
+        count = 2,
+        state = pagerState,
+        modifier = Modifier.fillMaxSize()
+    ) { page ->
+        when (page) {
+            0 -> ChurchVibesScreen(viewModel)
+            1 -> LivestreamsScreen()
         }
     }
 }

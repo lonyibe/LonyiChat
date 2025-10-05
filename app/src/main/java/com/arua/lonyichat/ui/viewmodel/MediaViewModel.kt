@@ -10,18 +10,20 @@ import com.arua.lonyichat.data.MediaItem
 import com.arua.lonyichat.data.PlayerManager // IMPORTANT: Import the new PlayerManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class MediaUiState(
     val mediaItems: List<MediaItem> = emptyList(),
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val uploadSuccessful: Boolean = false
 )
 
 class MediaViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(MediaUiState())
-    val uiState: StateFlow<MediaUiState> = _uiState
+    val uiState: StateFlow<MediaUiState> = _uiState.asStateFlow()
 
     // ✨ ADDED: Player Manager instance, initialized using application context
     private val playerManager = PlayerManager(LonyiChatApp.appContext)
@@ -52,16 +54,20 @@ class MediaViewModel : ViewModel() {
 
     fun uploadMedia(uri: Uri, title: String, description: String, context: Activity) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            _uiState.update { it.copy(isLoading = true, error = null, uploadSuccessful = false) }
             ApiService.uploadMedia(uri, title, description, context)
                 .onSuccess {
                     // Refresh the media list to show the new item
                     fetchMedia()
+                    _uiState.update { it.copy(isLoading = false, uploadSuccessful = true) }
                 }
                 .onFailure { error ->
                     _uiState.update { it.copy(error = error.localizedMessage, isLoading = false) }
                 }
         }
+    }
+    fun onUploadSuccessShown() {
+        _uiState.update { it.copy(uploadSuccessful = false) }
     }
 
     fun likeMedia(mediaId: String) {

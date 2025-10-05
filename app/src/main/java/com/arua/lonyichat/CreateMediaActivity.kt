@@ -193,12 +193,11 @@ fun CreateMediaScreen(
         }
     }
 
-    // Listen for a change in the media items list, which signals a successful upload
-    val mediaCount = remember { mutableStateOf(uiState.mediaItems.size) }
-    LaunchedEffect(uiState.mediaItems.size) {
-        if (uiState.mediaItems.size > mediaCount.value) {
+    // Listen for the uploadSuccessful flag
+    LaunchedEffect(uiState.uploadSuccessful) {
+        if (uiState.uploadSuccessful) {
             onUploadSuccess()
+            viewModel.onUploadSuccessShown()
         }
-        mediaCount.value = uiState.mediaItems.size
     }
 }
