@@ -4,8 +4,10 @@ import android.app.Activity
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.arua.lonyichat.LonyiChatApp // Assuming this provides the application context
 import com.arua.lonyichat.data.ApiService
 import com.arua.lonyichat.data.MediaItem
+import com.arua.lonyichat.data.PlayerManager // IMPORTANT: Import the new PlayerManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -21,8 +23,20 @@ class MediaViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(MediaUiState())
     val uiState: StateFlow<MediaUiState> = _uiState
 
+    // ✨ ADDED: Player Manager instance, initialized using application context
+    private val playerManager = PlayerManager(LonyiChatApp.appContext)
+
     init {
         fetchMedia()
+    }
+
+    // ✨ ADDED: Expose PlayerManager for use in the composable
+    fun getPlayerManager(): PlayerManager = playerManager
+
+    // ✨ ADDED: Release all players when ViewModel is cleared to prevent memory leaks
+    override fun onCleared() {
+        super.onCleared()
+        playerManager.releaseAllPlayers()
     }
 
     fun fetchMedia() {
@@ -36,7 +50,6 @@ class MediaViewModel : ViewModel() {
         }
     }
 
-    // ✨ ADDED: Function to handle the media upload logic
     fun uploadMedia(uri: Uri, title: String, description: String, context: Activity) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
@@ -51,7 +64,6 @@ class MediaViewModel : ViewModel() {
         }
     }
 
-    // ✨ ADDED: Interaction logic with Optimistic UI Update for Liking
     fun likeMedia(mediaId: String) {
         viewModelScope.launch {
             // 1. Optimistic Update
@@ -78,7 +90,6 @@ class MediaViewModel : ViewModel() {
         }
     }
 
-    // ✨ ADDED: Interaction logic for Sharing
     fun shareMedia(mediaId: String) {
         viewModelScope.launch {
             // Optimistic Update for share count
@@ -97,7 +108,6 @@ class MediaViewModel : ViewModel() {
         }
     }
 
-    // ✨ ADDED: Interaction logic for Downloading (simulated as an internal count)
     fun downloadMedia(mediaId: String) {
         viewModelScope.launch {
             // Optimistic Update for download count

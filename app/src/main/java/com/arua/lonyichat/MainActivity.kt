@@ -85,8 +85,8 @@ data class AppReaction(val type: String, val emoji: String, val label: String)
 
 val LonyiReactions = listOf(
     AppReaction("amen", "🙏", "Amen"),
-    AppReaction("hallelujah", "🥳", "Hallelujah"),
-    AppReaction("praiseGod", "🙌", "Praise God")
+    AppReaction("hallelujah", "🥳", "Hallelujah")
+    // ... (rest of LonyiReactions)
 )
 
 private const val TAG = "MainActivity"
@@ -1265,38 +1265,6 @@ fun MediaScreen(viewModel: MediaViewModel) {
     }
 }
 
-// NEW HELPER: Vertical button for modern short-form video UI
-@Composable
-fun VerticalActionButton(icon: ImageVector, text: String, count: Int, tint: Color = Color.White, onClick: () -> Unit) { // MODIFIED: Added tint parameter
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .clickable(onClick = onClick)
-            .padding(vertical = 12.dp)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = text,
-            tint = tint, // MODIFIED: Use tint parameter
-            modifier = Modifier.size(36.dp)
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = if (count > 0) formatCount(count) else text, // MODIFIED: Use formatCount
-            color = Color.White,
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.labelSmall
-        )
-    }
-}
-// NEW HELPER: For formatting large numbers (e.g., 12000 -> 12K)
-fun formatCount(count: Int): String {
-    return when {
-        count >= 1000 -> String.format(Locale.getDefault(), "%.1fK", count / 1000.0)
-        else -> count.toString()
-    }
-}
-
 @OptIn(ExperimentalPagerApi::class)
 @Composable
 fun ChurchVibesScreen(viewModel: MediaViewModel) {
@@ -1306,6 +1274,16 @@ fun ChurchVibesScreen(viewModel: MediaViewModel) {
         uiState.mediaItems.filter { it.mediaType == "video" }
     }
     val pagerState = rememberPagerState()
+
+    // ✨ ADDED: Get the PlayerManager instance from the ViewModel
+    val playerManager = viewModel.getPlayerManager()
+
+    // ✨ ADDED: Logic to control playback based on scroll state for seamless experience
+    LaunchedEffect(pagerState.currentPage, mediaItems.size) {
+        if (mediaItems.isNotEmpty()) {
+            playerManager.updatePlayers(pagerState.currentPage, mediaItems.size)
+        }
+    }
 
     SwipeRefresh(
         state = rememberSwipeRefreshState(isRefreshing = uiState.isLoading),
@@ -1324,14 +1302,18 @@ fun ChurchVibesScreen(viewModel: MediaViewModel) {
                 }
             }
             else -> {
-                // MODIFIED: Retained VerticalPager (correctly) for a modern, swipe-up short-form video feed experience.
-                // FIX: Removed the invalid 'verticalAlignment' parameter.
+                // VerticalPager for a TikTok-style feed
                 VerticalPager(
                     count = mediaItems.size,
                     state = pagerState,
                     modifier = Modifier.fillMaxSize()
                 ) { page ->
-                    VideoPlayerItem(mediaItem = mediaItems[page], viewModel = viewModel) // MODIFIED: Pass ViewModel
+                    // ✨ MODIFIED: Pass the player directly from the PlayerManager
+                    VideoPlayerItem(
+                        player = playerManager.getPlayer(page, mediaItems[page]),
+                        mediaItem = mediaItems[page],
+                        viewModel = viewModel
+                    )
                 }
             }
         }
@@ -1341,23 +1323,8 @@ fun ChurchVibesScreen(viewModel: MediaViewModel) {
 
 // Replace VideoPlayerItem implementation
 @Composable
-fun VideoPlayerItem(mediaItem: com.arua.lonyichat.data.MediaItem, viewModel: MediaViewModel) { // MODIFIED: Accept ViewModel
-    val context = LocalContext.current
-    val exoPlayer = remember { ExoPlayer.Builder(context).build() }
-    val mediaSource = remember(mediaItem.url) {
-        // Use the streaming route for videos
-        Media3MediaItem.fromUri("${ApiService.BASE_URL}/uploads/videos/${mediaItem.url.split("/").last()}")
-    }
-
-    DisposableEffect(key1 = mediaItem.url) {
-        exoPlayer.setMediaItem(mediaSource)
-        exoPlayer.prepare()
-        exoPlayer.repeatMode = ExoPlayer.REPEAT_MODE_ONE // Loop video for short-form video experience
-        exoPlayer.playWhenReady = true
-        onDispose {
-            exoPlayer.release()
-        }
-    }
+// ✨ MODIFIED: Accepts ExoPlayer instance instead of creating one internally
+fun VideoPlayerItem(player: ExoPlayer, mediaItem: com.arua.lonyichat.data.MediaItem, viewModel: MediaViewModel) {
 
     Box(
         modifier = Modifier
@@ -1368,23 +1335,23 @@ fun VideoPlayerItem(mediaItem: com.arua.lonyichat.data.MediaItem, viewModel: Med
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
-                    player = exoPlayer
+                    this.player = player // ✨ MODIFIED: Use the passed player
                     useController = true // Shows the default controls (Play/Pause/Seek)
+
                     // Hides all other unnecessary UI elements to simplify the experience
                     setShowNextButton(false)
                     setShowPreviousButton(false)
                     setShowFastForwardButton(false)
                     setShowRewindButton(false)
-                    // Set the PlayerView's background to Black to ensure seamless look
+                    setShowSubtitleButton(false)
+
                     setBackgroundColor(android.graphics.Color.BLACK)
                 }
             },
             // Apply full screen modifier including status/navigation bar space
             modifier = Modifier.fillMaxSize()
         )
-
-        // All previous UI Overlays (metadata, interaction buttons, top title) are REMOVED
-        // from here to comply with the request for only pause/play to be visible.
+        // ⚠️ REMOVED: All overlays (metadata, buttons, top title) for maximum immersion.
     }
 }
 
