@@ -1,11 +1,9 @@
 package com.arua.lonyichat
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import android.content.Intent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Search
@@ -13,25 +11,21 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.arua.lonyichat.data.ApiService
-import com.arua.lonyichat.data.Chat
 import com.arua.lonyichat.ui.viewmodel.ChatListViewModel
-import java.util.*
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
-import java.text.SimpleDateFormat
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen(viewModel: ChatListViewModel) {
+fun ChatScreen(viewModel: ChatListViewModel = viewModel()) {
     val uiState by viewModel.uiState.collectAsState()
-    val currentUserId = ApiService.getCurrentUserId()
-    val onRefresh = { viewModel.fetchConversations() }
+    val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
+    val currentUserId = ApiService.getCurrentUserId()
 
     val filteredConversations = remember(uiState.conversations, searchQuery) {
         if (searchQuery.isBlank()) {
@@ -47,7 +41,9 @@ fun ChatScreen(viewModel: ChatListViewModel) {
 
     Scaffold(
         floatingActionButton = {
-            FloatingActionButton(onClick = { /* TODO: Navigate to a user search/create chat screen */ }) {
+            FloatingActionButton(onClick = {
+                context.startActivity(Intent(context, NewConversationActivity::class.java))
+            }) {
                 Icon(Icons.Default.Add, contentDescription = "New Chat")
             }
         }
@@ -55,7 +51,6 @@ fun ChatScreen(viewModel: ChatListViewModel) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
                 .padding(paddingValues)
         ) {
             // Search Bar
@@ -70,35 +65,51 @@ fun ChatScreen(viewModel: ChatListViewModel) {
                 singleLine = true
             )
 
-            when {
-                uiState.isLoading && uiState.conversations.isEmpty() -> Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) { CircularProgressIndicator() }
-                uiState.error != null -> Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) { Text("Error: ${uiState.error}", color = MaterialTheme.colorScheme.error) }
-                else -> {
-                    SwipeRefresh(
-                        state = rememberSwipeRefreshState(isRefreshing = uiState.isLoading),
-                        onRefresh = onRefresh,
-                        modifier = Modifier.fillMaxSize()
-                    ) {
+            SwipeRefresh(
+                state = rememberSwipeRefreshState(isRefreshing = uiState.isLoading),
+                onRefresh = { viewModel.fetchConversations() }
+            ) {
+                when {
+                    uiState.isLoading && uiState.conversations.isEmpty() -> {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
+                    }
+                    uiState.error != null -> {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("Error: ${uiState.error}", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    filteredConversations.isEmpty() -> {
+                        Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("No conversations found.", style = MaterialTheme.typography.headlineSmall)
+                                if (searchQuery.isBlank()) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text("Tap the '+' button to start a new chat.")
+                                }
+                            }
+                        }
+                    }
+                    else -> {
                         LazyColumn(
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(vertical = 8.dp)
                         ) {
                             items(filteredConversations) { chat ->
-                                val otherParticipantId =
-                                    chat.participants.firstOrNull { it != currentUserId }
-                                val chatName =
-                                    chat.participantNames[otherParticipantId] ?: "Unknown User"
+                                val otherParticipantId = chat.participants.first { it != currentUserId }
                                 ChatThreadItem(
-                                    chatName,
-                                    chat.lastMessage,
-                                    chat.lastMessageTimestamp
+                                    chat = chat,
+                                    onClick = {
+                                        val intent = Intent(context, MessageActivity::class.java).apply {
+                                            putExtra("CHAT_ID", chat.id)
+                                            putExtra("OTHER_USER_ID", otherParticipantId)
+                                            putExtra("OTHER_USER_NAME", chat.participantNames[otherParticipantId])
+                                        }
+                                        context.startActivity(intent)
+                                    }
                                 )
+                                Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
                             }
                         }
                     }

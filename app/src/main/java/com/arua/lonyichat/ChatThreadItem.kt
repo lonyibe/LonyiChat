@@ -14,33 +14,38 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.arua.lonyichat.data.ApiService
+import com.arua.lonyichat.data.Chat
 import java.text.SimpleDateFormat
 import java.util.*
 
 @Composable
 fun ChatThreadItem(
-    chatName: String,
-    lastMessage: String?,
-    lastMessageTimestamp: Date?
+    chat: Chat,
+    onClick: () -> Unit
 ) {
+    val currentUserId = ApiService.getCurrentUserId()
+    val otherParticipantId = chat.participants.firstOrNull { it != currentUserId }
+    val chatName = chat.participantNames[otherParticipantId] ?: "Unknown User"
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { /* TODO: Handle click */ }
-            .padding(vertical = 8.dp),
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Profile Picture Placeholder
+        // Placeholder for profile picture
         Box(
             modifier = Modifier
-                .size(56.dp)
+                .size(50.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = chatName.first().toString(),
-                style = MaterialTheme.typography.headlineSmall,
+                text = chatName.firstOrNull()?.uppercase() ?: "U",
+                style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
         }
@@ -52,40 +57,51 @@ fun ChatThreadItem(
         ) {
             Text(
                 text = chatName,
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = lastMessage ?: "No messages yet",
+                text = chat.lastMessage ?: "No messages yet",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.Gray,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
 
-        if (lastMessageTimestamp != null) {
+        Spacer(modifier = Modifier.width(16.dp))
+
+        chat.lastMessageTimestamp?.let {
             Text(
-                text = formatTimestamp(lastMessageTimestamp),
+                text = formatTimestamp(it),
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
 }
 
-private fun formatTimestamp(timestamp: Date): String {
+private fun formatTimestamp(date: Date): String {
     val calendar = Calendar.getInstance()
-    calendar.time = timestamp
-    val today = Calendar.getInstance()
+    calendar.time = date
 
-    return if (calendar.get(Calendar.YEAR) == today.get(Calendar.YEAR) &&
-        calendar.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR)
-    ) {
-        SimpleDateFormat("HH:mm", Locale.getDefault()).format(timestamp)
-    } else {
-        SimpleDateFormat("MMM dd", Locale.getDefault()).format(timestamp)
+    val today = Calendar.getInstance()
+    val yesterday = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }
+
+    return when {
+        calendar.get(Calendar.YEAR) == today.get(Calendar.YEAR) &&
+                calendar.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR) -> {
+            SimpleDateFormat("h:mm a", Locale.getDefault()).format(date)
+        }
+        calendar.get(Calendar.YEAR) == yesterday.get(Calendar.YEAR) &&
+                calendar.get(Calendar.DAY_OF_YEAR) == yesterday.get(Calendar.DAY_OF_YEAR) -> {
+            "Yesterday"
+        }
+        else -> {
+            SimpleDateFormat("dd/MM/yy", Locale.getDefault()).format(date)
+        }
     }
 }

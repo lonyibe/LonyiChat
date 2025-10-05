@@ -4,11 +4,11 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arua.lonyichat.data.Chat
-import com.arua.lonyichat.data.ApiService // 🔥 ADDED
-import com.arua.lonyichat.data.ApiException
-// REMOVED all Firebase imports
+import com.arua.lonyichat.data.ApiService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class ChatListUiState(
@@ -19,31 +19,27 @@ data class ChatListUiState(
 
 class ChatListViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(ChatListUiState())
-    val uiState: StateFlow<ChatListUiState> = _uiState
-
-    // REMOVED Firebase properties
+    val uiState: StateFlow<ChatListUiState> = _uiState.asStateFlow()
 
     init {
         fetchConversations()
     }
 
-    // ✨ FIX: Changed visibility from private to public to enable pull-to-refresh from UI
     fun fetchConversations() {
         val currentUserId = ApiService.getCurrentUserId()
         if (currentUserId == null) {
-            _uiState.value = ChatListUiState(error = "User not logged in.")
+            _uiState.update { it.copy(error = "User not logged in.") }
             return
         }
 
-        _uiState.value = ChatListUiState(isLoading = true)
+        _uiState.update { it.copy(isLoading = true) }
 
-        // 🔥 DETACHMENT: Replaced Firestore listener with a one-time API call
         viewModelScope.launch {
             ApiService.getChatConversations().onSuccess { chats ->
-                _uiState.value = ChatListUiState(conversations = chats)
+                _uiState.update { it.copy(conversations = chats, isLoading = false) }
             }.onFailure { error ->
                 Log.w("ChatListViewModel", "Listen failed.", error)
-                _uiState.value = ChatListUiState(error = "Failed to load chats: ${error.localizedMessage}")
+                _uiState.update { it.copy(error = "Failed to load chats: ${error.localizedMessage}", isLoading = false) }
             }
         }
     }
