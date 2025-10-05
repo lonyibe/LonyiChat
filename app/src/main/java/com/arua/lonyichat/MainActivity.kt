@@ -73,6 +73,7 @@ import com.arua.lonyichat.ui.theme.LonyiChatTheme
 import com.arua.lonyichat.ui.viewmodel.*
 import com.google.accompanist.pager.ExperimentalPagerApi
 import com.google.accompanist.pager.HorizontalPager
+import com.google.accompanist.pager.VerticalPager // ADDED: Import for vertical feed
 import com.google.accompanist.pager.rememberPagerState
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
@@ -1250,7 +1251,7 @@ fun MediaScreen(viewModel: MediaViewModel) {
                 )
             }
 
-            HorizontalPager(
+            HorizontalPager( // HorizontalPager is used here to select the tab screen
                 count = 2,
                 state = pagerState,
                 modifier = Modifier.fillMaxSize()
@@ -1264,35 +1265,87 @@ fun MediaScreen(viewModel: MediaViewModel) {
     }
 }
 
+// NEW HELPER: Vertical button for modern short-form video UI
+@Composable
+fun VerticalActionButton(icon: ImageVector, text: String, count: Int, onClick: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = text,
+            tint = Color.White,
+            modifier = Modifier.size(36.dp)
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = if (count > 0) count.toString() else text,
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelSmall
+        )
+    }
+}
+
 @OptIn(ExperimentalPagerApi::class)
 @Composable
 fun ChurchVibesScreen(viewModel: MediaViewModel) {
     val uiState by viewModel.uiState.collectAsState()
-    val videos = remember(uiState.mediaItems) {
-        uiState.mediaItems.filter { it.mediaType == "video" }
+    // Filter videos and audios, as VideoPlayerItem currently only handles videos
+    val mediaItems = remember(uiState.mediaItems) {
+        uiState.mediaItems.filter { it.mediaType == "video" || it.mediaType == "audio" }
     }
+    // Correctly initialize state for VerticalPager
     val pagerState = rememberPagerState()
 
-    if (uiState.isLoading && videos.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
-        }
-    } else if (videos.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No vibes yet. Be the first to upload!", style = MaterialTheme.typography.titleMedium)
-        }
-    } else {
-        HorizontalPager(
-            count = videos.size,
-            state = pagerState,
-            modifier = Modifier.fillMaxSize(),
-            verticalAlignment = Alignment.CenterVertically
-        ) { page ->
-            VideoPlayerItem(mediaItem = videos[page])
+    SwipeRefresh(
+        state = rememberSwipeRefreshState(isRefreshing = uiState.isLoading),
+        onRefresh = { viewModel.fetchMedia() },
+        modifier = Modifier.fillMaxSize()
+    ) {
+        when {
+            uiState.error != null -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Error loading media: ${uiState.error}", color = MaterialTheme.colorScheme.error)
+                }
+            }
+            mediaItems.isEmpty() -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No vibes yet. Be the first to upload!", style = MaterialTheme.typography.titleMedium)
+                }
+            }
+            else -> {
+                // MODIFIED: Changed to VerticalPager for a modern, swipe-up short-form video feed experience.
+                // FIX: Removed the invalid 'verticalAlignment' parameter.
+                VerticalPager(
+                    count = mediaItems.size,
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize()
+                ) { page ->
+                    // Only display video player for video types
+                    val mediaItem = mediaItems[page]
+                    if (mediaItem.mediaType == "video") {
+                        VideoPlayerItem(mediaItem = mediaItem)
+                    } else {
+                        // Placeholder for non-video files
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(
+                                "Audio Content: ${mediaItem.title}",
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
 
+
+// Replace VideoPlayerItem implementation
 @Composable
 fun VideoPlayerItem(mediaItem: com.arua.lonyichat.data.MediaItem) {
     val context = LocalContext.current
@@ -1304,7 +1357,8 @@ fun VideoPlayerItem(mediaItem: com.arua.lonyichat.data.MediaItem) {
     DisposableEffect(key1 = mediaItem.url) {
         exoPlayer.setMediaItem(mediaSource)
         exoPlayer.prepare()
-        exoPlayer.playWhenReady = true // Autoplay
+        exoPlayer.repeatMode = ExoPlayer.REPEAT_MODE_ONE // Loop video for short-form video experience
+        exoPlayer.playWhenReady = true
         onDispose {
             exoPlayer.release()
         }
@@ -1315,46 +1369,79 @@ fun VideoPlayerItem(mediaItem: com.arua.lonyichat.data.MediaItem) {
             .fillMaxSize()
             .background(Color.Black)
     ) {
+        // 1. Video Player View (The background content)
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
                     player = exoPlayer
                     useController = true // Show controls
+                    // Set the PlayerView's background to Black to ensure seamless look
+                    setBackgroundColor(android.graphics.Color.BLACK)
                 }
             },
             modifier = Modifier.fillMaxSize()
         )
-        // Overlay for video information and actions
+
+        // 2. Video Metadata (Bottom Left Overlay - Modern Layout)
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(16.dp)
-                .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
-                .padding(8.dp)
+                .fillMaxWidth(0.8f) // Give enough space for action buttons on the right
+                .navigationBarsPadding() // Ensure it stays above system navigation bar
+                .padding(bottom = 16.dp, start = 16.dp)
         ) {
-            Text(mediaItem.title, color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-            Text(mediaItem.description, color = Color.White.copy(alpha = 0.8f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+            // Uploader/Author Row
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // AsyncImage for Uploader Photo (Placeholder logic if not available in MediaItem)
+                AsyncImage(
+                    model = R.drawable.ic_person_placeholder, // Using local placeholder since MediaItem lacks uploader photoUrl
+                    contentDescription = "Uploader Photo",
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "Uploader (${mediaItem.uploaderId})", // Use placeholder if uploaderName not available
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            // Title and Description
+            Text(
+                text = mediaItem.title,
+                color = Color.White,
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = mediaItem.description,
+                color = Color.White.copy(alpha = 0.8f),
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
         }
-        // Interaction Buttons (Like, Comment, Share)
+
+        // 3. Interaction Buttons (Bottom Right - Modern Vertical Bar)
+        // Positioned slightly higher to separate from bottom text but still integrated with the feed style
         Column(
             modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+                .align(Alignment.BottomEnd)
+                .navigationBarsPadding()
+                .padding(end = 16.dp, bottom = 100.dp), // Pushed up above the text block
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            IconButton(onClick = { /* TODO: Handle Like */ }) {
-                Icon(Icons.Default.Favorite, contentDescription = "Like", tint = Color.White, modifier = Modifier.size(32.dp))
-            }
-            IconButton(onClick = { /* TODO: Handle Comment */ }) {
-                Icon(Icons.Default.Comment, contentDescription = "Comment", tint = Color.White, modifier = Modifier.size(32.dp))
-            }
-            IconButton(onClick = { /* TODO: Handle Share */ }) {
-                Icon(Icons.Default.Share, contentDescription = "Share", tint = Color.White, modifier = Modifier.size(32.dp))
-            }
-            IconButton(onClick = { /* TODO: Handle Download */ }) {
-                Icon(Icons.Default.Download, contentDescription = "Download", tint = Color.White, modifier = Modifier.size(32.dp))
-            }
+            // Using placeholder counts as MediaItem doesn't contain reaction counts
+            VerticalActionButton(Icons.Default.Favorite, "Like", 120, onClick = { /* TODO: Handle Like */ })
+            VerticalActionButton(Icons.Default.Comment, "Comment", 25, onClick = { /* TODO: Handle Comment */ })
+            VerticalActionButton(Icons.Default.Share, "Share", 7, onClick = { /* TODO: Handle Share */ })
+            VerticalActionButton(Icons.Default.Download, "Save", 0, onClick = { /* TODO: Handle Download */ })
         }
     }
 }
