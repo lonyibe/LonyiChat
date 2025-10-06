@@ -1,111 +1,128 @@
 package com.arua.lonyichat
 
+import android.app.Activity
+import android.content.Intent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 import com.arua.lonyichat.data.ApiService
 import com.arua.lonyichat.data.Profile
+import com.arua.lonyichat.ui.viewmodel.SearchViewModel
+import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NewConversationScreen(
-    onBackPressed: () -> Unit,
-    onStartChat: (String) -> Unit // Callback with the newly created chatId
+    viewModel: SearchViewModel = viewModel()
 ) {
+    val searchResults by viewModel.searchResults.collectAsState()
+    val friendshipStatusMap by viewModel.friendshipStatus.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
-    var searchResults by remember { mutableStateOf<List<Profile>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current as Activity
 
-    LaunchedEffect(searchQuery) {
-        if (searchQuery.length >= 2) {
-            isLoading = true
-            errorMessage = null
-            try {
-                searchResults = ApiService.searchUsers(searchQuery)
-            } catch (e: Exception) {
-                errorMessage = "Failed to search users: ${e.message}"
-            } finally {
-                isLoading = false
-            }
-        } else {
-            searchResults = emptyList()
-        }
-    }
+    Column(modifier = Modifier.fillMaxSize()) {
+        TextField(
+            value = searchQuery,
+            onValueChange = {
+                searchQuery = it
+                viewModel.searchUsers(it)
+            },
+            label = { Text("Search for users...") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        )
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("New Conversation") },
-                navigationIcon = {
-                    IconButton(onClick = onBackPressed) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
-                }
-            )
-        }
-    ) { paddingValues ->
-        Column(modifier = Modifier.padding(paddingValues)) {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                label = { Text("Search for users") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                singleLine = true
-            )
-
-            when {
-                isLoading -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
-                }
-                errorMessage != null -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(errorMessage!!, color = MaterialTheme.colorScheme.error)
-                    }
-                }
-                else -> {
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        items(searchResults) { user ->
-                            UserItem(user = user, onClick = {
-                                // Create a new chat and then navigate
-                                // This part will be implemented in the ViewModel/ApiService later
-                                // For now, we'll just simulate it
-                                println("Starting chat with ${user.name}")
-                                // onStartChat(newlyCreatedChatId)
-                            })
+        LazyColumn {
+            items(searchResults) { user ->
+                val status = friendshipStatusMap[user.userId] ?: "none"
+                UserRow(
+                    user = user,
+                    status = status,
+                    onAction = {
+                        when (status) {
+                            "friends" -> { // Click the row to open chat
+                                coroutineScope.launch {
+                                    try {
+                                        val chatId = ApiService.createChat(user.userId)
+                                        val intent = Intent(context, MessageActivity::class.java).apply {
+                                            putExtra("CHAT_ID", chatId)
+                                            putExtra("OTHER_USER_NAME", user.name)
+                                            putExtra("OTHER_USER_ID", user.userId)
+                                        }
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        // Handle error, maybe show a toast
+                                    }
+                                }
+                            }
+                            "none", "request_received" -> { // Add or Accept
+                                viewModel.sendFriendRequest(user.userId)
+                            }
+                            // "request_sent" has no action
                         }
                     }
-                }
+                )
             }
         }
     }
 }
 
 @Composable
-fun UserItem(user: Profile, onClick: () -> Unit) {
+fun UserRow(
+    user: Profile,
+    status: String,
+    onAction: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(16.dp),
+            .clickable(onClick = onAction)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // You can add a profile picture here later
+        AsyncImage(
+            model = user.photoUrl,
+            contentDescription = "Profile Photo",
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape),
+            contentScale = ContentScale.Crop
+        )
         Spacer(modifier = Modifier.width(16.dp))
-        Text(text = user.name, style = MaterialTheme.typography.bodyLarge)
+        Text(text = user.name, modifier = Modifier.weight(1f))
+
+        when (status) {
+            "friends" -> {
+                // The entire row is clickable, no button needed
+            }
+            "request_sent" -> {
+                OutlinedButton(onClick = {}, enabled = false) {
+                    Text("Pending")
+                }
+            }
+            "request_received" -> {
+                Button(onClick = onAction) {
+                    Text("Accept")
+                }
+            }
+            "none" -> {
+                Button(onClick = onAction) {
+                    Text("Add Friend")
+                }
+            }
+        }
     }
 }

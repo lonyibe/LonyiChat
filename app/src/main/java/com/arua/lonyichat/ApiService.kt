@@ -41,6 +41,7 @@ data class FriendshipStatusResponse(val success: Boolean, val status: String)
 object ApiService {
     private val client = OkHttpClient()
     private val gson = Gson()
+    // 롤백FIXED: Reverted BASE_URL to the original public IP address
     const val BASE_URL = "http://104.225.141.13:3000"
     private val JSON = "application/json; charset=utf-8".toMediaType()
 
@@ -724,7 +725,7 @@ object ApiService {
                 }
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            return Result.failure(e)
         }
     }
 

@@ -10,7 +10,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -40,13 +39,13 @@ fun ChatThreadItem(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Placeholder for profile picture
+        // Display the other user's profile picture
         AsyncImage(
             model = ImageRequest.Builder(LocalContext.current)
                 .data(photoUrl)
                 .crossfade(true)
-                .placeholder(R.drawable.ic_person_placeholder)
-                .error(R.drawable.ic_person_placeholder)
+                .placeholder(R.drawable.ic_person_placeholder) // Fallback placeholder
+                .error(R.drawable.ic_person_placeholder)       // Fallback for errors
                 .build(),
             contentDescription = "Profile Photo",
             modifier = Modifier

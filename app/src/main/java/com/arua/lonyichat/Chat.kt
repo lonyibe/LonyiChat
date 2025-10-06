@@ -1,8 +1,7 @@
 package com.arua.lonyichat.data
 
-// 🔥 REMOVED: import com.google.firebase.firestore.ServerTimestamp
-import java.util.Date
 import com.google.gson.annotations.SerializedName
+import java.util.Date
 
 // Represents a chat conversation document in MongoDB
 data class Chat(
@@ -10,11 +9,11 @@ data class Chat(
     val id: String = "",
     val participants: List<String> = emptyList(),
     val lastMessage: String = "",
-    // 🔥 RENAMED/FIXED: Use SerializedName to map the backend MongoDB field name
+    // Use SerializedName to map the backend MongoDB field name
     @SerializedName("lastMessageTimestamp")
     val lastMessageTimestamp: Date? = null,
 
-    // We'll add this field to make querying easier
+    // These fields are populated by the backend to make displaying info easier
     val participantNames: Map<String, String> = emptyMap(),
     val participantPhotoUrls: Map<String, String?> = emptyMap()
 )

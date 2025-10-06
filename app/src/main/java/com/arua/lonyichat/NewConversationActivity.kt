@@ -1,38 +1,45 @@
 package com.arua.lonyichat
 
-import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.runtime.rememberCoroutineScope
-import com.arua.lonyichat.data.ApiService
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.ui.Modifier
 import com.arua.lonyichat.ui.theme.LonyiChatTheme
-import kotlinx.coroutines.launch
 
 class NewConversationActivity : ComponentActivity() {
+    @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             LonyiChatTheme {
-                val coroutineScope = rememberCoroutineScope()
-
-                NewConversationScreen(
-                    onBackPressed = { finish() },
-                    onStartChat = { userId ->
-                        coroutineScope.launch {
-                            try {
-                                val chatId = ApiService.createChat(userId)
-                                val intent = Intent(this@NewConversationActivity, MessageActivity::class.java).apply {
-                                    putExtra("CHAT_ID", chatId)
+                Scaffold(
+                    topBar = {
+                        TopAppBar(
+                            title = { Text("New Conversation") },
+                            navigationIcon = {
+                                IconButton(onClick = { finish() }) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                                 }
-                                startActivity(intent)
-                                finish() // Finish this activity so the user doesn't come back to it when pressing back
-                            } catch (e: Exception) {
-                                // Handle error, maybe show a toast
                             }
-                        }
+                        )
                     }
-                )
+                ) { innerPadding ->
+                    // The NewConversationScreen now handles its own logic and ViewModel,
+                    // so we just need to place it inside the Scaffold.
+                    Box(modifier = Modifier.padding(innerPadding)) {
+                        NewConversationScreen()
+                    }
+                }
             }
         }
     }

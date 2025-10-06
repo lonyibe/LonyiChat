@@ -1,5 +1,6 @@
-package com.arua.lonyichat.data
+package com.arua.lonyichat
 
-data class Friendship(
-    val status: String // none, request_sent, request_received, friends
+data class FriendshipStatus(
+    val userId: String,
+    val status: String // Can be "none", "friends", "request_sent", "request_received"
 )
