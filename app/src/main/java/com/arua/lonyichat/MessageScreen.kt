@@ -1,6 +1,11 @@
 // lonyibe/lonyichat/LonyiChat-87a97249019887eaa5b777f1336cd7c6a85c85c1/app/src/main/java/com/arua/lonyichat/MessageScreen.kt
 package com.arua.lonyichat
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -20,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -33,7 +39,7 @@ import com.arua.lonyichat.ui.viewmodel.MessageViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun MessageScreen(
     chatId: String,
@@ -46,13 +52,20 @@ fun MessageScreen(
     val isDarkTheme = isSystemInDarkTheme()
     val currentUserId = ApiService.getCurrentUserId()
 
+    // Read the IME inset directly for keyboard height tracking
+    val keyboardHeight = WindowInsets.ime.getBottom(LocalDensity.current)
+
     LaunchedEffect(chatId) {
         viewModel.loadMessages(chatId)
     }
 
-    LaunchedEffect(uiState.messages.size) {
+    // FIX: Use scrollToItem() for instantaneous (super fast) scroll when keyboard/messages change
+    LaunchedEffect(uiState.messages.size, keyboardHeight) {
         if (uiState.messages.isNotEmpty()) {
-            listState.animateScrollToItem(uiState.messages.size - 1)
+            listState.scrollToItem( // Changed from animateScrollToItem
+                index = uiState.messages.size - 1,
+                scrollOffset = 0
+            )
         }
     }
 
@@ -75,19 +88,16 @@ fun MessageScreen(
                 )
             )
         }
-        // Removed the bottomBar and contentWindowInsets to allow Column to control everything
     ) { paddingValues ->
-        // ✨ The main Column now handles both the padding and the keyboard ✨
         Column(
             modifier = Modifier
-                .padding(paddingValues) // Apply padding from the Scaffold (for the top bar)
+                .padding(paddingValues)
                 .fillMaxSize()
-                .imePadding() // This is the key fix: it adds padding when the keyboard is open
+                .imePadding()
         ) {
-            // This Box will contain the messages or loading/error states
             Box(
                 modifier = Modifier
-                    .weight(1f) // This makes the message list take up all available space
+                    .weight(1f)
                     .background(MaterialTheme.colorScheme.background)
             ) {
                 when {
@@ -110,17 +120,22 @@ fun MessageScreen(
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(8.dp)
                         ) {
-                            items(uiState.messages) { message ->
-                                MessageBubble(
-                                    message = message,
-                                    isSentByCurrentUser = message.senderId == currentUserId
-                                )
+                            items(uiState.messages, key = { it.id }) { message ->
+                                Box(
+                                    modifier = Modifier
+                                        .animateItemPlacement()
+                                        .padding(vertical = 4.dp)
+                                ) {
+                                    MessageBubble(
+                                        message = message,
+                                        isSentByCurrentUser = message.senderId == currentUserId
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
-            // The input bar is now part of the main Column
             MessageInput(
                 onSendMessage = { text ->
                     if (text.isNotBlank()) {
@@ -148,8 +163,7 @@ fun MessageBubble(message: Message, isSentByCurrentUser: Boolean) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp),
-        horizontalArrangement = if (isSentByCurrentUser) Arrangement.End else Arrangement.Start,
-        verticalAlignment = Alignment.Bottom
+        horizontalArrangement = if (isSentByCurrentUser) Arrangement.End else Arrangement.Start
     ) {
         if (!isSentByCurrentUser) {
             ProfilePicture(imageUrl = message.senderPhotoUrl)
@@ -202,7 +216,6 @@ fun ProfilePicture(imageUrl: String?) {
     )
 }
 
-// ✨ Simplified the MessageInput to be just the Row, not a Card ✨
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MessageInput(
@@ -212,14 +225,12 @@ fun MessageInput(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            // FIX: Reduced vertical padding from 8.dp to 4.dp to close the gap with the keyboard
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .padding(horizontal = 0.dp, vertical = 0.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         TextField(
             value = text,
             onValueChange = { text = it },
-            modifier = Modifier.weight(1f),
             placeholder = { Text("Type a message...") },
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -228,20 +239,21 @@ fun MessageInput(
                 unfocusedIndicatorColor = Color.Transparent,
                 disabledIndicatorColor = Color.Transparent
             ),
-            shape = RoundedCornerShape(24.dp)
+            shape = RoundedCornerShape(24.dp),
+            modifier = Modifier.weight(1f).padding(start = 8.dp)
         )
         Spacer(modifier = Modifier.width(8.dp))
         IconButton(
             onClick = {
                 onSendMessage(text)
-                text = "" // Clear text after sending
+                text = ""
             },
-            enabled = text.isNotBlank()
+            enabled = text.isNotBlank(),
+            modifier = Modifier.padding(end = 8.dp)
         ) {
             Icon(
                 Icons.AutoMirrored.Filled.Send,
                 contentDescription = "Send Message",
-                // Ensure the icon is orange when enabled
                 tint = MaterialTheme.colorScheme.primary
             )
         }
