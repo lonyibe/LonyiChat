@@ -58,8 +58,8 @@ class MessageViewModel : ViewModel() {
                 senderPhotoUrl = data.optString("senderPhotoUrl", null),
                 text = data.getString("text"),
                 timestamp = date ?: Date(),
-                type = data.optString("type", "text"), // ✨ HANDLE MESSAGE TYPE
-                url = data.optString("url", null)      // ✨ HANDLE MEDIA URL
+                type = data.optString("type", "text"),
+                url = data.optString("url", null)
             )
             _uiState.value = _uiState.value.copy(
                 messages = _uiState.value.messages + newMessage
@@ -84,7 +84,6 @@ class MessageViewModel : ViewModel() {
     fun sendMessage(chatId: String, text: String) {
         viewModelScope.launch {
             try {
-                // ✨ SPECIFY THE MESSAGE TYPE AS 'TEXT'
                 ApiService.sendMessage(chatId, text, type = "text")
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(error = "Failed to send message: ${e.message}")
@@ -92,14 +91,12 @@ class MessageViewModel : ViewModel() {
         }
     }
 
-    // ✨ NEW: Function to handle sending media messages
     fun sendMediaMessage(chatId: String, uri: Uri, type: String, context: Activity) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true) // Optional: Show a loading indicator
+            _uiState.value = _uiState.value.copy(isLoading = true)
             val uploadResult = ApiService.uploadChatMedia(uri, context)
             uploadResult.fold(
                 onSuccess = { url ->
-                    // Set a default message text based on the media type
                     val messageText = when (type) {
                         "image" -> "📷 Image"
                         "video" -> "📹 Video"
@@ -117,7 +114,7 @@ class MessageViewModel : ViewModel() {
                     _uiState.value = _uiState.value.copy(error = "Upload failed: ${it.message}")
                 }
             )
-            _uiState.value = _uiState.value.copy(isLoading = false) // Hide loading indicator
+            _uiState.value = _uiState.value.copy(isLoading = false)
         }
     }
 

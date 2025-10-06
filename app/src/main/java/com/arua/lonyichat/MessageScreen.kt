@@ -1,16 +1,20 @@
-// lonyibe/lonyichat/LonyiChat-87a97249019887eaa5b777f1336cd7c6a85c85c1/app/src/main/java/com/arua/lonyichat/MessageScreen.kt
 package com.arua.lonyichat
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -23,6 +27,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MusicNote
@@ -34,6 +39,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -47,8 +54,10 @@ import com.arua.lonyichat.ui.theme.LonyiDarkSurface
 import com.arua.lonyichat.ui.theme.LonyiDarkTextPrimary
 import com.arua.lonyichat.ui.theme.LonyiOrange
 import com.arua.lonyichat.ui.viewmodel.MessageViewModel
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.math.absoluteValue
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -57,11 +66,13 @@ fun MessageScreen(
     viewModel: MessageViewModel,
     otherUserName: String,
     onBackPressed: () -> Unit,
-    // ✨ ADDED: Callbacks to trigger media pickers
+    // ✨ Callbacks are now more specific for recording actions
     onPickImage: () -> Unit,
     onPickVideo: () -> Unit,
     onPickAudio: () -> Unit,
-    onRecordVoice: () -> Unit,
+    onStartRecording: () -> Boolean, // Returns true if recording started successfully
+    onStopRecording: () -> Unit,
+    onCancelRecording: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
@@ -111,7 +122,7 @@ fun MessageScreen(
                     .background(MaterialTheme.colorScheme.background)
             ) {
                 when {
-                    uiState.isLoading && uiState.messages.isEmpty() -> { // Only show full-screen loader when messages are empty
+                    uiState.isLoading && uiState.messages.isEmpty() -> {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator()
                         }
@@ -149,16 +160,19 @@ fun MessageScreen(
                         viewModel.sendMessage(chatId, text)
                     }
                 },
-                // ✨ ADDED: Pass the media picker callbacks to the input composable
                 onPickImage = onPickImage,
                 onPickVideo = onPickVideo,
                 onPickAudio = onPickAudio,
-                onRecordVoice = onRecordVoice
+                // ✨ Pass the new recording callbacks
+                onStartRecording = onStartRecording,
+                onStopRecording = onStopRecording,
+                onCancelRecording = onCancelRecording
             )
         }
     }
 }
 
+// --- MessageBubble and other composables remain the same ---
 @Composable
 fun MessageBubble(message: Message, isSentByCurrentUser: Boolean) {
     val bubbleColor = if (isSentByCurrentUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
@@ -267,7 +281,7 @@ fun VideoMessage(message: Message) {
     ) {
         // In a real app, you would use a library like ExoPlayer to show a thumbnail
         Image(
-            painter = rememberAsyncImagePainter(model = message.url), // This might show the first frame if the server is configured correctly
+            painter = rememberAsyncImagePainter(model = message.url), // CORRECTED
             contentDescription = "Video message",
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,
@@ -316,7 +330,7 @@ fun AudioMessage(message: Message) {
 @Composable
 fun ProfilePicture(imageUrl: String?) {
     Image(
-        painter = rememberAsyncImagePainter(
+        painter = rememberAsyncImagePainter( // CORRECTED
             model = imageUrl,
             error = painterResource(id = R.drawable.ic_person_placeholder)
         ),
@@ -332,81 +346,215 @@ fun ProfilePicture(imageUrl: String?) {
 @Composable
 fun MessageInput(
     onSendMessage: (String) -> Unit,
-    // ✨ ADDED: Callbacks for the new buttons
     onPickImage: () -> Unit,
     onPickVideo: () -> Unit,
     onPickAudio: () -> Unit,
-    onRecordVoice: () -> Unit
+    // ✨ MODIFIED: New callbacks for recording
+    onStartRecording: () -> Boolean,
+    onStopRecording: () -> Unit,
+    onCancelRecording: () -> Unit
 ) {
     var text by remember { mutableStateOf("") }
     var showAttachmentMenu by remember { mutableStateOf(false) }
 
-    Column {
-        // ✨ NEW: The attachment menu that appears when you click the '+' button
+    // ✨ NEW: State for voice recording UI
+    var isRecording by remember { mutableStateOf(false) }
+    var recordingTime by remember { mutableStateOf(0L) }
+    var slideOffset by remember { mutableStateOf(0f) }
+    val maxSlideOffset = with(LocalDensity.current) { -150.dp.toPx() } // Slide left to cancel
+
+    // Timer for recording duration
+    LaunchedEffect(isRecording) {
+        while (isRecording) {
+            delay(1000)
+            recordingTime++
+        }
+    }
+
+    Column(modifier = Modifier.animateContentSize()) {
         AnimatedVisibility(
             visible = showAttachmentMenu,
             enter = expandVertically(),
             exit = shrinkVertically()
         ) {
-            AttachmentMenu(onPickImage, onPickVideo, onPickAudio, onRecordVoice)
+            // The onRecordVoice parameter is removed as it's now handled by the microphone button directly
+            AttachmentMenu(onPickImage, onPickVideo, onPickAudio)
         }
 
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surface)
                 .padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            contentAlignment = Alignment.CenterStart
         ) {
-            // Attachment button
-            IconButton(onClick = { showAttachmentMenu = !showAttachmentMenu }) {
-                Icon(
-                    if (showAttachmentMenu) Icons.Default.Close else Icons.Default.Add,
-                    contentDescription = "Attach file",
-                    tint = MaterialTheme.colorScheme.primary
+            // ✨ NEW: Recording overlay
+            if (isRecording) {
+                RecordingOverlay(
+                    recordingTime = recordingTime,
+                    slideOffset = slideOffset,
+                    onCancelRecording = onCancelRecording
                 )
-            }
+            } else {
+                // Regular input row
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    IconButton(onClick = { showAttachmentMenu = !showAttachmentMenu }) {
+                        Icon(
+                            if (showAttachmentMenu) Icons.Default.Close else Icons.Default.Add,
+                            contentDescription = "Attach file",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
 
-            // Text field
-            TextField(
-                value = text,
-                onValueChange = { text = it },
-                placeholder = { Text("Type a message...") },
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    disabledIndicatorColor = Color.Transparent
-                ),
-                shape = RoundedCornerShape(24.dp),
-                modifier = Modifier.weight(1f)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            // Send button
-            IconButton(
-                onClick = {
-                    onSendMessage(text)
-                    text = ""
-                },
-                enabled = text.isNotBlank(),
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.Send,
-                    contentDescription = "Send Message",
-                    tint = if (text.isNotBlank()) MaterialTheme.colorScheme.primary else Color.Gray
-                )
+                    TextField(
+                        value = text,
+                        onValueChange = { text = it },
+                        placeholder = { Text("Type a message...") },
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            disabledIndicatorColor = Color.Transparent
+                        ),
+                        shape = RoundedCornerShape(24.dp),
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // ✨ NEW: Crossfade between Send and Mic button
+                    Crossfade(targetState = text.isNotBlank(), label = "SendOrMic") { isTextEntered ->
+                        if (isTextEntered) {
+                            IconButton(
+                                onClick = {
+                                    onSendMessage(text)
+                                    text = ""
+                                },
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.Send,
+                                    contentDescription = "Send Message",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        } else {
+                            // ✨ NEW: Voice Record Button with gesture handling
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primary)
+                                    .pointerInput(Unit) {
+                                        detectDragGesturesAfterLongPress(
+                                            onDragStart = {
+                                                if (onStartRecording()) {
+                                                    isRecording = true
+                                                    recordingTime = 0L
+                                                }
+                                            },
+                                            onDragEnd = {
+                                                isRecording = false
+                                                if (slideOffset < maxSlideOffset) {
+                                                    onCancelRecording()
+                                                } else {
+                                                    onStopRecording()
+                                                }
+                                                slideOffset = 0f
+                                            },
+                                            onDragCancel = {
+                                                isRecording = false
+                                                onCancelRecording()
+                                                slideOffset = 0f
+                                            },
+                                            onDrag = { change, dragAmount ->
+                                                change.consume()
+                                                slideOffset += dragAmount.x
+                                            }
+                                        )
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.Mic,
+                                    contentDescription = "Record Voice Message",
+                                    tint = Color.White
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 }
+@Composable
+fun RecordingOverlay(recordingTime: Long, slideOffset: Float, onCancelRecording: () -> Unit) {
+    val slideCancelThreshold = with(LocalDensity.current) { -150.dp.toPx() }
+    val isCancelled = slideOffset < slideCancelThreshold
 
-// ✨ NEW: The attachment menu composable
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        // Timer
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Default.Mic,
+                contentDescription = null,
+                tint = Color.Red,
+                modifier = Modifier.padding(start = 16.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = String.format("%02d:%02d", recordingTime / 60, recordingTime % 60),
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        // "Slide to cancel" indicator
+        Row(
+            modifier = Modifier
+                .graphicsLayer {
+                    translationX = slideOffset
+                },
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AnimatedVisibility(visible = isCancelled, enter = fadeIn(), exit = fadeOut()) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Cancel Recording",
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(end = 16.dp)
+                )
+            }
+            AnimatedVisibility(visible = !isCancelled, enter = fadeIn(), exit = fadeOut()) {
+                Text(
+                    "Slide to cancel",
+                    modifier = Modifier.padding(end = 16.dp),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+            }
+
+        }
+    }
+}
+
+
+// ✨ MODIFIED: Removed the onRecordVoice parameter
 @Composable
 fun AttachmentMenu(
     onPickImage: () -> Unit,
     onPickVideo: () -> Unit,
-    onPickAudio: () -> Unit,
-    onRecordVoice: () -> Unit
+    onPickAudio: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -418,11 +566,10 @@ fun AttachmentMenu(
         AttachmentButton(icon = Icons.Default.Image, description = "Image", onClick = onPickImage)
         AttachmentButton(icon = Icons.Default.Videocam, description = "Video", onClick = onPickVideo)
         AttachmentButton(icon = Icons.Default.MusicNote, description = "Audio", onClick = onPickAudio)
-        AttachmentButton(icon = Icons.Default.Mic, description = "Voice", onClick = onRecordVoice)
+        // The voice button is now the primary action when the text field is empty
     }
 }
 
-// ✨ NEW: A button for the attachment menu
 @Composable
 fun AttachmentButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -431,7 +578,7 @@ fun AttachmentButton(
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable(onClick = onClick)
+        modifier = Modifier.clickable(onClick = onClick).padding(8.dp)
     ) {
         Icon(icon, contentDescription = description, tint = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(4.dp))
