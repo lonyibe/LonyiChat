@@ -212,7 +212,8 @@ fun MessageInput(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(8.dp), // Padding around the input area
+            // FIX: Reduced vertical padding from 8.dp to 4.dp to close the gap with the keyboard
+            .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         TextField(
@@ -240,8 +241,7 @@ fun MessageInput(
             Icon(
                 Icons.AutoMirrored.Filled.Send,
                 contentDescription = "Send Message",
-                // FIX: Unconditionally set the tint to primary. The IconButton handles the
-                // disabled alpha blend on this color when 'enabled' is false.
+                // Ensure the icon is orange when enabled
                 tint = MaterialTheme.colorScheme.primary
             )
         }
