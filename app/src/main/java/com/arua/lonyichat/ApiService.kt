@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import android.webkit.MimeTypeMap
 import com.arua.lonyichat.LonyiChatApp
 import com.arua.lonyichat.Message
 import com.google.gson.Gson
@@ -284,6 +285,52 @@ object ApiService {
 
                 val request = Request.Builder()
                     .url("$BASE_URL/upload/post-image")
+                    .addHeader("Authorization", "Bearer $token")
+                    .post(multipartBody)
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    val responseBody = response.body?.string()
+                    if (!response.isSuccessful) {
+                        throw ApiException("Upload failed: ${getErrorMessage(responseBody)}")
+                    }
+                    val jsonResponse = gson.fromJson(responseBody, Map::class.java)
+                    val secureUrl = jsonResponse["secure_url"] as? String
+                    if (secureUrl.isNullOrBlank()) {
+                        return@withContext Result.failure(ApiException("Backend returned a success status but no URL."))
+                    }
+                    return@withContext Result.success(secureUrl)
+                }
+            } catch (e: Exception) {
+                return@withContext Result.failure(ApiException("File operation failed: ${e.localizedMessage}"))
+            }
+        }
+    }
+
+    // ✨ NEW: Function to upload media for chat messages
+    suspend fun uploadChatMedia(uri: Uri, context: Activity): Result<String> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+
+        return withContext(Dispatchers.IO) {
+            try {
+                val inputStream: InputStream? = context.contentResolver.openInputStream(uri)
+                val mimeType = context.contentResolver.getType(uri)
+                if (inputStream == null || mimeType == null) {
+                    return@withContext Result.failure(ApiException("Failed to open media file."))
+                }
+                val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType) ?: "tmp"
+
+
+                val fileBytes = inputStream.use { it.readBytes() }
+                val requestBody = fileBytes.toRequestBody(mimeType.toMediaTypeOrNull(), 0, fileBytes.size)
+
+                val multipartBody = MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart("chatMedia", "chat-media-${System.currentTimeMillis()}.$extension", requestBody)
+                    .build()
+
+                val request = Request.Builder()
+                    .url("$BASE_URL/upload/chat-media")
                     .addHeader("Authorization", "Bearer $token")
                     .post(multipartBody)
                     .build()
@@ -730,15 +777,22 @@ object ApiService {
         }
     }
 
+    // ✨ MODIFIED: Now supports media messages
     suspend fun postChurchMessage(
         churchId: String,
         content: String,
         repliedToMessageId: String? = null,
-        repliedToMessageContent: String? = null
+        repliedToMessageContent: String? = null,
+        type: String = "text",
+        url: String? = null
     ): Result<ChurchMessage> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {
-            val bodyMap = mutableMapOf<String, Any>("content" to content)
+            val bodyMap = mutableMapOf<String, Any?>(
+                "content" to content,
+                "type" to type,
+                "url" to url
+            )
             repliedToMessageId?.let { bodyMap["repliedToMessageId"] = it }
             repliedToMessageContent?.let { bodyMap["repliedToMessageContent"] = it }
 
@@ -764,6 +818,7 @@ object ApiService {
             Result.failure(e)
         }
     }
+
 
     suspend fun getVerseOfTheDay(): Result<Verse> {
         return try {
@@ -1153,9 +1208,16 @@ object ApiService {
         }
     }
 
-    suspend fun sendMessage(chatId: String, text: String): Message {
+    // ✨ MODIFIED: Now supports media messages
+    suspend fun sendMessage(chatId: String, text: String, type: String = "text", url: String? = null): Message {
         val token = getAuthToken() ?: throw ApiException("User not authenticated.")
-        val json = gson.toJson(mapOf("text" to text))
+        val requestBodyMap = mutableMapOf<String, Any?>(
+            "text" to text,
+            "type" to type
+        )
+        url?.let { requestBodyMap["url"] = it }
+
+        val json = gson.toJson(requestBodyMap)
         val body = json.toRequestBody(JSON)
         val request = Request.Builder()
             .url("$BASE_URL/chats/$chatId/messages")
@@ -1173,6 +1235,7 @@ object ApiService {
             }
         }
     }
+
 
     suspend fun createChat(otherUserId: String): String {
         val token = getAuthToken() ?: throw ApiException("User not authenticated.")

@@ -1,5 +1,7 @@
 package com.arua.lonyichat.ui.viewmodel
 
+import android.app.Activity
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arua.lonyichat.data.ApiService
@@ -55,7 +57,9 @@ class MessageViewModel : ViewModel() {
                 senderName = data.getString("senderName"),
                 senderPhotoUrl = data.optString("senderPhotoUrl", null),
                 text = data.getString("text"),
-                timestamp = date ?: Date()
+                timestamp = date ?: Date(),
+                type = data.optString("type", "text"), // ✨ HANDLE MESSAGE TYPE
+                url = data.optString("url", null)      // ✨ HANDLE MEDIA URL
             )
             _uiState.value = _uiState.value.copy(
                 messages = _uiState.value.messages + newMessage
@@ -80,12 +84,43 @@ class MessageViewModel : ViewModel() {
     fun sendMessage(chatId: String, text: String) {
         viewModelScope.launch {
             try {
-                ApiService.sendMessage(chatId, text)
+                // ✨ SPECIFY THE MESSAGE TYPE AS 'TEXT'
+                ApiService.sendMessage(chatId, text, type = "text")
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(error = "Failed to send message: ${e.message}")
             }
         }
     }
+
+    // ✨ NEW: Function to handle sending media messages
+    fun sendMediaMessage(chatId: String, uri: Uri, type: String, context: Activity) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true) // Optional: Show a loading indicator
+            val uploadResult = ApiService.uploadChatMedia(uri, context)
+            uploadResult.fold(
+                onSuccess = { url ->
+                    // Set a default message text based on the media type
+                    val messageText = when (type) {
+                        "image" -> "📷 Image"
+                        "video" -> "📹 Video"
+                        "audio" -> "🎵 Audio"
+                        "voice" -> "🎤 Voice Message"
+                        else -> "Attachment"
+                    }
+                    try {
+                        ApiService.sendMessage(chatId, messageText, type, url)
+                    } catch (e: Exception) {
+                        _uiState.value = _uiState.value.copy(error = "Failed to send message: ${e.message}")
+                    }
+                },
+                onFailure = {
+                    _uiState.value = _uiState.value.copy(error = "Upload failed: ${it.message}")
+                }
+            )
+            _uiState.value = _uiState.value.copy(isLoading = false) // Hide loading indicator
+        }
+    }
+
 
     override fun onCleared() {
         super.onCleared()
