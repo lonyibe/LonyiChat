@@ -34,8 +34,9 @@ fun NewConversationScreen(
 ) {
     val searchResults by viewModel.searchResults.collectAsState()
     val friendshipStatusMap by viewModel.friendshipStatus.collectAsState()
-    // ✨ ADDED: Collect the loading state ✨
     val loadingStatusUserIds by viewModel.loadingStatusUserIds.collectAsState()
+    // ✨ ADDED: Collect the main search loading state ✨
+    val isSearching by viewModel.isSearching.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current as Activity
@@ -58,40 +59,68 @@ fun NewConversationScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         )
 
-        LazyColumn {
-            items(searchResults) { user ->
-                val status = friendshipStatusMap[user.userId]
-                UserRow(
-                    user = user,
-                    status = status,
-                    // ✨ ADDED: Pass loading state to the UserRow ✨
-                    isLoading = user.userId in loadingStatusUserIds,
-                    onAction = {
-                        // Action is only enabled when not loading and status is determined
-                        if (status != null) {
-                            when (status) {
-                                "friends" -> { // Click the row to open chat
-                                    coroutineScope.launch {
-                                        try {
-                                            val chatId = ApiService.createChat(user.userId)
-                                            val intent = Intent(context, MessageActivity::class.java).apply {
-                                                putExtra("CHAT_ID", chatId)
-                                                putExtra("OTHER_USER_NAME", user.name)
-                                                putExtra("OTHER_USER_ID", user.userId)
+        // ✨ ADDED: Handle loading, empty, and results states ✨
+        when {
+            // 1. Show a loading spinner for the initial search
+            isSearching -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+            // 2. Show a message if the search is done, the query is not empty, and there are no results
+            searchResults.isEmpty() && searchQuery.isNotBlank() -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No users found.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            // 3. Show the list of results
+            else -> {
+                LazyColumn {
+                    items(searchResults) { user ->
+                        val status = friendshipStatusMap[user.userId]
+                        UserRow(
+                            user = user,
+                            status = status,
+                            isLoading = user.userId in loadingStatusUserIds,
+                            onAction = {
+                                if (status != null) {
+                                    when (status) {
+                                        "friends" -> { // Click the row to open chat
+                                            coroutineScope.launch {
+                                                try {
+                                                    val chatId = ApiService.createChat(user.userId)
+                                                    val intent = Intent(context, MessageActivity::class.java).apply {
+                                                        putExtra("CHAT_ID", chatId)
+                                                        putExtra("OTHER_USER_NAME", user.name)
+                                                        putExtra("OTHER_USER_ID", user.userId)
+                                                    }
+                                                    context.startActivity(intent)
+                                                } catch (e: Exception) {
+                                                    // Handle error
+                                                }
                                             }
-                                            context.startActivity(intent)
-                                        } catch (e: Exception) {
-                                            // Handle error
+                                        }
+                                        "none", "request_received" -> { // Add or Accept
+                                            viewModel.sendFriendRequest(user.userId)
                                         }
                                     }
                                 }
-                                "none", "request_received" -> { // Add or Accept
-                                    viewModel.sendFriendRequest(user.userId)
-                                }
                             }
-                        }
+                        )
                     }
-                )
+                }
             }
         }
     }
@@ -101,7 +130,7 @@ fun NewConversationScreen(
 fun UserRow(
     user: Profile,
     status: String?,
-    isLoading: Boolean, // ✨ ADDED: isLoading parameter ✨
+    isLoading: Boolean,
     onAction: () -> Unit
 ) {
     Row(
@@ -111,7 +140,6 @@ fun UserRow(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Added Placeholder for Profile Picture
         AsyncImage(
             model = ImageRequest.Builder(LocalContext.current)
                 .data(user.photoUrl)
@@ -128,7 +156,6 @@ fun UserRow(
         Spacer(modifier = Modifier.width(16.dp))
         Text(text = user.name, modifier = Modifier.weight(1f))
 
-        // ✨ ADDED: Conditional logic for displaying the spinner ✨
         Box(contentAlignment = Alignment.Center) {
             if (isLoading) {
                 CircularProgressIndicator(

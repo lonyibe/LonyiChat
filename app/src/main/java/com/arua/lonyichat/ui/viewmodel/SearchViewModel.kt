@@ -16,9 +16,12 @@ class SearchViewModel : ViewModel() {
     private val _friendshipStatus = MutableStateFlow<Map<String, String>>(emptyMap())
     val friendshipStatus: StateFlow<Map<String, String>> = _friendshipStatus
 
-    // ✨ ADDED: State to track which user statuses are currently loading ✨
     private val _loadingStatusUserIds = MutableStateFlow<Set<String>>(emptySet())
     val loadingStatusUserIds: StateFlow<Set<String>> = _loadingStatusUserIds
+
+    // ✨ ADDED: State to track if the main search is in progress ✨
+    private val _isSearching = MutableStateFlow(false)
+    val isSearching: StateFlow<Boolean> = _isSearching
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
@@ -31,6 +34,7 @@ class SearchViewModel : ViewModel() {
             return
         }
         viewModelScope.launch {
+            _isSearching.value = true // ✨ Set loading state to true
             try {
                 val users = ApiService.searchUsers(query)
                 _searchResults.value = users
@@ -40,13 +44,14 @@ class SearchViewModel : ViewModel() {
                 }
             } catch (e: Exception) {
                 _error.value = "Failed to search users: ${e.message}"
+            } finally {
+                _isSearching.value = false // ✨ Set loading state to false when done
             }
         }
     }
 
     private fun fetchFriendshipStatus(userId: String) {
         viewModelScope.launch {
-            // ✨ ADDED: Add user to loading set before fetching ✨
             _loadingStatusUserIds.value = _loadingStatusUserIds.value + userId
             try {
                 val result = ApiService.getFriendshipStatus(userId)
@@ -58,7 +63,6 @@ class SearchViewModel : ViewModel() {
                     _error.value = "Failed to get friendship status for user $userId: ${e.message}"
                 }
             } finally {
-                // ✨ ADDED: Remove user from loading set after fetching is complete ✨
                 _loadingStatusUserIds.value = _loadingStatusUserIds.value - userId
             }
         }
@@ -66,10 +70,8 @@ class SearchViewModel : ViewModel() {
 
     fun sendFriendRequest(userId: String) {
         viewModelScope.launch {
-            // No need to show a spinner here, as the status will just update upon success
             val result = ApiService.sendFriendRequest(userId)
             result.onSuccess {
-                // Refresh the status after sending the request
                 fetchFriendshipStatus(userId)
             }.onFailure { e ->
                 _error.value = "Failed to send friend request: ${e.message}"
