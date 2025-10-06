@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,6 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.arua.lonyichat.data.ApiService
 import com.arua.lonyichat.data.Profile
 import com.arua.lonyichat.ui.viewmodel.SearchViewModel
@@ -33,16 +37,21 @@ fun NewConversationScreen(
     val context = LocalContext.current as Activity
 
     Column(modifier = Modifier.fillMaxSize()) {
-        TextField(
+        // ✨ Modernized Search Bar ✨
+        OutlinedTextField(
             value = searchQuery,
             onValueChange = {
                 searchQuery = it
                 viewModel.searchUsers(it)
             },
             label = { Text("Search for users...") },
+            leadingIcon = {
+                Icon(Icons.Default.Search, contentDescription = "Search Icon")
+            },
+            shape = RoundedCornerShape(30.dp), // Rounded corners
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         )
 
         LazyColumn {
@@ -93,8 +102,14 @@ fun UserRow(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // ✨ Added Placeholder for Profile Picture ✨
         AsyncImage(
-            model = user.photoUrl,
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(user.photoUrl)
+                .crossfade(true)
+                .placeholder(R.drawable.ic_person_placeholder) // Display this while loading
+                .error(R.drawable.ic_person_placeholder)       // Display this on error or if URL is null
+                .build(),
             contentDescription = "Profile Photo",
             modifier = Modifier
                 .size(48.dp)
