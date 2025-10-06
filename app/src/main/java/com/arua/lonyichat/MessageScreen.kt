@@ -1,3 +1,4 @@
+// lonyibe/lonyichat/LonyiChat-87a97249019887eaa5b777f1336cd7c6a85c85c1/app/src/main/java/com/arua/lonyichat/MessageScreen.kt
 package com.arua.lonyichat
 
 import androidx.compose.foundation.Image
@@ -91,14 +92,17 @@ fun MessageScreen(
             ) {
                 when {
                     uiState.isLoading -> {
-                        CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
                     }
                     uiState.error != null -> {
-                        Text(
-                            text = uiState.error!!,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.align(Alignment.Center)
-                        )
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(
+                                text = uiState.error!!,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
                     }
                     else -> {
                         LazyColumn(
