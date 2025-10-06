@@ -15,5 +15,6 @@ data class Chat(
     val lastMessageTimestamp: Date? = null,
 
     // We'll add this field to make querying easier
-    val participantNames: Map<String, String> = emptyMap()
+    val participantNames: Map<String, String> = emptyMap(),
+    val participantPhotoUrls: Map<String, String?> = emptyMap()
 )

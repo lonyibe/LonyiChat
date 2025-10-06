@@ -11,9 +11,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.arua.lonyichat.data.ApiService
 import com.arua.lonyichat.data.Chat
 import java.text.SimpleDateFormat
@@ -27,6 +31,7 @@ fun ChatThreadItem(
     val currentUserId = ApiService.getCurrentUserId()
     val otherParticipantId = chat.participants.firstOrNull { it != currentUserId }
     val chatName = chat.participantNames[otherParticipantId] ?: "Unknown User"
+    val photoUrl = chat.participantPhotoUrls[otherParticipantId]
 
     Row(
         modifier = Modifier
@@ -36,19 +41,20 @@ fun ChatThreadItem(
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Placeholder for profile picture
-        Box(
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(photoUrl)
+                .crossfade(true)
+                .placeholder(R.drawable.ic_person_placeholder)
+                .error(R.drawable.ic_person_placeholder)
+                .build(),
+            contentDescription = "Profile Photo",
             modifier = Modifier
                 .size(50.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.primaryContainer),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = chatName.firstOrNull()?.uppercase() ?: "U",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-        }
+            contentScale = ContentScale.Crop
+        )
 
         Spacer(modifier = Modifier.width(16.dp))
 
