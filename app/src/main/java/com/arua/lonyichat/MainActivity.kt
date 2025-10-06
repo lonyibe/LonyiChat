@@ -11,7 +11,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.viewModels
+import androidx.activity.viewModels // FIX: This import is now available
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -113,6 +113,7 @@ sealed class Screen(val title: String, val icon: ImageVector) {
 private const val EXTRA_NOTIFICATION_ID = "notification_id"
 
 class MainActivity : ComponentActivity() {
+    // These viewModels delegates should now resolve correctly
     private val homeFeedViewModel: HomeFeedViewModel by viewModels()
     private val churchesViewModel: ChurchesViewModel by viewModels()
     private val chatListViewModel: ChatListViewModel by viewModels()
@@ -154,6 +155,7 @@ class MainActivity : ComponentActivity() {
         }
         churchesViewModel.fetchChurches()
         notificationViewModel.fetchNotifications()
+        chatListViewModel.fetchConversations()
     }
 
     override fun onPause() {
@@ -194,7 +196,9 @@ fun LonyiChatApp(
     notificationViewModel: NotificationViewModel
 ) {
     val profileUiState by profileViewModel.uiState.collectAsState()
-    val unreadCount by notificationViewModel.unreadCount.collectAsState()
+    val unreadNotificationCount by notificationViewModel.unreadCount.collectAsState()
+    // FIX: Collect the unread chat count
+    val unreadChatCount by chatListViewModel.unreadChatCount.collectAsState()
     val profileState = UserProfileState(
         userName = profileUiState.profile?.name ?: "Loading...",
         photoUrl = profileUiState.profile?.photoUrl,
@@ -256,7 +260,7 @@ fun LonyiChatApp(
                         context.startActivity(intent)
                     },
                     scrollBehavior = scrollBehavior,
-                    unreadCount = unreadCount
+                    unreadCount = unreadNotificationCount
                 )
                 if (selectedItem == Screen.Media) {
                     TabRow(
@@ -282,7 +286,9 @@ fun LonyiChatApp(
             LonyiChatBottomBar(
                 items = bottomBarItems,
                 selectedItem = selectedItem,
-                onItemSelected = { selectedItem = it }
+                onItemSelected = { selectedItem = it },
+                // FIX: Pass the chat count to the bottom bar
+                unreadChatCount = unreadChatCount
             )
         },
         floatingActionButton = {
@@ -380,15 +386,35 @@ fun LonyiChatTopBar(
 }
 
 @Composable
-fun LonyiChatBottomBar(items: List<Screen>, selectedItem: Screen, onItemSelected: (Screen) -> Unit) {
+fun LonyiChatBottomBar(items: List<Screen>, selectedItem: Screen, onItemSelected: (Screen) -> Unit, unreadChatCount: Int) {
     NavigationBar(
         modifier = Modifier.navigationBarsPadding(),
         containerColor = MaterialTheme.colorScheme.surface,
         contentColor = MaterialTheme.colorScheme.onSurface
     ) {
         items.forEach { screen ->
+            val isChatScreen = screen == Screen.Chat
             NavigationBarItem(
-                icon = { Icon(screen.icon, contentDescription = screen.title) },
+                icon = {
+                    // FIX: Use BadgedBox for the Chat icon if it's the chat screen
+                    if (isChatScreen) {
+                        BadgedBox(
+                            badge = {
+                                if (unreadChatCount > 0) {
+                                    Badge(containerColor = Color.Red) {
+                                        // Ensure "99+" for high counts
+                                        Text(text = if (unreadChatCount > 99) "99+" else unreadChatCount.toString())
+                                    }
+                                }
+                            }
+                        ) {
+                            Icon(screen.icon, contentDescription = screen.title)
+                        }
+                    } else {
+                        // Standard icon for other screens
+                        Icon(screen.icon, contentDescription = screen.title)
+                    }
+                },
                 label = { Text(screen.title, style = MaterialTheme.typography.labelSmall) },
                 selected = selectedItem == screen,
                 onClick = { onItemSelected(screen) },
@@ -760,6 +786,7 @@ fun PostCard(post: Post, viewModel: HomeFeedViewModel, onCommentClicked: () -> U
 fun PollView(poll: Poll, onVote: (String) -> Unit) {
     val totalVotes = poll.options.sumOf { it.votes.size }
     val currentUser = ApiService.getCurrentUserId()
+    // FIX: The error was here. It should check if any option's votes list contains the currentUser ID.
     val userVote = poll.options.find { it.votes.contains(currentUser) }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

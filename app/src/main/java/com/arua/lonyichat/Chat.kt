@@ -15,5 +15,10 @@ data class Chat(
 
     // These fields are populated by the backend to make displaying info easier
     val participantNames: Map<String, String> = emptyMap(),
-    val participantPhotoUrls: Map<String, String?> = emptyMap()
+    val participantPhotoUrls: Map<String, String?> = emptyMap(),
+    // ✨ NEW: Field for unread message count from the backend
+    val unreadCount: Int = 0
 )
+
+// Wrapper for the API response when fetching chats
+data class ChatConversationsResponse(val success: Boolean, val chats: List<Chat>)

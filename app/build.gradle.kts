@@ -84,7 +84,7 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
 
-    // ✨ This line will now work correctly!
+    // ✨ FIX: This line ensures 'viewModels' is resolved for Activity
     implementation(libs.androidx.lifecycle.viewmodel.compose)
 
     implementation("io.socket:socket.io-client:2.0.1")

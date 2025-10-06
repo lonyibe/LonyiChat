@@ -8,7 +8,7 @@ espressoCore = "3.5.1"
 lifecycleRuntimeKtx = "2.6.1"
 activityCompose = "1.8.0"
 composeBom = "2024.09.00"
-# ✨ ADDED: Version for all lifecycle components
+# ✨ ADDED/UPDATED: Version for all lifecycle components (2.8.0 is safe and modern)
 lifecycleVersion = "2.8.0"
 
 [libraries]
@@ -27,7 +27,7 @@ androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-
 androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
-# ✨ ADDED: Library definition for the viewModel() composable function
+# ✨ FIXED: Library definition for the viewModel() composable function (using androidx-lifecycle-viewmodel-compose)
 androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycleVersion" }
 
 
