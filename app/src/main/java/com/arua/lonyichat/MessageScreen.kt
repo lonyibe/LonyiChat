@@ -237,7 +237,13 @@ fun MessageInput(
             },
             enabled = text.isNotBlank()
         ) {
-            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send Message")
+            Icon(
+                Icons.AutoMirrored.Filled.Send,
+                contentDescription = "Send Message",
+                // FIX: Unconditionally set the tint to primary. The IconButton handles the
+                // disabled alpha blend on this color when 'enabled' is false.
+                tint = MaterialTheme.colorScheme.primary
+            )
         }
     }
 }
