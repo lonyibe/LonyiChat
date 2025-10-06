@@ -12,8 +12,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.forEachGesture
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -39,8 +37,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -350,15 +346,12 @@ fun MessageInput(
 
     var isRecording by remember { mutableStateOf(false) }
     var recordingTime by remember { mutableStateOf(0L) }
-    var slideOffset by remember { mutableStateOf(0f) }
-    val density = LocalDensity.current
-    val slideToCancelDistancePx = with(density) { -150.dp.toPx() }
 
     // Timer for recording duration
     LaunchedEffect(isRecording) {
-        recordingTime = 0L
         if (isRecording) {
-            while (true) {
+            recordingTime = 0L
+            while (isRecording) { // Loop will stop when isRecording becomes false
                 delay(1000)
                 recordingTime++
             }
@@ -382,9 +375,16 @@ fun MessageInput(
             contentAlignment = Alignment.CenterStart
         ) {
             if (isRecording) {
-                RecordingOverlay(
+                RecordingControls(
                     recordingTime = recordingTime,
-                    slideOffset = slideOffset
+                    onSendClick = {
+                        onStopRecording()
+                        isRecording = false
+                    },
+                    onCancelClick = {
+                        onCancelRecording()
+                        isRecording = false
+                    }
                 )
             } else {
                 Row(
@@ -428,57 +428,14 @@ fun MessageInput(
                                 )
                             }
                         } else {
-                            val scope = rememberCoroutineScope()
-                            Box(
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primary)
-                                    .pointerInput(Unit) {
-                                        forEachGesture {
-                                            awaitPointerEventScope {
-                                                awaitFirstDown(requireUnconsumed = false)
-                                                val longPressJob = scope.launch {
-                                                    delay(200)
-                                                    if (onStartRecording()) {
-                                                        isRecording = true
-                                                    }
-                                                }
-
-                                                while (true) {
-                                                    val event = awaitPointerEvent()
-                                                    if (event.changes.any { it.pressed }) {
-                                                        // ✨ FIX for sumOf ambiguity
-                                                        var xChange = 0f
-                                                        event.changes.forEach {
-                                                            xChange += it.positionChange().x
-                                                        }
-                                                        slideOffset += xChange
-                                                    } else {
-                                                        // Pointer is up
-                                                        longPressJob.cancel()
-                                                        if (isRecording) {
-                                                            if (slideOffset < slideToCancelDistancePx) {
-                                                                onCancelRecording()
-                                                            } else {
-                                                                onStopRecording()
-                                                            }
-                                                        }
-                                                        // Reset state and break the loop
-                                                        isRecording = false
-                                                        slideOffset = 0f
-                                                        break
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
+                            IconButton(onClick = {
+                                // Start recording if permissions are granted, etc.
+                                isRecording = onStartRecording()
+                            }) {
                                 Icon(
                                     Icons.Default.Mic,
                                     contentDescription = "Record Voice Message",
-                                    tint = Color.White
+                                    tint = MaterialTheme.colorScheme.primary
                                 )
                             }
                         }
@@ -488,21 +445,33 @@ fun MessageInput(
         }
     }
 }
-@Composable
-fun RecordingOverlay(recordingTime: Long, slideOffset: Float) {
-    val slideCancelThreshold = with(LocalDensity.current) { -150.dp.toPx() }
-    val isCancelled = slideOffset < slideCancelThreshold
 
+@Composable
+fun RecordingControls(
+    recordingTime: Long,
+    onSendClick: () -> Unit,
+    onCancelClick: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(48.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .height(48.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // Cancel button
+        IconButton(onClick = onCancelClick) {
+            Icon(
+                Icons.Default.Delete,
+                contentDescription = "Cancel Recording",
+                tint = MaterialTheme.colorScheme.error
+            )
+        }
+
+        // Timer
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Icon(
                 Icons.Default.Mic,
                 contentDescription = null,
@@ -517,31 +486,17 @@ fun RecordingOverlay(recordingTime: Long, slideOffset: Float) {
             )
         }
 
-        Row(
-            modifier = Modifier
-                .graphicsLayer {
-                    translationX = slideOffset
-                },
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AnimatedVisibility(visible = isCancelled, enter = fadeIn(), exit = fadeOut()) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "Cancel Recording",
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(end = 16.dp)
-                )
-            }
-            AnimatedVisibility(visible = !isCancelled, enter = fadeIn(), exit = fadeOut()) {
-                Text(
-                    "Slide to cancel",
-                    modifier = Modifier.padding(end = 16.dp),
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                )
-            }
+        // Send button
+        IconButton(onClick = onSendClick) {
+            Icon(
+                Icons.AutoMirrored.Filled.Send,
+                contentDescription = "Send Recording",
+                tint = MaterialTheme.colorScheme.primary
+            )
         }
     }
 }
+
 
 @Composable
 fun AttachmentMenu(
@@ -570,7 +525,9 @@ fun AttachmentButton(
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable(onClick = onClick).padding(8.dp)
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .padding(8.dp)
     ) {
         Icon(icon, contentDescription = description, tint = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(4.dp))
