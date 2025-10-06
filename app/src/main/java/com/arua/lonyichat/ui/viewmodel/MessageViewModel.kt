@@ -52,8 +52,10 @@ class MessageViewModel : ViewModel() {
                 id = data.getString("id"),
                 chatId = data.getString("chatId"),
                 senderId = data.getString("senderId"),
+                senderName = data.getString("senderName"),
+                senderPhotoUrl = data.optString("senderPhotoUrl", null),
                 text = data.getString("text"),
-                timestamp = date ?: Date() // Use parsed date, with a fallback
+                timestamp = date ?: Date()
             )
             _uiState.value = _uiState.value.copy(
                 messages = _uiState.value.messages + newMessage
@@ -67,7 +69,7 @@ class MessageViewModel : ViewModel() {
             _uiState.value = MessageUiState(isLoading = true)
             try {
                 val messages = ApiService.getMessages(chatId)
-                _uiState.value = MessageUiState(messages = messages.sortedBy { it.timestamp })
+                _uiState.value = MessageUiState(messages = messages)
                 connectToChat(chatId)
             } catch (e: Exception) {
                 _uiState.value = MessageUiState(error = "Failed to load messages: ${e.message}")

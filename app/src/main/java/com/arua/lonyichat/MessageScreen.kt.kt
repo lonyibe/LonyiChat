@@ -1,17 +1,29 @@
 package com.arua.lonyichat
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import coil.compose.rememberAsyncImagePainter
+import com.arua.lonyichat.data.ApiService
 import com.arua.lonyichat.ui.viewmodel.MessageViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -28,18 +40,18 @@ fun MessageScreen(
     var newMessageText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
 
-    // Load messages when the screen is first launched
+    // You should replace this with a dynamic way of getting the current user's ID
+    val currentUserId = ApiService.getCurrentUserId()
+
     LaunchedEffect(chatId) {
         viewModel.loadMessages(chatId)
     }
 
-    // Scroll to the bottom when a new message is added
-    LaunchedEffect(uiState.messages) {
+    LaunchedEffect(uiState.messages.size) {
         if (uiState.messages.isNotEmpty()) {
             listState.animateScrollToItem(uiState.messages.size - 1)
         }
     }
-
 
     Scaffold(
         topBar = {
@@ -47,68 +59,54 @@ fun MessageScreen(
                 title = { Text(otherUserName) },
                 navigationIcon = {
                     IconButton(onClick = onBackPressed) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        // FIX 3: Use AutoMirrored ArrowBack icon
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
         },
         bottomBar = {
-            BottomAppBar {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = newMessageText,
-                        onValueChange = { newMessageText = it },
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text("Type a message...") }
-                    )
-                    IconButton(onClick = {
-                        if (newMessageText.isNotBlank()) {
-                            viewModel.sendMessage(chatId, newMessageText)
-                            newMessageText = ""
-                        }
-                    }) {
-                        Icon(Icons.Default.Send, contentDescription = "Send Message")
+            MessageInputBar(
+                onSendMessage = {
+                    if (newMessageText.isNotBlank()) {
+                        viewModel.sendMessage(chatId, newMessageText)
+                        newMessageText = ""
                     }
-                }
-            }
+                },
+                text = newMessageText,
+                onTextChanged = { newMessageText = it }
+            )
         }
     ) { paddingValues ->
-        when {
-            uiState.isLoading -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFFECE5DD)) // WhatsApp-like background color
+                .padding(paddingValues)
+        ) {
+            when {
+                uiState.isLoading -> {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 }
-            }
-            uiState.error != null -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(uiState.error!!, color = MaterialTheme.colorScheme.error)
+                uiState.error != null -> {
+                    Text(
+                        text = uiState.error!!,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
                 }
-            }
-            else -> {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues)
-                        .padding(horizontal = 8.dp),
-                ) {
-                    items(uiState.messages) { message ->
-                        MessageBubble(message = message)
+                else -> {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(8.dp)
+                    ) {
+                        items(uiState.messages) { message ->
+                            MessageBubble(
+                                message = message,
+                                isSentByCurrentUser = message.senderId == currentUserId
+                            )
+                        }
                     }
                 }
             }
@@ -117,36 +115,109 @@ fun MessageScreen(
 }
 
 @Composable
-fun MessageBubble(message: Message) {
-    val messageDate = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(message.timestamp)
+fun MessageBubble(message: Message, isSentByCurrentUser: Boolean) {
+    val bubbleColor = if (isSentByCurrentUser) Color(0xFFDCF8C6) else Color.White
+    // FIX 1: Use Alignment.End and Alignment.Start for horizontal alignment in a Column
+    val alignment = if (isSentByCurrentUser) Alignment.End else Alignment.Start
+    val bubbleShape = RoundedCornerShape(
+        topStart = 16.dp,
+        topEnd = 16.dp,
+        bottomStart = if (isSentByCurrentUser) 16.dp else 0.dp,
+        bottomEnd = if (isSentByCurrentUser) 0.dp else 16.dp
+    )
 
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
+            .padding(vertical = 4.dp),
+        horizontalArrangement = if (isSentByCurrentUser) Arrangement.End else Arrangement.Start,
+        verticalAlignment = Alignment.Bottom
     ) {
-        // You can use a real user ID here to differentiate between sent and received messages
-        val isSentByCurrentUser = message.senderId == "current_user_id"
+        if (!isSentByCurrentUser) {
+            ProfilePicture(imageUrl = message.senderPhotoUrl)
+        }
 
-        Box(
+        Column(
             modifier = Modifier
-                .align(if (isSentByCurrentUser) Alignment.End else Alignment.Start)
-                .fillMaxWidth(0.8f)
+                .weight(1f, fill = false)
+                .padding(horizontal = 8.dp),
+            horizontalAlignment = alignment // This now uses the correct type
         ) {
-            Card(
-                shape = MaterialTheme.shapes.medium,
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isSentByCurrentUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer
-                )
+            Box(
+                modifier = Modifier
+                    .background(bubbleColor, shape = bubbleShape)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
+                Column {
+                    if (!isSentByCurrentUser) {
+                        Text(
+                            text = message.senderName,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                     Text(text = message.text)
                     Text(
-                        text = messageDate,
-                        style = MaterialTheme.typography.bodySmall,
+                        text = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(message.timestamp),
+                        fontSize = 12.sp,
+                        color = Color.Gray,
                         modifier = Modifier.align(Alignment.End)
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun ProfilePicture(imageUrl: String?) {
+    Image(
+        painter = rememberAsyncImagePainter(
+            model = imageUrl,
+            error = painterResource(id = R.drawable.ic_person_placeholder)
+        ),
+        contentDescription = "Profile Picture",
+        modifier = Modifier
+            .size(40.dp)
+            .clip(CircleShape),
+        contentScale = ContentScale.Crop
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MessageInputBar(
+    onSendMessage: () -> Unit,
+    text: String,
+    onTextChanged: (String) -> Unit
+) {
+    Card(
+        modifier = Modifier.padding(8.dp),
+        shape = RoundedCornerShape(24.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextField(
+                value = text,
+                onValueChange = onTextChanged,
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("Type a message...") },
+                // FIX 2: Use colors instead of textFieldColors
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent
+                )
+            )
+            IconButton(onClick = onSendMessage) {
+                // FIX 4: Use AutoMirrored Send icon
+                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send Message")
             }
         }
     }
