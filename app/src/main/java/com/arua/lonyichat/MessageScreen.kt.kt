@@ -3,6 +3,7 @@ package com.arua.lonyichat
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Send
@@ -11,7 +12,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.arua.lonyichat.data.ApiService
 import com.arua.lonyichat.ui.viewmodel.MessageViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -21,16 +21,25 @@ import java.util.*
 fun MessageScreen(
     chatId: String,
     viewModel: MessageViewModel,
-    otherUserId: String,
     otherUserName: String,
     onBackPressed: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var newMessageText by remember { mutableStateOf("") }
+    val listState = rememberLazyListState()
 
+    // Load messages when the screen is first launched
     LaunchedEffect(chatId) {
         viewModel.loadMessages(chatId)
     }
+
+    // Scroll to the bottom when a new message is added
+    LaunchedEffect(uiState.messages) {
+        if (uiState.messages.isNotEmpty()) {
+            listState.animateScrollToItem(uiState.messages.size - 1)
+        }
+    }
+
 
     Scaffold(
         topBar = {
@@ -92,13 +101,13 @@ fun MessageScreen(
             }
             else -> {
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(paddingValues)
                         .padding(horizontal = 8.dp),
-                    reverseLayout = true
                 ) {
-                    items(uiState.messages.reversed()) { message ->
+                    items(uiState.messages) { message ->
                         MessageBubble(message = message)
                     }
                 }
@@ -109,27 +118,35 @@ fun MessageScreen(
 
 @Composable
 fun MessageBubble(message: Message) {
-    val isFromCurrentUser = message.senderId == ApiService.getCurrentUserId()
-    val alignment = if (isFromCurrentUser) Alignment.CenterEnd else Alignment.CenterStart
-    val bubbleColor = if (isFromCurrentUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer
+    val messageDate = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(message.timestamp)
 
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        contentAlignment = alignment
+            .padding(vertical = 4.dp)
     ) {
-        Card(
-            shape = MaterialTheme.shapes.medium,
-            colors = CardDefaults.cardColors(containerColor = bubbleColor)
+        // You can use a real user ID here to differentiate between sent and received messages
+        val isSentByCurrentUser = message.senderId == "current_user_id"
+
+        Box(
+            modifier = Modifier
+                .align(if (isSentByCurrentUser) Alignment.End else Alignment.Start)
+                .fillMaxWidth(0.8f)
         ) {
-            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                Text(text = message.text)
-                Text(
-                    text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(message.timestamp),
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.align(Alignment.End)
+            Card(
+                shape = MaterialTheme.shapes.medium,
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isSentByCurrentUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer
                 )
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(text = message.text)
+                    Text(
+                        text = messageDate,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.align(Alignment.End)
+                    )
+                }
             }
         }
     }

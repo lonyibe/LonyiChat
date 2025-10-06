@@ -4,10 +4,18 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arua.lonyichat.data.ApiService
 import com.arua.lonyichat.Message
+import io.socket.client.IO
+import io.socket.client.Socket
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.json.JSONObject
+import java.net.URISyntaxException
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 data class MessageUiState(
     val messages: List<Message> = emptyList(),
@@ -19,14 +27,48 @@ class MessageViewModel : ViewModel() {
 
     private val _uiState = MutableStateFlow(MessageUiState())
     val uiState: StateFlow<MessageUiState> = _uiState.asStateFlow()
+    private var socket: Socket? = null
+
+    init {
+        try {
+            socket = IO.socket(ApiService.BASE_URL)
+        } catch (e: URISyntaxException) {
+            e.printStackTrace()
+        }
+    }
+
+    fun connectToChat(chatId: String) {
+        socket?.on(Socket.EVENT_CONNECT) {
+            socket?.emit("join_chat", chatId)
+        }
+        socket?.on("new_message") { args ->
+            val data = args[0] as JSONObject
+            val timestampString = data.getString("timestamp")
+            val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
+            format.timeZone = TimeZone.getTimeZone("UTC")
+            val date = format.parse(timestampString)
+
+            val newMessage = Message(
+                id = data.getString("id"),
+                chatId = data.getString("chatId"),
+                senderId = data.getString("senderId"),
+                text = data.getString("text"),
+                timestamp = date ?: Date() // Use parsed date, with a fallback
+            )
+            _uiState.value = _uiState.value.copy(
+                messages = _uiState.value.messages + newMessage
+            )
+        }
+        socket?.connect()
+    }
 
     fun loadMessages(chatId: String) {
         viewModelScope.launch {
             _uiState.value = MessageUiState(isLoading = true)
             try {
-                // This is a placeholder. We will implement real-time updates later.
                 val messages = ApiService.getMessages(chatId)
-                _uiState.value = MessageUiState(messages = messages.sortedByDescending { it.timestamp })
+                _uiState.value = MessageUiState(messages = messages.sortedBy { it.timestamp })
+                connectToChat(chatId)
             } catch (e: Exception) {
                 _uiState.value = MessageUiState(error = "Failed to load messages: ${e.message}")
             }
@@ -36,14 +78,15 @@ class MessageViewModel : ViewModel() {
     fun sendMessage(chatId: String, text: String) {
         viewModelScope.launch {
             try {
-                val newMessage = ApiService.sendMessage(chatId, text)
-                // Add the new message to the top of the list
-                val currentMessages = _uiState.value.messages
-                _uiState.value = _uiState.value.copy(messages = listOf(newMessage) + currentMessages)
+                ApiService.sendMessage(chatId, text)
             } catch (e: Exception) {
-                // Handle error, maybe show a toast or a snackbar
                 _uiState.value = _uiState.value.copy(error = "Failed to send message: ${e.message}")
             }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        socket?.disconnect()
     }
 }

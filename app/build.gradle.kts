@@ -87,6 +87,8 @@ dependencies {
     // ✨ This line will now work correctly!
     implementation(libs.androidx.lifecycle.viewmodel.compose)
 
+    implementation("io.socket:socket.io-client:2.0.1")
+
 
     testImplementation(libs.junit)
 

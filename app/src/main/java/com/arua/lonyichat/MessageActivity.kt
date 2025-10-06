@@ -14,10 +14,9 @@ class MessageActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val chatId = intent.getStringExtra("CHAT_ID")
-        val otherUserId = intent.getStringExtra("OTHER_USER_ID")
         val otherUserName = intent.getStringExtra("OTHER_USER_NAME") ?: "Chat"
 
-        if (chatId == null || otherUserId == null) {
+        if (chatId == null) {
             // Handle the error, maybe finish the activity
             finish()
             return
@@ -28,7 +27,6 @@ class MessageActivity : ComponentActivity() {
                 MessageScreen(
                     chatId = chatId,
                     viewModel = viewModel,
-                    otherUserId = otherUserId,
                     otherUserName = otherUserName,
                     onBackPressed = { finish() }
                 )
