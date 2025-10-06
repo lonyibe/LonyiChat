@@ -41,7 +41,6 @@ data class FriendshipStatusResponse(val success: Boolean, val status: String)
 object ApiService {
     private val client = OkHttpClient()
     private val gson = Gson()
-    // 롤백FIXED: Reverted BASE_URL to the original public IP address
     const val BASE_URL = "http://104.225.141.13:3000"
     private val JSON = "application/json; charset=utf-8".toMediaType()
 
@@ -63,6 +62,8 @@ object ApiService {
     data class ChurchMessageReactionResponse(val success: Boolean, val message: ChurchMessage)
     data class EventResponse(val success: Boolean, val events: List<Event>)
     data class SingleEventResponse(val success: Boolean, val event: Event)
+    // ✨ ADDED: The missing data class for creating a single church
+    data class SingleChurchResponse(val success: Boolean, val church: Church)
 
     // MODIFIED: MediaResponse is now defined in MediaItem.kt, but we'll include a helper response for interactions
     data class MediaInteractionResponse(val success: Boolean, val message: String)
