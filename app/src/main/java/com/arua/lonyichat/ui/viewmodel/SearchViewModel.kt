@@ -16,19 +16,25 @@ class SearchViewModel : ViewModel() {
     private val _friendshipStatus = MutableStateFlow<Map<String, String>>(emptyMap())
     val friendshipStatus: StateFlow<Map<String, String>> = _friendshipStatus
 
+    // ✨ ADDED: State to track which user statuses are currently loading ✨
+    private val _loadingStatusUserIds = MutableStateFlow<Set<String>>(emptySet())
+    val loadingStatusUserIds: StateFlow<Set<String>> = _loadingStatusUserIds
+
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
 
     fun searchUsers(query: String) {
         if (query.isBlank()) {
             _searchResults.value = emptyList()
+            _friendshipStatus.value = emptyMap()
+            _loadingStatusUserIds.value = emptySet()
             return
         }
         viewModelScope.launch {
             try {
                 val users = ApiService.searchUsers(query)
                 _searchResults.value = users
-                // After getting users, fetch their friendship status
+                // After getting users, fetch their friendship status for each
                 users.forEach { user ->
                     fetchFriendshipStatus(user.userId)
                 }
@@ -40,19 +46,27 @@ class SearchViewModel : ViewModel() {
 
     private fun fetchFriendshipStatus(userId: String) {
         viewModelScope.launch {
-            val result = ApiService.getFriendshipStatus(userId)
-            result.onSuccess { response ->
-                _friendshipStatus.value = _friendshipStatus.value.toMutableMap().apply {
-                    this[userId] = response.status
+            // ✨ ADDED: Add user to loading set before fetching ✨
+            _loadingStatusUserIds.value = _loadingStatusUserIds.value + userId
+            try {
+                val result = ApiService.getFriendshipStatus(userId)
+                result.onSuccess { response ->
+                    _friendshipStatus.value = _friendshipStatus.value.toMutableMap().apply {
+                        this[userId] = response.status
+                    }
+                }.onFailure { e ->
+                    _error.value = "Failed to get friendship status for user $userId: ${e.message}"
                 }
-            }.onFailure { e ->
-                _error.value = "Failed to get friendship status for user $userId: ${e.message}"
+            } finally {
+                // ✨ ADDED: Remove user from loading set after fetching is complete ✨
+                _loadingStatusUserIds.value = _loadingStatusUserIds.value - userId
             }
         }
     }
 
     fun sendFriendRequest(userId: String) {
         viewModelScope.launch {
+            // No need to show a spinner here, as the status will just update upon success
             val result = ApiService.sendFriendRequest(userId)
             result.onSuccess {
                 // Refresh the status after sending the request

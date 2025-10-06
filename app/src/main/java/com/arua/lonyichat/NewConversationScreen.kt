@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -17,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -32,12 +34,14 @@ fun NewConversationScreen(
 ) {
     val searchResults by viewModel.searchResults.collectAsState()
     val friendshipStatusMap by viewModel.friendshipStatus.collectAsState()
+    // ✨ ADDED: Collect the loading state ✨
+    val loadingStatusUserIds by viewModel.loadingStatusUserIds.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current as Activity
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // ✨ Modernized Search Bar ✨
+        // Modernized Search Bar
         OutlinedTextField(
             value = searchQuery,
             onValueChange = {
@@ -48,7 +52,7 @@ fun NewConversationScreen(
             leadingIcon = {
                 Icon(Icons.Default.Search, contentDescription = "Search Icon")
             },
-            shape = RoundedCornerShape(30.dp), // Rounded corners
+            shape = RoundedCornerShape(30.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -56,31 +60,35 @@ fun NewConversationScreen(
 
         LazyColumn {
             items(searchResults) { user ->
-                val status = friendshipStatusMap[user.userId] ?: "none"
+                val status = friendshipStatusMap[user.userId]
                 UserRow(
                     user = user,
                     status = status,
+                    // ✨ ADDED: Pass loading state to the UserRow ✨
+                    isLoading = user.userId in loadingStatusUserIds,
                     onAction = {
-                        when (status) {
-                            "friends" -> { // Click the row to open chat
-                                coroutineScope.launch {
-                                    try {
-                                        val chatId = ApiService.createChat(user.userId)
-                                        val intent = Intent(context, MessageActivity::class.java).apply {
-                                            putExtra("CHAT_ID", chatId)
-                                            putExtra("OTHER_USER_NAME", user.name)
-                                            putExtra("OTHER_USER_ID", user.userId)
+                        // Action is only enabled when not loading and status is determined
+                        if (status != null) {
+                            when (status) {
+                                "friends" -> { // Click the row to open chat
+                                    coroutineScope.launch {
+                                        try {
+                                            val chatId = ApiService.createChat(user.userId)
+                                            val intent = Intent(context, MessageActivity::class.java).apply {
+                                                putExtra("CHAT_ID", chatId)
+                                                putExtra("OTHER_USER_NAME", user.name)
+                                                putExtra("OTHER_USER_ID", user.userId)
+                                            }
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            // Handle error
                                         }
-                                        context.startActivity(intent)
-                                    } catch (e: Exception) {
-                                        // Handle error, maybe show a toast
                                     }
                                 }
+                                "none", "request_received" -> { // Add or Accept
+                                    viewModel.sendFriendRequest(user.userId)
+                                }
                             }
-                            "none", "request_received" -> { // Add or Accept
-                                viewModel.sendFriendRequest(user.userId)
-                            }
-                            // "request_sent" has no action
                         }
                     }
                 )
@@ -92,23 +100,24 @@ fun NewConversationScreen(
 @Composable
 fun UserRow(
     user: Profile,
-    status: String,
+    status: String?,
+    isLoading: Boolean, // ✨ ADDED: isLoading parameter ✨
     onAction: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onAction)
+            .clickable(enabled = !isLoading && status == "friends", onClick = onAction)
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // ✨ Added Placeholder for Profile Picture ✨
+        // Added Placeholder for Profile Picture
         AsyncImage(
             model = ImageRequest.Builder(LocalContext.current)
                 .data(user.photoUrl)
                 .crossfade(true)
-                .placeholder(R.drawable.ic_person_placeholder) // Display this while loading
-                .error(R.drawable.ic_person_placeholder)       // Display this on error or if URL is null
+                .placeholder(R.drawable.ic_person_placeholder)
+                .error(R.drawable.ic_person_placeholder)
                 .build(),
             contentDescription = "Profile Photo",
             modifier = Modifier
@@ -119,23 +128,49 @@ fun UserRow(
         Spacer(modifier = Modifier.width(16.dp))
         Text(text = user.name, modifier = Modifier.weight(1f))
 
-        when (status) {
-            "friends" -> {
-                // The entire row is clickable, no button needed
-            }
-            "request_sent" -> {
-                OutlinedButton(onClick = {}, enabled = false) {
-                    Text("Pending")
-                }
-            }
-            "request_received" -> {
-                Button(onClick = onAction) {
-                    Text("Accept")
-                }
-            }
-            "none" -> {
-                Button(onClick = onAction) {
-                    Text("Add Friend")
+        // ✨ ADDED: Conditional logic for displaying the spinner ✨
+        Box(contentAlignment = Alignment.Center) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 2.dp
+                )
+            } else {
+                when (status) {
+                    "friends" -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "Friends",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "Friends",
+                                color = MaterialTheme.colorScheme.primary,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                    "request_sent" -> {
+                        OutlinedButton(onClick = {}, enabled = false) {
+                            Text("Pending")
+                        }
+                    }
+                    "request_received" -> {
+                        Button(onClick = onAction) {
+                            Text("Accept")
+                        }
+                    }
+                    "none" -> {
+                        Button(onClick = onAction) {
+                            Text("Add Friend")
+                        }
+                    }
                 }
             }
         }
