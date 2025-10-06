@@ -358,7 +358,7 @@ fun MessageInput(
     LaunchedEffect(isRecording) {
         recordingTime = 0L
         if (isRecording) {
-            while (isRecording) {
+            while (true) {
                 delay(1000)
                 recordingTime++
             }
@@ -437,43 +437,39 @@ fun MessageInput(
                                     .pointerInput(Unit) {
                                         forEachGesture {
                                             awaitPointerEventScope {
-                                                val down = awaitFirstDown(requireUnconsumed = false)
-                                                var longPressJob: Job? = null
-                                                if (!isRecording) {
-                                                    longPressJob = scope.launch {
-                                                        delay(200)
-                                                        if (onStartRecording()) {
-                                                            isRecording = true
-                                                        }
+                                                awaitFirstDown(requireUnconsumed = false)
+                                                val longPressJob = scope.launch {
+                                                    delay(200)
+                                                    if (onStartRecording()) {
+                                                        isRecording = true
                                                     }
                                                 }
 
-                                                var isCancelled = false
-                                                do {
+                                                while (true) {
                                                     val event = awaitPointerEvent()
-                                                    val isPointerUp = event.changes.all { !it.pressed }
-
-                                                    if (isPointerUp) {
-                                                        longPressJob?.cancel()
+                                                    if (event.changes.any { it.pressed }) {
+                                                        // ✨ FIX for sumOf ambiguity
+                                                        var xChange = 0f
+                                                        event.changes.forEach {
+                                                            xChange += it.positionChange().x
+                                                        }
+                                                        slideOffset += xChange
+                                                    } else {
+                                                        // Pointer is up
+                                                        longPressJob.cancel()
                                                         if (isRecording) {
                                                             if (slideOffset < slideToCancelDistancePx) {
                                                                 onCancelRecording()
                                                             } else {
                                                                 onStopRecording()
                                                             }
-                                                            isRecording = false
-                                                            slideOffset = 0f
                                                         }
-                                                        isCancelled = true
-                                                    } else {
-                                                        // ✨ FIXED: Manually sum the x position change
-                                                        var xChange = 0f
-                                                        for(change in event.changes) {
-                                                            xChange += change.positionChange().x
-                                                        }
-                                                        slideOffset += xChange
+                                                        // Reset state and break the loop
+                                                        isRecording = false
+                                                        slideOffset = 0f
+                                                        break
                                                     }
-                                                } while (!isCancelled)
+                                                }
                                             }
                                         }
                                     },
