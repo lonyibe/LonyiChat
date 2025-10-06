@@ -1,17 +1,20 @@
+// File Path: lonyibe/lonyichat/LonyiChat-554c58ac20d26ce973661057119b615306e7f3c8/app/src/main/java/com/arua/lonyichat/ui/viewmodel/ChatListViewModel.kt
+
 package com.arua.lonyichat.ui.viewmodel
 
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.arua.lonyichat.data.Chat
 import com.arua.lonyichat.data.ApiService
+import com.arua.lonyichat.data.Chat
+import com.arua.lonyichat.SocketManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-// ✨ REMOVED: No longer need to import Random for simulating unread count
-// import kotlin.random.Random
 
 data class ChatListUiState(
     val conversations: List<Chat> = emptyList(),
@@ -28,6 +31,13 @@ class ChatListViewModel : ViewModel() {
 
     init {
         fetchConversations()
+
+        SocketManager.chatBadgeUpdate
+            .onEach {
+                Log.d("ChatListViewModel", "Refreshing conversations due to socket event")
+                fetchConversations()
+            }
+            .launchIn(viewModelScope)
     }
 
     fun fetchConversations() {
@@ -41,12 +51,8 @@ class ChatListViewModel : ViewModel() {
 
         viewModelScope.launch {
             ApiService.getChatConversations().onSuccess { chats ->
-
-                // ✨ FIX: Removed the simulation of the unread count.
-                // The app will now use the actual `unreadCount` from the backend.
                 _uiState.update { it.copy(conversations = chats, isLoading = false) }
 
-                // ✨ NEW: Calculate and update the total unread chat count from the actual data
                 val totalUnread = chats.sumOf { it.unreadCount }
                 _unreadChatCount.value = totalUnread
 
