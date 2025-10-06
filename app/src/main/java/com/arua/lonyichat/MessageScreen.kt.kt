@@ -1,9 +1,8 @@
-// app/src/main/java/com/arua/lonyichat/MessageScreen.kt
-
 package com.arua.lonyichat
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -26,6 +25,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
 import com.arua.lonyichat.data.ApiService
+import com.arua.lonyichat.ui.theme.LonyiDarkSurface
+import com.arua.lonyichat.ui.theme.LonyiDarkTextPrimary
 import com.arua.lonyichat.ui.theme.LonyiOrange
 import com.arua.lonyichat.ui.viewmodel.MessageViewModel
 import java.text.SimpleDateFormat
@@ -42,7 +43,9 @@ fun MessageScreen(
     val uiState by viewModel.uiState.collectAsState()
     var newMessageText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+    val isDarkTheme = isSystemInDarkTheme()
 
+    // You should replace this with a dynamic way of getting the current user's ID
     val currentUserId = ApiService.getCurrentUserId()
 
     LaunchedEffect(chatId) {
@@ -58,18 +61,20 @@ fun MessageScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(otherUserName, color = Color.White) },
+                title = { Text(otherUserName) },
                 navigationIcon = {
                     IconButton(onClick = onBackPressed) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
-                            tint = Color.White
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = LonyiOrange
+                    // Use a dark color in dark mode and orange in light mode
+                    containerColor = if (isDarkTheme) LonyiDarkSurface else LonyiOrange,
+                    titleContentColor = if (isDarkTheme) LonyiDarkTextPrimary else Color.White,
+                    navigationIconContentColor = if (isDarkTheme) LonyiDarkTextPrimary else Color.White
                 )
             )
         },
@@ -90,7 +95,6 @@ fun MessageScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                // Use the theme's background color
                 .background(MaterialTheme.colorScheme.background)
                 .padding(paddingValues)
         ) {
