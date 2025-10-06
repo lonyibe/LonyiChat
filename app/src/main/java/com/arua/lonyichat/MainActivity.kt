@@ -155,6 +155,8 @@ class MainActivity : ComponentActivity() {
         }
         churchesViewModel.fetchChurches()
         notificationViewModel.fetchNotifications()
+        // FIX: Ensure chat list view model also fetches on resume for unread count update
+        // The read receipt is saved when the MessageActivity opens, so refetching here pulls the updated (zeroed) count.
         chatListViewModel.fetchConversations()
     }
 
