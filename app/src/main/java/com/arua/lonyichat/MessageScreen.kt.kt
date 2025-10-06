@@ -1,3 +1,5 @@
+// app/src/main/java/com/arua/lonyichat/MessageScreen.kt
+
 package com.arua.lonyichat
 
 import androidx.compose.foundation.Image
@@ -24,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
 import com.arua.lonyichat.data.ApiService
+import com.arua.lonyichat.ui.theme.LonyiOrange
 import com.arua.lonyichat.ui.viewmodel.MessageViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -40,7 +43,6 @@ fun MessageScreen(
     var newMessageText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
 
-    // You should replace this with a dynamic way of getting the current user's ID
     val currentUserId = ApiService.getCurrentUserId()
 
     LaunchedEffect(chatId) {
@@ -56,13 +58,19 @@ fun MessageScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(otherUserName) },
+                title = { Text(otherUserName, color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = onBackPressed) {
-                        // FIX 3: Use AutoMirrored ArrowBack icon
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Color.White
+                        )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = LonyiOrange
+                )
             )
         },
         bottomBar = {
@@ -76,12 +84,14 @@ fun MessageScreen(
                 text = newMessageText,
                 onTextChanged = { newMessageText = it }
             )
-        }
+        },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { paddingValues ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFFECE5DD)) // WhatsApp-like background color
+                // Use the theme's background color
+                .background(MaterialTheme.colorScheme.background)
                 .padding(paddingValues)
         ) {
             when {
@@ -98,7 +108,9 @@ fun MessageScreen(
                 else -> {
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .navigationBarsPadding(),
                         contentPadding = PaddingValues(8.dp)
                     ) {
                         items(uiState.messages) { message ->
@@ -116,8 +128,10 @@ fun MessageScreen(
 
 @Composable
 fun MessageBubble(message: Message, isSentByCurrentUser: Boolean) {
-    val bubbleColor = if (isSentByCurrentUser) Color(0xFFDCF8C6) else Color.White
-    // FIX 1: Use Alignment.End and Alignment.Start for horizontal alignment in a Column
+    // Use theme colors for the message bubbles
+    val bubbleColor = if (isSentByCurrentUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+    val textColor = if (isSentByCurrentUser) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+
     val alignment = if (isSentByCurrentUser) Alignment.End else Alignment.Start
     val bubbleShape = RoundedCornerShape(
         topStart = 16.dp,
@@ -141,7 +155,7 @@ fun MessageBubble(message: Message, isSentByCurrentUser: Boolean) {
             modifier = Modifier
                 .weight(1f, fill = false)
                 .padding(horizontal = 8.dp),
-            horizontalAlignment = alignment // This now uses the correct type
+            horizontalAlignment = alignment
         ) {
             Box(
                 modifier = Modifier
@@ -156,11 +170,11 @@ fun MessageBubble(message: Message, isSentByCurrentUser: Boolean) {
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
-                    Text(text = message.text)
+                    Text(text = message.text, color = textColor)
                     Text(
                         text = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(message.timestamp),
                         fontSize = 12.sp,
-                        color = Color.Gray,
+                        color = textColor.copy(alpha = 0.7f),
                         modifier = Modifier.align(Alignment.End)
                     )
                 }
@@ -192,8 +206,11 @@ fun MessageInputBar(
     onTextChanged: (String) -> Unit
 ) {
     Card(
-        modifier = Modifier.padding(8.dp),
-        shape = RoundedCornerShape(24.dp)
+        modifier = Modifier
+            .navigationBarsPadding()
+            .padding(8.dp),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Row(
             modifier = Modifier
@@ -206,7 +223,6 @@ fun MessageInputBar(
                 onValueChange = onTextChanged,
                 modifier = Modifier.weight(1f),
                 placeholder = { Text("Type a message...") },
-                // FIX 2: Use colors instead of textFieldColors
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent,
                     unfocusedContainerColor = Color.Transparent,
@@ -216,7 +232,6 @@ fun MessageInputBar(
                 )
             )
             IconButton(onClick = onSendMessage) {
-                // FIX 4: Use AutoMirrored Send icon
                 Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send Message")
             }
         }
