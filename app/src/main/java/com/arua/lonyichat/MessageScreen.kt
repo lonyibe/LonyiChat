@@ -3,18 +3,17 @@ package com.arua.lonyichat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.forEachGesture
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -41,8 +40,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -54,10 +53,11 @@ import com.arua.lonyichat.ui.theme.LonyiDarkSurface
 import com.arua.lonyichat.ui.theme.LonyiDarkTextPrimary
 import com.arua.lonyichat.ui.theme.LonyiOrange
 import com.arua.lonyichat.ui.viewmodel.MessageViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
-import kotlin.math.absoluteValue
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -66,11 +66,10 @@ fun MessageScreen(
     viewModel: MessageViewModel,
     otherUserName: String,
     onBackPressed: () -> Unit,
-    // ✨ Callbacks are now more specific for recording actions
     onPickImage: () -> Unit,
     onPickVideo: () -> Unit,
     onPickAudio: () -> Unit,
-    onStartRecording: () -> Boolean, // Returns true if recording started successfully
+    onStartRecording: () -> Boolean,
     onStopRecording: () -> Unit,
     onCancelRecording: () -> Unit,
 ) {
@@ -163,7 +162,6 @@ fun MessageScreen(
                 onPickImage = onPickImage,
                 onPickVideo = onPickVideo,
                 onPickAudio = onPickAudio,
-                // ✨ Pass the new recording callbacks
                 onStartRecording = onStartRecording,
                 onStopRecording = onStopRecording,
                 onCancelRecording = onCancelRecording
@@ -172,7 +170,6 @@ fun MessageScreen(
     }
 }
 
-// --- MessageBubble and other composables remain the same ---
 @Composable
 fun MessageBubble(message: Message, isSentByCurrentUser: Boolean) {
     val bubbleColor = if (isSentByCurrentUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
@@ -204,8 +201,8 @@ fun MessageBubble(message: Message, isSentByCurrentUser: Boolean) {
             Box(
                 modifier = Modifier
                     .background(bubbleColor, shape = bubbleShape)
-                    .clip(bubbleShape) // Clip the content to the bubble shape
-                    .widthIn(max = 280.dp) // Set a max width for the bubble
+                    .clip(bubbleShape)
+                    .widthIn(max = 280.dp)
             ) {
                 Column(modifier = Modifier.padding(horizontal = if (message.type == "image" || message.type == "video") 0.dp else 12.dp, vertical = if (message.type == "image" || message.type == "video") 0.dp else 8.dp)) {
                     if (!isSentByCurrentUser) {
@@ -217,15 +214,13 @@ fun MessageBubble(message: Message, isSentByCurrentUser: Boolean) {
                         )
                     }
 
-                    // ✨ NEW: Display content based on message type
                     when (message.type) {
                         "image" -> ImageMessage(message)
                         "video" -> VideoMessage(message)
                         "audio", "voice" -> AudioMessage(message)
-                        else -> TextMessage(message, textColor) // Default to text
+                        else -> TextMessage(message, textColor)
                     }
 
-                    // Timestamp aligned to the bottom right
                     Text(
                         text = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(message.timestamp),
                         fontSize = 12.sp,
@@ -238,14 +233,13 @@ fun MessageBubble(message: Message, isSentByCurrentUser: Boolean) {
                                 shape = RoundedCornerShape(8.dp)
                             )
                             .padding(horizontal = 4.dp)
-
                     )
                 }
             }
         }
     }
 }
-// ✨ NEW: Composables for different message types ✨
+
 @Composable
 fun TextMessage(message: Message, textColor: Color) {
     Text(text = message.text, color = textColor)
@@ -279,9 +273,8 @@ fun VideoMessage(message: Message) {
             .background(Color.Black),
         contentAlignment = Alignment.Center
     ) {
-        // In a real app, you would use a library like ExoPlayer to show a thumbnail
         Image(
-            painter = rememberAsyncImagePainter(model = message.url), // CORRECTED
+            painter = rememberAsyncImagePainter(model = message.url),
             contentDescription = "Video message",
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,
@@ -313,7 +306,7 @@ fun AudioMessage(message: Message) {
             tint = MaterialTheme.colorScheme.primary
         )
         Spacer(modifier = Modifier.width(12.dp))
-        Text(text = message.text) // e.g., "🎤 Voice Message" or "🎵 Audio"
+        Text(text = message.text)
         Spacer(modifier = Modifier.weight(1f))
         Icon(
             Icons.Default.PlayArrow,
@@ -326,11 +319,10 @@ fun AudioMessage(message: Message) {
     }
 }
 
-
 @Composable
 fun ProfilePicture(imageUrl: String?) {
     Image(
-        painter = rememberAsyncImagePainter( // CORRECTED
+        painter = rememberAsyncImagePainter(
             model = imageUrl,
             error = painterResource(id = R.drawable.ic_person_placeholder)
         ),
@@ -349,7 +341,6 @@ fun MessageInput(
     onPickImage: () -> Unit,
     onPickVideo: () -> Unit,
     onPickAudio: () -> Unit,
-    // ✨ MODIFIED: New callbacks for recording
     onStartRecording: () -> Boolean,
     onStopRecording: () -> Unit,
     onCancelRecording: () -> Unit
@@ -357,17 +348,20 @@ fun MessageInput(
     var text by remember { mutableStateOf("") }
     var showAttachmentMenu by remember { mutableStateOf(false) }
 
-    // ✨ NEW: State for voice recording UI
     var isRecording by remember { mutableStateOf(false) }
     var recordingTime by remember { mutableStateOf(0L) }
     var slideOffset by remember { mutableStateOf(0f) }
-    val maxSlideOffset = with(LocalDensity.current) { -150.dp.toPx() } // Slide left to cancel
+    val density = LocalDensity.current
+    val slideToCancelDistancePx = with(density) { -150.dp.toPx() }
 
     // Timer for recording duration
     LaunchedEffect(isRecording) {
-        while (isRecording) {
-            delay(1000)
-            recordingTime++
+        recordingTime = 0L
+        if (isRecording) {
+            while (isRecording) {
+                delay(1000)
+                recordingTime++
+            }
         }
     }
 
@@ -377,7 +371,6 @@ fun MessageInput(
             enter = expandVertically(),
             exit = shrinkVertically()
         ) {
-            // The onRecordVoice parameter is removed as it's now handled by the microphone button directly
             AttachmentMenu(onPickImage, onPickVideo, onPickAudio)
         }
 
@@ -388,15 +381,12 @@ fun MessageInput(
                 .padding(8.dp),
             contentAlignment = Alignment.CenterStart
         ) {
-            // ✨ NEW: Recording overlay
             if (isRecording) {
                 RecordingOverlay(
                     recordingTime = recordingTime,
-                    slideOffset = slideOffset,
-                    onCancelRecording = onCancelRecording
+                    slideOffset = slideOffset
                 )
             } else {
-                // Regular input row
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
@@ -425,15 +415,12 @@ fun MessageInput(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    // ✨ NEW: Crossfade between Send and Mic button
                     Crossfade(targetState = text.isNotBlank(), label = "SendOrMic") { isTextEntered ->
                         if (isTextEntered) {
-                            IconButton(
-                                onClick = {
-                                    onSendMessage(text)
-                                    text = ""
-                                },
-                            ) {
+                            IconButton(onClick = {
+                                onSendMessage(text)
+                                text = ""
+                            }) {
                                 Icon(
                                     Icons.AutoMirrored.Filled.Send,
                                     contentDescription = "Send Message",
@@ -441,39 +428,54 @@ fun MessageInput(
                                 )
                             }
                         } else {
-                            // ✨ NEW: Voice Record Button with gesture handling
+                            val scope = rememberCoroutineScope()
                             Box(
                                 modifier = Modifier
                                     .size(48.dp)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.primary)
                                     .pointerInput(Unit) {
-                                        detectDragGesturesAfterLongPress(
-                                            onDragStart = {
-                                                if (onStartRecording()) {
-                                                    isRecording = true
-                                                    recordingTime = 0L
+                                        forEachGesture {
+                                            awaitPointerEventScope {
+                                                val down = awaitFirstDown(requireUnconsumed = false)
+                                                var longPressJob: Job? = null
+                                                if (!isRecording) {
+                                                    longPressJob = scope.launch {
+                                                        delay(200)
+                                                        if (onStartRecording()) {
+                                                            isRecording = true
+                                                        }
+                                                    }
                                                 }
-                                            },
-                                            onDragEnd = {
-                                                isRecording = false
-                                                if (slideOffset < maxSlideOffset) {
-                                                    onCancelRecording()
-                                                } else {
-                                                    onStopRecording()
-                                                }
-                                                slideOffset = 0f
-                                            },
-                                            onDragCancel = {
-                                                isRecording = false
-                                                onCancelRecording()
-                                                slideOffset = 0f
-                                            },
-                                            onDrag = { change, dragAmount ->
-                                                change.consume()
-                                                slideOffset += dragAmount.x
+
+                                                var isCancelled = false
+                                                do {
+                                                    val event = awaitPointerEvent()
+                                                    val isPointerUp = event.changes.all { !it.pressed }
+
+                                                    if (isPointerUp) {
+                                                        longPressJob?.cancel()
+                                                        if (isRecording) {
+                                                            if (slideOffset < slideToCancelDistancePx) {
+                                                                onCancelRecording()
+                                                            } else {
+                                                                onStopRecording()
+                                                            }
+                                                            isRecording = false
+                                                            slideOffset = 0f
+                                                        }
+                                                        isCancelled = true
+                                                    } else {
+                                                        // ✨ FIXED: Manually sum the x position change
+                                                        var xChange = 0f
+                                                        for(change in event.changes) {
+                                                            xChange += change.positionChange().x
+                                                        }
+                                                        slideOffset += xChange
+                                                    }
+                                                } while (!isCancelled)
                                             }
-                                        )
+                                        }
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
@@ -491,7 +493,7 @@ fun MessageInput(
     }
 }
 @Composable
-fun RecordingOverlay(recordingTime: Long, slideOffset: Float, onCancelRecording: () -> Unit) {
+fun RecordingOverlay(recordingTime: Long, slideOffset: Float) {
     val slideCancelThreshold = with(LocalDensity.current) { -150.dp.toPx() }
     val isCancelled = slideOffset < slideCancelThreshold
 
@@ -504,7 +506,6 @@ fun RecordingOverlay(recordingTime: Long, slideOffset: Float, onCancelRecording:
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        // Timer
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 Icons.Default.Mic,
@@ -520,7 +521,6 @@ fun RecordingOverlay(recordingTime: Long, slideOffset: Float, onCancelRecording:
             )
         }
 
-        // "Slide to cancel" indicator
         Row(
             modifier = Modifier
                 .graphicsLayer {
@@ -543,13 +543,10 @@ fun RecordingOverlay(recordingTime: Long, slideOffset: Float, onCancelRecording:
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
             }
-
         }
     }
 }
 
-
-// ✨ MODIFIED: Removed the onRecordVoice parameter
 @Composable
 fun AttachmentMenu(
     onPickImage: () -> Unit,
@@ -566,7 +563,6 @@ fun AttachmentMenu(
         AttachmentButton(icon = Icons.Default.Image, description = "Image", onClick = onPickImage)
         AttachmentButton(icon = Icons.Default.Videocam, description = "Video", onClick = onPickVideo)
         AttachmentButton(icon = Icons.Default.MusicNote, description = "Audio", onClick = onPickAudio)
-        // The voice button is now the primary action when the text field is empty
     }
 }
 
