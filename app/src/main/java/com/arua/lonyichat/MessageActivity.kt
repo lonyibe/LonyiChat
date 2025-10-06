@@ -4,17 +4,10 @@ package com.arua.lonyichat
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.graphics.toArgb
 import com.arua.lonyichat.ui.theme.LonyiChatTheme
-import com.arua.lonyichat.ui.theme.LonyiDarkSurface
-import com.arua.lonyichat.ui.theme.LonyiOrange
 import com.arua.lonyichat.ui.viewmodel.MessageViewModel
 
 class MessageActivity : ComponentActivity() {
@@ -24,31 +17,22 @@ class MessageActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // This correctly prepares the activity to draw behind the system bars.
         enableEdgeToEdge()
 
         val chatId = intent.getStringExtra("CHAT_ID")
         val otherUserName = intent.getStringExtra("OTHER_USER_NAME") ?: "Chat"
+        // It's good practice to also get the other user's ID if available
+        val otherUserId = intent.getStringExtra("OTHER_USER_ID")
 
-        if (chatId == null) {
-            finish()
+        if (chatId == null || otherUserId == null) {
+            finish() // Exit if essential data is missing
             return
         }
 
         setContent {
-            val isDarkTheme = isSystemInDarkTheme()
-
-            // This effect will update the system bar colors to match the theme
-            LaunchedEffect(isDarkTheme) {
-                val darkScrim = LonyiDarkSurface.toArgb()
-                enableEdgeToEdge(
-                    statusBarStyle = SystemBarStyle.auto(
-                        lightScrim = LonyiOrange.toArgb(),
-                        darkScrim = darkScrim,
-                    ) { isDarkTheme }
-                )
-            }
-
             LonyiChatTheme {
+                // The custom theme and system bar coloring are now handled by the theme itself.
                 MessageScreen(
                     chatId = chatId,
                     viewModel = viewModel,

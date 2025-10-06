@@ -41,11 +41,8 @@ fun MessageScreen(
     onBackPressed: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var newMessageText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val isDarkTheme = isSystemInDarkTheme()
-
-    // You should replace this with a dynamic way of getting the current user's ID
     val currentUserId = ApiService.getCurrentUserId()
 
     LaunchedEffect(chatId) {
@@ -71,71 +68,70 @@ fun MessageScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    // Use a dark color in dark mode and orange in light mode
                     containerColor = if (isDarkTheme) LonyiDarkSurface else LonyiOrange,
                     titleContentColor = if (isDarkTheme) LonyiDarkTextPrimary else Color.White,
                     navigationIconContentColor = if (isDarkTheme) LonyiDarkTextPrimary else Color.White
                 )
             )
-        },
-        bottomBar = {
-            MessageInputBar(
-                onSendMessage = {
-                    if (newMessageText.isNotBlank()) {
-                        viewModel.sendMessage(chatId, newMessageText)
-                        newMessageText = ""
-                    }
-                },
-                text = newMessageText,
-                onTextChanged = { newMessageText = it }
-            )
-        },
-        contentWindowInsets = WindowInsets(0, 0, 0, 0)
+        }
+        // Removed the bottomBar and contentWindowInsets to allow Column to control everything
     ) { paddingValues ->
-        Box(
+        // ✨ The main Column now handles both the padding and the keyboard ✨
+        Column(
             modifier = Modifier
+                .padding(paddingValues) // Apply padding from the Scaffold (for the top bar)
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .padding(paddingValues)
+                .imePadding() // This is the key fix: it adds padding when the keyboard is open
         ) {
-            when {
-                uiState.isLoading -> {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-                }
-                uiState.error != null -> {
-                    Text(
-                        text = uiState.error!!,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                }
-                else -> {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .navigationBarsPadding(),
-                        contentPadding = PaddingValues(8.dp)
-                    ) {
-                        items(uiState.messages) { message ->
-                            MessageBubble(
-                                message = message,
-                                isSentByCurrentUser = message.senderId == currentUserId
-                            )
+            // This Box will contain the messages or loading/error states
+            Box(
+                modifier = Modifier
+                    .weight(1f) // This makes the message list take up all available space
+                    .background(MaterialTheme.colorScheme.background)
+            ) {
+                when {
+                    uiState.isLoading -> {
+                        CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                    }
+                    uiState.error != null -> {
+                        Text(
+                            text = uiState.error!!,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                    }
+                    else -> {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(8.dp)
+                        ) {
+                            items(uiState.messages) { message ->
+                                MessageBubble(
+                                    message = message,
+                                    isSentByCurrentUser = message.senderId == currentUserId
+                                )
+                            }
                         }
                     }
                 }
             }
+            // The input bar is now part of the main Column
+            MessageInput(
+                onSendMessage = { text ->
+                    if (text.isNotBlank()) {
+                        viewModel.sendMessage(chatId, text)
+                    }
+                }
+            )
         }
     }
 }
 
 @Composable
 fun MessageBubble(message: Message, isSentByCurrentUser: Boolean) {
-    // Use theme colors for the message bubbles
     val bubbleColor = if (isSentByCurrentUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
     val textColor = if (isSentByCurrentUser) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-
     val alignment = if (isSentByCurrentUser) Alignment.End else Alignment.Start
     val bubbleShape = RoundedCornerShape(
         topStart = 16.dp,
@@ -202,42 +198,42 @@ fun ProfilePicture(imageUrl: String?) {
     )
 }
 
+// ✨ Simplified the MessageInput to be just the Row, not a Card ✨
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MessageInputBar(
-    onSendMessage: () -> Unit,
-    text: String,
-    onTextChanged: (String) -> Unit
+fun MessageInput(
+    onSendMessage: (String) -> Unit
 ) {
-    Card(
+    var text by remember { mutableStateOf("") }
+    Row(
         modifier = Modifier
-            .navigationBarsPadding()
-            .padding(8.dp),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            .fillMaxWidth()
+            .padding(8.dp), // Padding around the input area
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+        TextField(
+            value = text,
+            onValueChange = { text = it },
+            modifier = Modifier.weight(1f),
+            placeholder = { Text("Type a message...") },
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                disabledIndicatorColor = Color.Transparent
+            ),
+            shape = RoundedCornerShape(24.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        IconButton(
+            onClick = {
+                onSendMessage(text)
+                text = "" // Clear text after sending
+            },
+            enabled = text.isNotBlank()
         ) {
-            TextField(
-                value = text,
-                onValueChange = onTextChanged,
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("Type a message...") },
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    disabledIndicatorColor = Color.Transparent
-                )
-            )
-            IconButton(onClick = onSendMessage) {
-                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send Message")
-            }
+            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send Message")
         }
     }
 }
