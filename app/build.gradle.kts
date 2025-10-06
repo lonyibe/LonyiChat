@@ -87,7 +87,6 @@ dependencies {
     // ✨ FIX: This line ensures 'viewModels' is resolved for Activity
     implementation(libs.androidx.lifecycle.viewmodel.compose)
 
-    // ✨ REQUIRED FOR REAL-TIME CHAT COUNTER
     implementation("io.socket:socket.io-client:2.0.1")
 
 
