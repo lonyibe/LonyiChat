@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Pause // FIX: Added missing import for Pause icon
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.*
@@ -54,6 +55,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import android.media.MediaPlayer
+import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -290,30 +293,104 @@ fun VideoMessage(message: Message) {
 
 @Composable
 fun AudioMessage(message: Message) {
+    // MODIFIED: Replaced dummy content with actual player control
+    message.url?.let { url ->
+        VoiceMessagePlayer(url = url, messageType = message.type)
+    } ?: Text(message.text) // Fallback if URL is unexpectedly missing
+}
+
+// ADDED START: Voice Message Player Composable
+@Composable
+private fun VoiceMessagePlayer(url: String, messageType: String) {
+    val context = LocalContext.current
+    val mediaPlayer = remember { MediaPlayer() }
+    var isPlaying by remember { mutableStateOf(false) }
+    var currentPosition by remember { mutableIntStateOf(0) }
+    var duration by remember { mutableIntStateOf(1) } // Avoid division by zero
+
+    // Initialize MediaPlayer and manage its lifecycle
+    DisposableEffect(url) {
+        mediaPlayer.apply {
+            setDataSource(url)
+            setOnPreparedListener {
+                duration = it.duration
+                // Don't start playing, just get duration
+            }
+            setOnCompletionListener {
+                isPlaying = false
+                seekTo(0)
+                currentPosition = 0
+            }
+            prepareAsync()
+        }
+
+        onDispose {
+            mediaPlayer.release()
+        }
+    }
+
+    // Coroutine to update the progress bar while playing
+    LaunchedEffect(isPlaying) {
+        if (isPlaying) {
+            while (isPlaying) {
+                currentPosition = mediaPlayer.currentPosition
+                delay(50)
+            }
+        }
+    }
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .padding(vertical = 8.dp)
-            .fillMaxWidth()
+        modifier = Modifier.padding(vertical = 8.dp)
     ) {
-        Icon(
-            if (message.type == "voice") Icons.Default.Mic else Icons.Default.MusicNote,
-            contentDescription = "Audio message",
-            tint = MaterialTheme.colorScheme.primary
-        )
-        Spacer(modifier = Modifier.width(12.dp))
-        Text(text = message.text)
-        Spacer(modifier = Modifier.weight(1f))
-        Icon(
-            Icons.Default.PlayArrow,
-            contentDescription = "Play audio",
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.clickable {
-                // TODO: Implement audio playback
+        // Play/Pause Button
+        IconButton(onClick = {
+            if (mediaPlayer.isPlaying) {
+                mediaPlayer.pause()
+            } else {
+                mediaPlayer.start()
             }
+            isPlaying = !isPlaying
+        }) {
+            Icon(
+                if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                contentDescription = if (isPlaying) "Pause" else "Play",
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        // Progress Slider
+        Slider(
+            value = currentPosition.toFloat(),
+            onValueChange = { newPosition ->
+                currentPosition = newPosition.toInt()
+                mediaPlayer.seekTo(newPosition.toInt())
+            },
+            valueRange = 0f..duration.toFloat(),
+            modifier = Modifier.weight(1f)
+        )
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        // Timer
+        Text(
+            text = formatTime(currentPosition.toLong()),
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }
+
+// Helper function to format milliseconds into MM:SS string
+private fun formatTime(ms: Long): String {
+    val totalSeconds = ms / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return String.format("%02d:%02d", minutes, seconds)
+}
+// ADDED END
 
 @Composable
 fun ProfilePicture(imageUrl: String?) {

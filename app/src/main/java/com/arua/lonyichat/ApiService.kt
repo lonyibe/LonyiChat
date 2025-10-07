@@ -19,6 +19,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.io.InputStream
 import java.util.*
+import java.io.File // ADDED: For checking file path/extension
 
 class ApiException(message: String) : IOException(message)
 
@@ -314,9 +315,20 @@ object ApiService {
         return withContext(Dispatchers.IO) {
             try {
                 val inputStream: InputStream? = context.contentResolver.openInputStream(uri)
-                val mimeType = context.contentResolver.getType(uri)
+                var mimeType = context.contentResolver.getType(uri) // MODIFIED to be mutable
+
+                // FIX: If MIME type is null for local files (like the recorded .3gp audio), set it manually.
+                if (mimeType == null) {
+                    if (uri.path?.endsWith(".3gp", ignoreCase = true) == true) {
+                        mimeType = "audio/3gpp"
+                        Log.d("ApiService", "Inferred MIME type for 3gp file: $mimeType") // ADDED logging
+                    }
+                }
+
                 if (inputStream == null || mimeType == null) {
-                    return@withContext Result.failure(ApiException("Failed to open media file."))
+                    // MODIFIED: Provide detailed error message for debugging
+                    val uriString = uri.toString()
+                    return@withContext Result.failure(ApiException("Failed to open media file. URI: $uriString, InputStream: ${inputStream != null}, MimeType: $mimeType"))
                 }
                 val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType) ?: "tmp"
 

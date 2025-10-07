@@ -4,6 +4,7 @@ import android.content.Context
 import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 import androidx.core.net.toUri
 import java.io.File
 import java.io.IOException
@@ -33,8 +34,9 @@ class VoiceRecorderManager(private val context: Context) {
 
         mediaRecorder?.apply {
             setAudioSource(MediaRecorder.AudioSource.MIC)
-            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+            // FIX: Switched to 3GPP/AMR_NB for maximum stability/compatibility with voice recording
+            setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP)
+            setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB)
             setOutputFile(audioFile?.absolutePath)
 
             return try {
@@ -45,11 +47,13 @@ class VoiceRecorderManager(private val context: Context) {
                 e.printStackTrace()
                 // Clean up if preparation fails
                 releaseRecorder()
+                deleteCurrentFile() // ADDED: Robust file cleanup on failure
                 false
             } catch (e: IllegalStateException) {
                 e.printStackTrace()
                 // Clean up if start fails
                 releaseRecorder()
+                deleteCurrentFile() // ADDED: Robust file cleanup on failure
                 false
             }
         }
@@ -61,7 +65,19 @@ class VoiceRecorderManager(private val context: Context) {
         return try {
             mediaRecorder?.stop()
             releaseRecorder()
-            audioFile?.toUri()
+
+            val finalFile = audioFile // ADDED: Hold reference to the file before nulling it
+
+            // ADDED START: Robust file validation
+            if (finalFile != null && finalFile.exists() && finalFile.length() > 0) {
+                Log.d("VoiceRecorder", "Recording stopped successfully. File size: ${finalFile.length()} bytes.")
+                return finalFile.toUri()
+            } else {
+                Log.e("VoiceRecorder", "Recording stopped but file is missing or empty. Path: ${finalFile?.absolutePath}, Exists: ${finalFile?.exists()}, Size: ${finalFile?.length()}.")
+                deleteCurrentFile() // Delete corrupted/empty file
+                return null
+            }
+            // ADDED END
         } catch (e: IllegalStateException) {
             // This can happen if stop is called in an invalid state
             e.printStackTrace()
@@ -106,7 +122,7 @@ class VoiceRecorderManager(private val context: Context) {
             val storageDir: File? = context.cacheDir
             File.createTempFile(
                 "VOICE_${timeStamp}_",
-                ".mp3",
+                ".3gp", // FIX: Changed extension to .3gp to match THREE_GPP format
                 storageDir
             )
         } catch (ex: IOException) {
