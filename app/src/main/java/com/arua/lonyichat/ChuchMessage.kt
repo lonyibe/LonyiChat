@@ -14,7 +14,8 @@ data class ChurchMessage(
     val repliedToMessageId: String? = null,
     val repliedToMessageContent: String? = null,
     // ✨ FIX: Made nullable to prevent NullPointerException when map is omitted in JSON response
-    val reactions: Map<String, List<String>>? = null // Map of reaction emoji -> list of userIds
+    val reactions: Map<String, List<String>>? = null, // Map of reaction emoji -> list of userIds
+    val isEdited: Boolean = false
 )
 
 data class ChurchMessagesResponse(
