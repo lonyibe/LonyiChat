@@ -3,11 +3,11 @@ package com.arua.lonyichat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -28,7 +28,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Pause // FIX: Added missing import for Pause icon
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.*
@@ -36,27 +36,33 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
 import coil.compose.rememberAsyncImagePainter
 import com.arua.lonyichat.data.ApiService
 import com.arua.lonyichat.ui.theme.LonyiDarkSurface
 import com.arua.lonyichat.ui.theme.LonyiDarkTextPrimary
 import com.arua.lonyichat.ui.theme.LonyiOrange
 import com.arua.lonyichat.ui.viewmodel.MessageViewModel
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
-import android.media.MediaPlayer
-import androidx.compose.ui.platform.LocalContext
+import kotlin.math.max
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -216,7 +222,7 @@ fun MessageBubble(message: Message, isSentByCurrentUser: Boolean) {
                     when (message.type) {
                         "image" -> ImageMessage(message)
                         "video" -> VideoMessage(message)
-                        "audio", "voice" -> AudioMessage(message)
+                        "audio", "voice" -> AudioMessage(message, isSentByCurrentUser)
                         else -> TextMessage(message, textColor)
                     }
 
@@ -292,105 +298,166 @@ fun VideoMessage(message: Message) {
 }
 
 @Composable
-fun AudioMessage(message: Message) {
-    // MODIFIED: Replaced dummy content with actual player control
+fun AudioMessage(message: Message, isSentByCurrentUser: Boolean) {
     message.url?.let { url ->
-        VoiceMessagePlayer(url = url, messageType = message.type)
-    } ?: Text(message.text) // Fallback if URL is unexpectedly missing
+        VoiceMessagePlayer(
+            url = url,
+            isSentByCurrentUser = isSentByCurrentUser
+        )
+    } ?: Text(message.text)
 }
 
-// ADDED START: Voice Message Player Composable
 @Composable
-private fun VoiceMessagePlayer(url: String, messageType: String) {
+private fun VoiceMessagePlayer(url: String, isSentByCurrentUser: Boolean) {
     val context = LocalContext.current
-    val mediaPlayer = remember { MediaPlayer() }
-    var isPlaying by remember { mutableStateOf(false) }
-    var currentPosition by remember { mutableIntStateOf(0) }
-    var duration by remember { mutableIntStateOf(1) } // Avoid division by zero
-
-    // Initialize MediaPlayer and manage its lifecycle
-    DisposableEffect(url) {
-        mediaPlayer.apply {
-            setDataSource(url)
-            setOnPreparedListener {
-                duration = it.duration
-                // Don't start playing, just get duration
-            }
-            setOnCompletionListener {
-                isPlaying = false
-                seekTo(0)
-                currentPosition = 0
-            }
-            prepareAsync()
-        }
-
-        onDispose {
-            mediaPlayer.release()
+    val exoPlayer = remember {
+        ExoPlayer.Builder(context).build().apply {
+            setMediaItem(MediaItem.fromUri(url))
+            prepare()
         }
     }
 
-    // Coroutine to update the progress bar while playing
-    LaunchedEffect(isPlaying) {
-        if (isPlaying) {
-            while (isPlaying) {
-                currentPosition = mediaPlayer.currentPosition
-                delay(50)
+    var isPlaying by remember { mutableStateOf(false) }
+    var currentPosition by remember { mutableStateOf(0L) }
+    var duration by remember { mutableStateOf(0L) }
+
+    DisposableEffect(exoPlayer) {
+        val listener = object : Player.Listener {
+            override fun onIsPlayingChanged(isPlayingValue: Boolean) {
+                isPlaying = isPlayingValue
+            }
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY) {
+                    duration = exoPlayer.duration.coerceAtLeast(0L)
+                }
             }
         }
+        exoPlayer.addListener(listener)
+
+        onDispose {
+            exoPlayer.removeListener(listener)
+            exoPlayer.release()
+        }
+    }
+
+    LaunchedEffect(isPlaying) {
+        while (isPlaying) {
+            currentPosition = exoPlayer.currentPosition
+            delay(50)
+        }
+    }
+
+    val progress = if (duration > 0) (currentPosition.toFloat() / duration.toFloat()) else 0f
+
+    val waveformColor = if (isSentByCurrentUser) {
+        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.4f)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+    }
+    val progressColor = if (isSentByCurrentUser) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.primary
     }
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.padding(vertical = 8.dp)
     ) {
-        // Play/Pause Button
         IconButton(onClick = {
-            if (mediaPlayer.isPlaying) {
-                mediaPlayer.pause()
+            if (exoPlayer.isPlaying) {
+                exoPlayer.pause()
             } else {
-                mediaPlayer.start()
+                if(exoPlayer.currentPosition >= exoPlayer.duration){
+                    exoPlayer.seekTo(0)
+                }
+                exoPlayer.play()
             }
-            isPlaying = !isPlaying
         }) {
             Icon(
                 if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                 contentDescription = if (isPlaying) "Pause" else "Play",
-                tint = MaterialTheme.colorScheme.primary
+                tint = progressColor
+            )
+        }
+
+        Box(modifier = Modifier.weight(1f).height(30.dp), contentAlignment = Alignment.CenterStart) {
+            Waveform(
+                modifier = Modifier.fillMaxSize(),
+                progress = progress,
+                waveformColor = waveformColor,
+                progressColor = progressColor
+            )
+            Slider(
+                value = progress,
+                onValueChange = { newProgress ->
+                    val newPosition = (newProgress * duration).toLong()
+                    currentPosition = newPosition
+                    exoPlayer.seekTo(newPosition)
+                },
+                modifier = Modifier.fillMaxSize(),
+                colors = SliderDefaults.colors(
+                    thumbColor = progressColor,
+                    activeTrackColor = Color.Transparent,
+                    inactiveTrackColor = Color.Transparent
+                )
             )
         }
 
         Spacer(modifier = Modifier.width(8.dp))
 
-        // Progress Slider
-        Slider(
-            value = currentPosition.toFloat(),
-            onValueChange = { newPosition ->
-                currentPosition = newPosition.toInt()
-                mediaPlayer.seekTo(newPosition.toInt())
-            },
-            valueRange = 0f..duration.toFloat(),
-            modifier = Modifier.weight(1f)
-        )
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        // Timer
         Text(
-            text = formatTime(currentPosition.toLong()),
+            text = formatTime(duration),
             fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
         )
     }
 }
 
-// Helper function to format milliseconds into MM:SS string
+@Composable
+fun Waveform(
+    modifier: Modifier = Modifier,
+    progress: Float,
+    waveformColor: Color,
+    progressColor: Color
+) {
+    val waveformData = remember {
+        listOf(0.2f, 0.5f, 0.7f, 0.4f, 0.8f, 0.3f, 0.6f, 0.9f, 0.5f, 0.7f, 0.4f, 0.8f, 0.3f, 0.6f, 0.9f, 0.5f, 0.7f, 0.4f, 0.8f, 0.3f, 0.6f, 0.9f, 0.5f, 0.7f, 0.4f, 0.8f, 0.3f, 0.2f, 0.5f, 0.7f)
+    }
+
+    Canvas(modifier = modifier) {
+        val canvasWidth = size.width
+        val canvasHeight = size.height
+        val barWidth = 3.dp.toPx()
+        val barSpacing = 2.dp.toPx()
+        val totalBarWidth = barWidth + barSpacing
+        val progressWidth = canvasWidth * progress
+
+        for (i in 0..30) {
+            val value = waveformData.getOrElse(i) { 0.2f }
+            val barHeight = canvasHeight * value
+            val startX = i * totalBarWidth
+            val startY = (canvasHeight - barHeight) / 2
+
+            val color = if (startX < progressWidth) progressColor else waveformColor
+
+            drawRoundRect(
+                color = color,
+                topLeft = Offset(x = startX, y = startY),
+                size = Size(width = barWidth, height = barHeight),
+                cornerRadius = CornerRadius(barWidth / 2)
+            )
+        }
+    }
+}
+
 private fun formatTime(ms: Long): String {
+    if (ms < 0) return "00:00"
     val totalSeconds = ms / 1000
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
     return String.format("%02d:%02d", minutes, seconds)
 }
-// ADDED END
 
 @Composable
 fun ProfilePicture(imageUrl: String?) {
@@ -424,11 +491,10 @@ fun MessageInput(
     var isRecording by remember { mutableStateOf(false) }
     var recordingTime by remember { mutableStateOf(0L) }
 
-    // Timer for recording duration
     LaunchedEffect(isRecording) {
         if (isRecording) {
             recordingTime = 0L
-            while (isRecording) { // Loop will stop when isRecording becomes false
+            while (isRecording) {
                 delay(1000)
                 recordingTime++
             }
@@ -506,7 +572,6 @@ fun MessageInput(
                             }
                         } else {
                             IconButton(onClick = {
-                                // Start recording if permissions are granted, etc.
                                 isRecording = onStartRecording()
                             }) {
                                 Icon(
@@ -536,7 +601,6 @@ fun RecordingControls(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        // Cancel button
         IconButton(onClick = onCancelClick) {
             Icon(
                 Icons.Default.Delete,
@@ -545,7 +609,6 @@ fun RecordingControls(
             )
         }
 
-        // Timer
         Row(
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -563,7 +626,6 @@ fun RecordingControls(
             )
         }
 
-        // Send button
         IconButton(onClick = onSendClick) {
             Icon(
                 Icons.AutoMirrored.Filled.Send,
