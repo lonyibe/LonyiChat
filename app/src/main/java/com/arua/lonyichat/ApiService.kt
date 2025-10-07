@@ -66,6 +66,9 @@ object ApiService {
     data class SingleEventResponse(val success: Boolean, val event: Event)
     // ✨ ADDED: The missing data class for creating a single church
     data class SingleChurchResponse(val success: Boolean, val church: Church)
+    // ✨ NEW: Data class for the edit message response
+    data class EditMessageResponse(val success: Boolean, val updatedMessage: ChurchMessage)
+
 
     // MODIFIED: MediaResponse is now defined in MediaItem.kt, but we'll include a helper response for interactions
     data class MediaInteractionResponse(val success: Boolean, val message: String)
@@ -980,6 +983,33 @@ object ApiService {
                     }
                     val reactionResponse = gson.fromJson(responseBody, ChurchMessageReactionResponse::class.java)
                     Result.success(reactionResponse.message)
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // ✨ NEW: Function to edit a church message
+    suspend fun editChurchMessage(messageId: String, newContent: String): Result<ChurchMessage> {
+        val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
+        return try {
+            val json = gson.toJson(mapOf("content" to newContent))
+            val body = json.toRequestBody(JSON)
+            val request = Request.Builder()
+                .url("$BASE_URL/messages/$messageId")
+                .addHeader("Authorization", "Bearer $token")
+                .put(body)
+                .build()
+
+            withContext(Dispatchers.IO) {
+                client.newCall(request).execute().use { response ->
+                    val responseBody = response.body?.string()
+                    if (!response.isSuccessful) {
+                        throw ApiException("Failed to edit message (${response.code}): ${getErrorMessage(responseBody)}")
+                    }
+                    val editResponse = gson.fromJson(responseBody, EditMessageResponse::class.java)
+                    Result.success(editResponse.updatedMessage)
                 }
             }
         } catch (e: Exception) {
