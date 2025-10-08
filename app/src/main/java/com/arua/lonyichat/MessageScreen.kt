@@ -12,6 +12,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -21,10 +22,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddReaction
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MusicNote
@@ -47,8 +51,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -84,6 +90,12 @@ fun MessageScreen(
     val currentUserId = ApiService.getCurrentUserId()
     val keyboardHeight = WindowInsets.ime.getBottom(LocalDensity.current)
 
+    // ✨ START: State management for message actions
+    var replyingToMessage by remember { mutableStateOf<Message?>(null) }
+    var editingMessage by remember { mutableStateOf<Message?>(null) }
+    var messageWithOptions by remember { mutableStateOf<Message?>(null) }
+    // ✨ END: State management
+
     LaunchedEffect(chatId) {
         viewModel.loadMessages(chatId)
     }
@@ -96,6 +108,45 @@ fun MessageScreen(
             )
         }
     }
+
+    // ✨ START: Show message options dialog when a message is selected
+    if (messageWithOptions != null) {
+        MessageOptionsDialog(
+            message = messageWithOptions!!,
+            onDismiss = { messageWithOptions = null },
+            onReply = {
+                replyingToMessage = it
+                messageWithOptions = null
+            },
+            onEdit = {
+                editingMessage = it
+                messageWithOptions = null
+            },
+            onDelete = {
+                viewModel.deleteMessage(it.id)
+                messageWithOptions = null
+            },
+            onReact = { message, emoji ->
+                viewModel.reactToMessage(message.id, emoji)
+                messageWithOptions = null
+            },
+            isSentByCurrentUser = messageWithOptions?.senderId == currentUserId
+        )
+    }
+    // ✨ END: Show message options dialog
+
+    // ✨ START: Show edit message dialog
+    if (editingMessage != null) {
+        EditMessageDialog(
+            message = editingMessage!!,
+            onDismiss = { editingMessage = null },
+            onSave = { updatedText ->
+                viewModel.editMessage(editingMessage!!.id, updatedText)
+                editingMessage = null
+            }
+        )
+    }
+    // ✨ END: Show edit message dialog
 
     Scaffold(
         topBar = {
@@ -150,7 +201,9 @@ fun MessageScreen(
                                 ) {
                                     MessageBubble(
                                         message = message,
-                                        isSentByCurrentUser = message.senderId == currentUserId
+                                        isSentByCurrentUser = message.senderId == currentUserId,
+                                        // ✨ ADDED: Long click to show options
+                                        onLongClick = { messageWithOptions = message }
                                     )
                                 }
                             }
@@ -161,9 +214,20 @@ fun MessageScreen(
             MessageInput(
                 onSendMessage = { text ->
                     if (text.isNotBlank()) {
-                        viewModel.sendMessage(chatId, text)
+                        // ✨ UPDATED: Pass reply info to ViewModel
+                        viewModel.sendMessage(
+                            chatId = chatId,
+                            text = text,
+                            repliedToMessageId = replyingToMessage?.id,
+                            repliedToMessageContent = replyingToMessage?.text
+                        )
+                        replyingToMessage = null // Clear reply state after sending
                     }
                 },
+                // ✨ START: Pass reply state to MessageInput
+                replyingTo = replyingToMessage,
+                onCancelReply = { replyingToMessage = null },
+                // ✨ END: Pass reply state
                 onPickImage = onPickImage,
                 onPickVideo = onPickVideo,
                 onPickAudio = onPickAudio,
@@ -175,8 +239,13 @@ fun MessageScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun MessageBubble(message: Message, isSentByCurrentUser: Boolean) {
+fun MessageBubble(
+    message: Message,
+    isSentByCurrentUser: Boolean,
+    onLongClick: () -> Unit // ✨ ADDED: Callback for long click
+) {
     val bubbleColor = if (isSentByCurrentUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
     val textColor = if (isSentByCurrentUser) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
     val alignment = if (isSentByCurrentUser) Alignment.End else Alignment.Start
@@ -207,6 +276,11 @@ fun MessageBubble(message: Message, isSentByCurrentUser: Boolean) {
                 modifier = Modifier
                     .background(bubbleColor, shape = bubbleShape)
                     .clip(bubbleShape)
+                    // ✨ UPDATED: Use combinedClickable for long press
+                    .combinedClickable(
+                        onClick = { /* Can be used for message details later */ },
+                        onLongClick = onLongClick
+                    )
                     .widthIn(max = 280.dp)
             ) {
                 Column(modifier = Modifier.padding(horizontal = if (message.type == "image" || message.type == "video") 0.dp else 12.dp, vertical = if (message.type == "image" || message.type == "video") 0.dp else 8.dp)) {
@@ -219,6 +293,14 @@ fun MessageBubble(message: Message, isSentByCurrentUser: Boolean) {
                         )
                     }
 
+                    // ✨ ADDED: Display for replied message
+                    if (message.repliedToMessageContent != null) {
+                        ReplyPreview(
+                            content = message.repliedToMessageContent,
+                            isSentByCurrentUser = isSentByCurrentUser
+                        )
+                    }
+
                     when (message.type) {
                         "image" -> ImageMessage(message)
                         "video" -> VideoMessage(message)
@@ -226,24 +308,91 @@ fun MessageBubble(message: Message, isSentByCurrentUser: Boolean) {
                         else -> TextMessage(message, textColor)
                     }
 
-                    Text(
-                        text = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(message.timestamp),
-                        fontSize = 12.sp,
-                        color = if (message.type == "image" || message.type == "video") Color.White.copy(alpha = 0.8f) else textColor.copy(alpha = 0.7f),
-                        modifier = Modifier
-                            .align(Alignment.End)
-                            .padding(top = 4.dp, end = 8.dp, bottom = if (message.type == "image" || message.type == "video") 4.dp else 0.dp)
-                            .background(
-                                if (message.type == "image" || message.type == "video") Color.Black.copy(alpha = 0.3f) else Color.Transparent,
-                                shape = RoundedCornerShape(8.dp)
+                    Row(
+                        modifier = Modifier.align(Alignment.End),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // ✨ ADDED: Display 'Edited' text if message is edited
+                        if (message.isEdited) {
+                            Text(
+                                text = "Edited",
+                                fontSize = 11.sp,
+                                color = textColor.copy(alpha = 0.7f),
+                                modifier = Modifier.padding(end = 8.dp)
                             )
-                            .padding(horizontal = 4.dp)
-                    )
+                        }
+                        Text(
+                            text = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(message.timestamp),
+                            fontSize = 12.sp,
+                            color = if (message.type == "image" || message.type == "video") Color.White.copy(alpha = 0.8f) else textColor.copy(alpha = 0.7f),
+                            modifier = Modifier
+                                .padding(top = 4.dp, end = 8.dp, bottom = if (message.type == "image" || message.type == "video") 4.dp else 0.dp)
+                                .background(
+                                    if (message.type == "image" || message.type == "video") Color.Black.copy(alpha = 0.3f) else Color.Transparent,
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                .padding(horizontal = 4.dp)
+                        )
+                    }
                 }
+            }
+            // ✨ ADDED: Display for reactions
+            if (message.reactions.isNotEmpty()) {
+                ReactionsDisplay(
+                    reactions = message.reactions,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
             }
         }
     }
 }
+
+// ✨ NEW: Composable to show a preview of a replied message inside a bubble
+@Composable
+fun ReplyPreview(content: String, isSentByCurrentUser: Boolean) {
+    val replyColor = if (isSentByCurrentUser) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+    } else {
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+            .background(replyColor, RoundedCornerShape(8.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = content,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+        )
+    }
+}
+
+// ✨ NEW: Composable to display reactions below a message
+@Composable
+fun ReactionsDisplay(reactions: Map<String, List<String>>, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        reactions.forEach { (emoji, userIds) ->
+            if (userIds.isNotEmpty()) {
+                Text(
+                    text = "$emoji ${userIds.size}",
+                    fontSize = 12.sp
+                )
+            }
+        }
+    }
+}
+
 
 @Composable
 fun TextMessage(message: Message, textColor: Color) {
@@ -478,6 +627,8 @@ fun ProfilePicture(imageUrl: String?) {
 @Composable
 fun MessageInput(
     onSendMessage: (String) -> Unit,
+    replyingTo: Message?, // ✨ ADDED
+    onCancelReply: () -> Unit, // ✨ ADDED
     onPickImage: () -> Unit,
     onPickVideo: () -> Unit,
     onPickAudio: () -> Unit,
@@ -502,6 +653,36 @@ fun MessageInput(
     }
 
     Column(modifier = Modifier.animateContentSize()) {
+        // ✨ ADDED: Reply Preview UI
+        AnimatedVisibility(visible = replyingTo != null) {
+            replyingTo?.let {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Replying to ${it.senderName}",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            it.text,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    IconButton(onClick = onCancelReply) {
+                        Icon(Icons.Default.Close, contentDescription = "Cancel Reply")
+                    }
+                }
+            }
+        }
+
         AnimatedVisibility(
             visible = showAttachmentMenu,
             enter = expandVertically(),
@@ -671,5 +852,114 @@ fun AttachmentButton(
         Icon(icon, contentDescription = description, tint = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(4.dp))
         Text(text = description, fontSize = 12.sp)
+    }
+}
+
+// ✨ NEW: Dialog for message options
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MessageOptionsDialog(
+    message: Message,
+    onDismiss: () -> Unit,
+    onReply: (Message) -> Unit,
+    onEdit: (Message) -> Unit,
+    onDelete: (Message) -> Unit,
+    onReact: (Message, String) -> Unit,
+    isSentByCurrentUser: Boolean
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier.padding(bottom = 32.dp)) {
+            ReactionPicker(onEmojiSelected = { onReact(message, it) })
+            Divider(modifier = Modifier.padding(vertical = 8.dp))
+            OptionItem(icon = Icons.AutoMirrored.Filled.Reply, text = "Reply", onClick = { onReply(message) })
+            if (isSentByCurrentUser && message.type == "text") { // Only allow editing for text messages
+                OptionItem(icon = Icons.Default.Edit, text = "Edit", onClick = { onEdit(message) })
+            }
+            if (isSentByCurrentUser) {
+                OptionItem(icon = Icons.Default.Delete, text = "Delete", onClick = { onDelete(message) }, isDestructive = true)
+            }
+        }
+    }
+}
+
+// ✨ NEW: Reaction picker UI
+@Composable
+fun ReactionPicker(onEmojiSelected: (String) -> Unit) {
+    val reactions = listOf("👍", "🙏", "❤️", "🤣")
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly
+    ) {
+        reactions.forEach { emoji ->
+            Text(
+                text = emoji,
+                fontSize = 24.sp,
+                modifier = Modifier
+                    .clickable { onEmojiSelected(emoji) }
+                    .padding(8.dp)
+            )
+        }
+    }
+}
+
+// ✨ NEW: A single item in the options dialog
+@Composable
+fun OptionItem(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, onClick: () -> Unit, isDestructive: Boolean = false) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = text,
+            tint = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(
+            text = text,
+            color = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+// ✨ NEW: Dialog for editing a message
+@Composable
+fun EditMessageDialog(
+    message: Message,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    var text by remember { mutableStateOf(message.text) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Edit Message", style = MaterialTheme.typography.titleLarge)
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = { onSave(text) }) {
+                        Text("Save")
+                    }
+                }
+            }
+        }
     }
 }
