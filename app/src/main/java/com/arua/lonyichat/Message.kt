@@ -13,5 +13,9 @@ data class Message(
     val text: String,
     val timestamp: Date,
     val type: String = "text", // Can be "text", "image", "video", "audio", or "voice"
-    val url: String? = null // URL for media content
+    val url: String? = null, // URL for media content
+    val isEdited: Boolean = false, // ✨ ADDED
+    val repliedToMessageId: String? = null, // ✨ ADDED
+    val repliedToMessageContent: String? = null, // ✨ ADDED
+    val reactions: Map<String, List<String>> = emptyMap() // ✨ ADDED (Emoji -> List of UserIDs)
 )

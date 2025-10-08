@@ -36,6 +36,8 @@ data class CreateChatResponse(val success: Boolean, val chatId: String)
 data class SearchUsersResponse(val success: Boolean, val users: List<Profile>)
 // ADDED: Data class for friendship status
 data class FriendshipStatusResponse(val success: Boolean, val status: String)
+// ✨ ADDED: Data class for generic message interaction responses
+data class MessageInteractionResponse(val success: Boolean, val updatedMessage: Message)
 
 
 // ✨ NOTE: The NotificationResponse is now correctly defined only in Notification.kt ✨
@@ -1220,14 +1222,24 @@ object ApiService {
         }
     }
 
-    // ✨ MODIFIED: Now supports media messages
-    suspend fun sendMessage(chatId: String, text: String, type: String = "text", url: String? = null): Message {
+    // ✨ UPDATED: Now supports replies and media messages
+    suspend fun sendMessage(
+        chatId: String,
+        text: String,
+        type: String = "text",
+        url: String? = null,
+        repliedToMessageId: String? = null,
+        repliedToMessageContent: String? = null
+    ): Message {
         val token = getAuthToken() ?: throw ApiException("User not authenticated.")
         val requestBodyMap = mutableMapOf<String, Any?>(
             "text" to text,
             "type" to type
         )
         url?.let { requestBodyMap["url"] = it }
+        repliedToMessageId?.let { requestBodyMap["repliedToMessageId"] = it }
+        repliedToMessageContent?.let { requestBodyMap["repliedToMessageContent"] = it }
+
 
         val json = gson.toJson(requestBodyMap)
         val body = json.toRequestBody(JSON)
@@ -1244,6 +1256,69 @@ object ApiService {
                     throw ApiException("Failed to send message: ${getErrorMessage(responseBody)}")
                 }
                 gson.fromJson(responseBody, SendMessageResponse::class.java).message
+            }
+        }
+    }
+
+    // ✨ ADDED: Function to edit a message
+    suspend fun editMessage(messageId: String, newContent: String): Message {
+        val token = getAuthToken() ?: throw ApiException("User not authenticated.")
+        val json = gson.toJson(mapOf("content" to newContent))
+        val body = json.toRequestBody(JSON)
+        val request = Request.Builder()
+            .url("$BASE_URL/messages/$messageId")
+            .addHeader("Authorization", "Bearer $token")
+            .put(body)
+            .build()
+
+        return withContext(Dispatchers.IO) {
+            client.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string()
+                if (!response.isSuccessful) {
+                    throw ApiException("Failed to edit message: ${getErrorMessage(responseBody)}")
+                }
+                gson.fromJson(responseBody, MessageInteractionResponse::class.java).updatedMessage
+            }
+        }
+    }
+
+    // ✨ ADDED: Function to delete a message
+    suspend fun deleteMessage(messageId: String) {
+        val token = getAuthToken() ?: throw ApiException("User not authenticated.")
+        val request = Request.Builder()
+            .url("$BASE_URL/messages/$messageId")
+            .addHeader("Authorization", "Bearer $token")
+            .delete()
+            .build()
+
+        withContext(Dispatchers.IO) {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    val errorBody = response.body?.string()
+                    throw ApiException("Failed to delete message: ${getErrorMessage(errorBody)}")
+                }
+            }
+        }
+    }
+
+    // ✨ ADDED: Function to react to a message
+    suspend fun reactToMessage(messageId: String, emoji: String): Message {
+        val token = getAuthToken() ?: throw ApiException("User not authenticated.")
+        val json = gson.toJson(mapOf("reactionEmoji" to emoji))
+        val body = json.toRequestBody(JSON)
+        val request = Request.Builder()
+            .url("$BASE_URL/messages/$messageId/react")
+            .addHeader("Authorization", "Bearer $token")
+            .post(body)
+            .build()
+
+        return withContext(Dispatchers.IO) {
+            client.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string()
+                if (!response.isSuccessful) {
+                    throw ApiException("Failed to react to message: ${getErrorMessage(responseBody)}")
+                }
+                gson.fromJson(responseBody, MessageInteractionResponse::class.java).updatedMessage
             }
         }
     }
