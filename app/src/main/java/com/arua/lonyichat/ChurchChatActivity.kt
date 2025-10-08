@@ -35,7 +35,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -121,9 +120,9 @@ fun ChurchChatScreen(
     // State to hold a potentially updated church object (specifically for photoUrl)
     var currentChurch by remember { mutableStateOf(church) }
 
+    // ✨ NEW: State for replying to a message (messageId, messageContent)
     var replyingToMessage by remember { mutableStateOf<Pair<String, String>?>(null) }
     var showMessageOptionsMenu by remember { mutableStateOf<ChurchMessage?>(null) } // Message that was long-pressed
-    var editingMessage by remember { mutableStateOf<ChurchMessage?>(null) }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -155,27 +154,13 @@ fun ChurchChatScreen(
                 viewModel.reactToMessage(currentChurch.id, message.id, reaction)
                 showMessageOptionsMenu = null
             },
-            onEdit = {
-                editingMessage = it
-                showMessageOptionsMenu = null
-            },
             onDelete = {
                 viewModel.deleteMessage(currentChurch.id, it.id)
                 showMessageOptionsMenu = null
             }
         )
     }
-
-    editingMessage?.let { messageToEdit ->
-        EditMessageDialog(
-            message = messageToEdit,
-            onDismiss = { editingMessage = null },
-            onSave = { newContent ->
-                viewModel.editMessage(messageToEdit.id, newContent)
-                editingMessage = null
-            }
-        )
-    }
+    // --- END DIALOGS ---
 
     // --- Delete Group Confirmation Dialog ---
     if (showDeleteConfirmDialog) {
@@ -413,22 +398,14 @@ fun ChatMessageItem(
             }
 
             // ✨ NEW: Reaction Chips
+            // The null check is now safe, using the pattern provided below
             ReactionChips(message.reactions) { emoji -> onReactionClick(emoji) }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (message.isEdited) {
-                    Text(
-                        text = "(edited)",
-                        style = MaterialTheme.typography.labelSmall.copy(fontStyle = FontStyle.Italic),
-                        modifier = Modifier.padding(top = 2.dp, start = 8.dp)
-                    )
-                }
-                Text(
-                    text = message.createdAt.toDate().toFormattedTimeString(),
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(top = 2.dp, start = 4.dp, end = 8.dp)
-                )
-            }
+            Text(
+                text = message.createdAt.toDate().toFormattedTimeString(),
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(top = 2.dp, start = 8.dp, end = 8.dp)
+            )
         }
 
         if (isCurrentUser) {
@@ -449,6 +426,7 @@ fun ChatMessageItem(
 fun ReactionChips(reactions: Map<String, List<String>>?, onReactionClick: (String) -> Unit) {
     val currentUserId = ApiService.getCurrentUserId()
 
+    // ✨ FIX: Use Elvis operator to safely handle a null reactions map.
     val safeReactions = reactions ?: emptyMap()
 
     if (safeReactions.isEmpty()) return
@@ -457,6 +435,7 @@ fun ReactionChips(reactions: Map<String, List<String>>?, onReactionClick: (Strin
         modifier = Modifier.padding(top = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
+        // Iterate over the safeReactions map.
         safeReactions.filterValues { it.isNotEmpty() }.forEach { (emoji, userIds) ->
             val isReactedByMe = userIds.contains(currentUserId)
 
@@ -525,6 +504,7 @@ fun MessageInputBar(
                 .imePadding()
                 .padding(bottom = 8.dp)
         ) {
+            // ✨ NEW: Reply Preview
             if (replyingTo != null) {
                 Row(
                     modifier = Modifier
@@ -582,7 +562,6 @@ fun MessageContextMenu(
     onDismiss: () -> Unit,
     onReply: (ChurchMessage) -> Unit,
     onReact: (String) -> Unit,
-    onEdit: (ChurchMessage) -> Unit,
     onDelete: (ChurchMessage) -> Unit
 ) {
     val currentUserId = ApiService.getCurrentUserId()
@@ -614,58 +593,17 @@ fun MessageContextMenu(
                     Text("Reply to Message")
                 }
 
-                // Author-only options
+                // Delete Button
                 if (isAuthor) {
-                    TextButton(onClick = { onEdit(message) }, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Default.Edit, contentDescription = "Edit")
-                        Spacer(Modifier.width(8.dp))
-                        Text("Edit Message")
-                    }
                     TextButton(onClick = { onDelete(message) }, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Default.Delete, contentDescription = "Delete")
                         Spacer(Modifier.width(8.dp))
-                        Text("Delete Message")
+                        Text("Delete Message (Yours)")
                     }
                 }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } }
-    )
-}
-
-@Composable
-fun EditMessageDialog(
-    message: ChurchMessage,
-    onDismiss: () -> Unit,
-    onSave: (newContent: String) -> Unit
-) {
-    var text by remember { mutableStateOf(message.content) }
-    val isSaveEnabled = text.isNotBlank() && text != message.content
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Edit Message") },
-        text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Message") }
-            )
-        },
-        confirmButton = {
-            Button(
-                onClick = { onSave(text) },
-                enabled = isSaveEnabled
-            ) {
-                Text("Save")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
     )
 }
 

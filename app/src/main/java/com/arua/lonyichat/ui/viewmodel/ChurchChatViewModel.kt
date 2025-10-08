@@ -78,26 +78,6 @@ class ChurchChatViewModel : ViewModel() {
         }
     }
 
-    // ✨ NEW: Edit a message
-    fun editMessage(messageId: String, newContent: String) {
-        viewModelScope.launch {
-            ApiService.editChurchMessage(messageId, newContent)
-                .onSuccess { updatedMessage ->
-                    _uiState.update { currentState ->
-                        currentState.copy(
-                            messages = currentState.messages.map { message ->
-                                if (message.id == messageId) updatedMessage else message
-                            }
-                        )
-                    }
-                }
-                .onFailure { error ->
-                    // Here you might want to show a temporary error message to the user
-                    _uiState.update { it.copy(error = "Failed to edit message: ${error.localizedMessage}") }
-                }
-        }
-    }
-
     // ✨ NEW: Delete a message
     fun deleteMessage(churchId: String, messageId: String) {
         viewModelScope.launch {
