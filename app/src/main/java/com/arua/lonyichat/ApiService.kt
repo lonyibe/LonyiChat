@@ -5,10 +5,15 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import android.webkit.MimeTypeMap
+import com.arua.lonyichat.ChurchMessage
 import com.arua.lonyichat.LonyiChatApp
 import com.arua.lonyichat.Message
 import com.google.gson.Gson
+import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -16,10 +21,12 @@ import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
 import java.io.IOException
 import java.io.InputStream
-import java.util.*
-import java.io.File // ADDED: For checking file path/extension
+import java.io.File
 
 class ApiException(message: String) : IOException(message)
 
@@ -29,20 +36,33 @@ data class UserProfileResponse(
     val posts: List<Post>
 )
 
-// ADDED: Data classes for chat functionality
 data class MessagesResponse(val success: Boolean, val messages: List<Message>)
 data class SendMessageResponse(val success: Boolean, val message: Message)
 data class CreateChatResponse(val success: Boolean, val chatId: String)
 data class SearchUsersResponse(val success: Boolean, val users: List<Profile>)
-// ADDED: Data class for friendship status
 data class FriendshipStatusResponse(val success: Boolean, val status: String)
-// ✨ ADDED: Data class for generic message interaction responses
 data class MessageInteractionResponse(val success: Boolean, val updatedMessage: Message)
 
 
-// ✨ NOTE: The NotificationResponse is now correctly defined only in Notification.kt ✨
+// ✨ NEW: Sealed class to represent all possible real-time events from the WebSocket
+sealed class WebSocketEvent {
+    data class NewMessage(val message: Message) : WebSocketEvent()
+    data class MessageUpdated(val message: Message) : WebSocketEvent()
+    data class MessageDeleted(val payload: DeletedMessageData) : WebSocketEvent()
+    data class NewChurchMessage(val message: ChurchMessage) : WebSocketEvent()
+    data class ChurchMessageUpdated(val message: ChurchMessage) : WebSocketEvent()
+    data class ChurchMessageDeleted(val payload: DeletedMessageData) : WebSocketEvent()
+    object ConnectionOpened : WebSocketEvent()
+    data class ConnectionFailed(val error: String) : WebSocketEvent()
+    object ConnectionClosed : WebSocketEvent()
+}
+
+// ✨ NEW: Data class for the payload of a deleted message event
+data class DeletedMessageData(val messageId: String)
+
 
 object ApiService {
+    // Keep a single OkHttpClient instance for both HTTP and WebSocket
     private val client = OkHttpClient()
     private val gson = Gson()
     const val BASE_URL = "http://104.225.141.13:3000"
@@ -52,6 +72,9 @@ object ApiService {
     private var currentUserId: String? = null
 
     private val prefs = LonyiChatApp.appContext.getSharedPreferences("auth", Context.MODE_PRIVATE)
+
+    // ✨ NEW: WebSocket Manager instance
+    val chatSocketManager = ChatSocketManager(client, gson, BASE_URL)
 
     init {
         authToken = prefs.getString("auth_token", null)
@@ -66,10 +89,7 @@ object ApiService {
     data class ChurchMessageReactionResponse(val success: Boolean, val message: ChurchMessage)
     data class EventResponse(val success: Boolean, val events: List<Event>)
     data class SingleEventResponse(val success: Boolean, val event: Event)
-    // ✨ ADDED: The missing data class for creating a single church
     data class SingleChurchResponse(val success: Boolean, val church: Church)
-
-    // MODIFIED: MediaResponse is now defined in MediaItem.kt, but we'll include a helper response for interactions
     data class MediaInteractionResponse(val success: Boolean, val message: String)
 
     private fun getErrorMessage(responseBody: String?): String {
@@ -85,6 +105,8 @@ object ApiService {
         authToken = null
         currentUserId = null
         prefs.edit().clear().apply()
+        // ✨ NEW: Disconnect WebSocket on logout
+        chatSocketManager.disconnect()
     }
 
     suspend fun signup(email: String, password: String, username: String, phone: String, age: String, country: String): Result<Unit> = withContext(Dispatchers.IO) {
@@ -136,21 +158,17 @@ object ApiService {
         context: Activity
     ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            // First, sign up the user
             val signupResult = signup(email, password, username, phone, age, country)
             if (signupResult.isFailure) {
                 return@withContext signupResult
             }
 
-            // If an image is provided, upload it
             if (imageUri != null) {
                 val uploadResult = uploadProfilePhoto(imageUri, context)
                 if (uploadResult.isSuccess) {
-                    // If upload is successful, update the user's profile with the new photo URL
                     val photoUrl = uploadResult.getOrNull()
                     updateProfile(username, phone, age, country, photoUrl)
                 } else {
-                    // If upload fails, you might want to return a partial success or a specific error
                     return@withContext Result.failure(uploadResult.exceptionOrNull() ?: ApiException("Profile photo upload failed."))
                 }
             }
@@ -310,25 +328,22 @@ object ApiService {
         }
     }
 
-    // ✨ NEW: Function to upload media for chat messages
     suspend fun uploadChatMedia(uri: Uri, context: Activity): Result<String> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
 
         return withContext(Dispatchers.IO) {
             try {
                 val inputStream: InputStream? = context.contentResolver.openInputStream(uri)
-                var mimeType = context.contentResolver.getType(uri) // MODIFIED to be mutable
+                var mimeType = context.contentResolver.getType(uri)
 
-                // FIX: If MIME type is null for local files (like the recorded .3gp audio), set it manually.
                 if (mimeType == null) {
                     if (uri.path?.endsWith(".3gp", ignoreCase = true) == true) {
                         mimeType = "audio/3gpp"
-                        Log.d("ApiService", "Inferred MIME type for 3gp file: $mimeType") // ADDED logging
+                        Log.d("ApiService", "Inferred MIME type for 3gp file: $mimeType")
                     }
                 }
 
                 if (inputStream == null || mimeType == null) {
-                    // MODIFIED: Provide detailed error message for debugging
                     val uriString = uri.toString()
                     return@withContext Result.failure(ApiException("Failed to open media file. URI: $uriString, InputStream: ${inputStream != null}, MimeType: $mimeType"))
                 }
@@ -791,7 +806,6 @@ object ApiService {
         }
     }
 
-    // ✨ MODIFIED: Now supports media messages
     suspend fun postChurchMessage(
         churchId: String,
         content: String,
@@ -1222,7 +1236,6 @@ object ApiService {
         }
     }
 
-    // ✨ UPDATED: Now supports replies and media messages
     suspend fun sendMessage(
         chatId: String,
         text: String,
@@ -1260,7 +1273,6 @@ object ApiService {
         }
     }
 
-    // ✨ ADDED: Function to edit a message
     suspend fun editMessage(messageId: String, newContent: String): Message {
         val token = getAuthToken() ?: throw ApiException("User not authenticated.")
         val json = gson.toJson(mapOf("content" to newContent))
@@ -1282,7 +1294,6 @@ object ApiService {
         }
     }
 
-    // ✨ ADDED: Function to delete a message
     suspend fun deleteMessage(messageId: String) {
         val token = getAuthToken() ?: throw ApiException("User not authenticated.")
         val request = Request.Builder()
@@ -1301,7 +1312,6 @@ object ApiService {
         }
     }
 
-    // ✨ ADDED: Function to react to a message
     suspend fun reactToMessage(messageId: String, emoji: String): Message {
         val token = getAuthToken() ?: throw ApiException("User not authenticated.")
         val json = gson.toJson(mapOf("reactionEmoji" to emoji))
@@ -1363,7 +1373,6 @@ object ApiService {
         }
     }
 
-    // ✨ ADDED: Get notifications for the logged-in user
     suspend fun getNotifications(): Result<List<Notification>> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {
@@ -1388,7 +1397,6 @@ object ApiService {
         }
     }
 
-    // ✨ ADDED: Mark a specific notification as read
     suspend fun markNotificationAsRead(notificationId: String): Result<Unit> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {
@@ -1402,7 +1410,6 @@ object ApiService {
             withContext(Dispatchers.IO) {
                 client.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) {
-                        // Don't throw an error for this, as it's not critical if it fails
                         println("Failed to mark notification as read: ${response.body?.string()}")
                     }
                     Result.success(Unit)
@@ -1413,7 +1420,6 @@ object ApiService {
         }
     }
 
-    // ADDED: Send a friend request
     suspend fun sendFriendRequest(userId: String): Result<Unit> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {
@@ -1438,7 +1444,6 @@ object ApiService {
         }
     }
 
-    // ADDED: Get friendship status
     suspend fun getFriendshipStatus(userId: String): Result<FriendshipStatusResponse> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {
@@ -1464,20 +1469,14 @@ object ApiService {
         }
     }
 
-    // ADDED: Accept a friend request (By following back) // ADDED
-    suspend fun acceptFriendRequest(senderId: String): Result<Unit> { // ADDED
-        // On the backend, mutual follow implies friendship. Calling sendFriendRequest // ADDED
-        // from the recipient to the sender completes the mutual follow. // ADDED
-        return sendFriendRequest(senderId) // ADDED
-    } // ADDED
+    suspend fun acceptFriendRequest(senderId: String): Result<Unit> {
+        return sendFriendRequest(senderId)
+    }
 
-    // ADDED: Delete a friend request (i.e., dismiss the notification and don't follow back) // ADDED
-    suspend fun deleteFriendRequest(notificationId: String): Result<Unit> { // ADDED
-        // This dismisses the request by marking the notification as read. // ADDED
-        return markNotificationAsRead(notificationId) // ADDED
-    } // ADDED
+    suspend fun deleteFriendRequest(notificationId: String): Result<Unit> {
+        return markNotificationAsRead(notificationId)
+    }
 
-    // ✨ ADDED: Media Interaction API Calls ✨
     suspend fun likeMedia(mediaId: String): Result<Unit> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {
@@ -1529,7 +1528,6 @@ object ApiService {
         } catch (e: Exception) { Result.failure(e) }
     }
 
-    // NEWLY ADDED
     suspend fun getCommentsForMedia(mediaId: String): Result<List<Comment>> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {
@@ -1554,7 +1552,6 @@ object ApiService {
         }
     }
 
-    // NEWLY ADDED
     suspend fun addMediaComment(mediaId: String, content: String): Result<Comment> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {
@@ -1581,7 +1578,6 @@ object ApiService {
         }
     }
 
-    // NEWLY ADDED
     suspend fun deleteMedia(mediaId: String): Result<Unit> {
         val token = getAuthToken() ?: return Result.failure(ApiException("User not authenticated."))
         return try {
@@ -1602,5 +1598,89 @@ object ApiService {
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+}
+
+
+// ✨ NEW: Class dedicated to managing the WebSocket connection and events ✨
+class ChatSocketManager(
+    private val client: OkHttpClient,
+    private val gson: Gson,
+    baseUrl: String
+) {
+    private val wsUrl = baseUrl.replace("http", "ws")
+    private var webSocket: WebSocket? = null
+
+    fun connect(chatId: String): Flow<WebSocketEvent> = callbackFlow {
+        // Create a new WebSocket listener for each connection flow
+        val listener = object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) {
+                super.onOpen(webSocket, response)
+                Log.d("ChatSocketManager", "WebSocket connection opened.")
+                // Once connected, send a message to join the specific chat room
+                val joinMessage = gson.toJson(mapOf("type" to "join_chat", "chatId" to chatId))
+                webSocket.send(joinMessage)
+                trySend(WebSocketEvent.ConnectionOpened)
+            }
+
+            override fun onMessage(webSocket: WebSocket, text: String) {
+                super.onMessage(webSocket, text)
+                Log.d("ChatSocketManager", "Received message: $text")
+                try {
+                    val jsonObject = JsonParser.parseString(text).asJsonObject
+                    val type = jsonObject.get("type").asString
+                    val data = jsonObject.get("data")
+
+                    val event = when (type) {
+                        "new_message" -> WebSocketEvent.NewMessage(gson.fromJson(data, Message::class.java))
+                        "message_updated" -> WebSocketEvent.MessageUpdated(gson.fromJson(data, Message::class.java))
+                        "message_deleted" -> WebSocketEvent.MessageDeleted(gson.fromJson(data, DeletedMessageData::class.java))
+                        "new_church_message" -> WebSocketEvent.NewChurchMessage(gson.fromJson(data, ChurchMessage::class.java))
+                        "church_message_updated" -> WebSocketEvent.ChurchMessageUpdated(gson.fromJson(data, ChurchMessage::class.java))
+                        "church_message_deleted" -> WebSocketEvent.ChurchMessageDeleted(gson.fromJson(data, DeletedMessageData::class.java))
+                        else -> null
+                    }
+                    event?.let { trySend(it) }
+                } catch (e: Exception) {
+                    Log.e("ChatSocketManager", "Error parsing WebSocket message", e)
+                }
+            }
+
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                super.onClosing(webSocket, code, reason)
+                Log.d("ChatSocketManager", "WebSocket closing: $code / $reason")
+                trySend(WebSocketEvent.ConnectionClosed)
+                channel.close()
+            }
+
+            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                super.onClosed(webSocket, code, reason)
+                Log.d("ChatSocketManager", "WebSocket closed: $code / $reason")
+                trySend(WebSocketEvent.ConnectionClosed)
+                channel.close()
+            }
+
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                super.onFailure(webSocket, t, response)
+                Log.e("ChatSocketManager", "WebSocket connection failure", t)
+                trySend(WebSocketEvent.ConnectionFailed(t.message ?: "Unknown error"))
+                channel.close()
+            }
+        }
+
+        // Build the request and create the WebSocket
+        val request = Request.Builder().url(wsUrl).build()
+        webSocket = client.newWebSocket(request, listener)
+
+        // This will be called when the flow is cancelled
+        awaitClose {
+            Log.d("ChatSocketManager", "Flow is closing, disconnecting WebSocket.")
+            disconnect()
+        }
+    }
+
+    fun disconnect() {
+        webSocket?.close(1000, "Client disconnected")
+        webSocket = null
     }
 }
