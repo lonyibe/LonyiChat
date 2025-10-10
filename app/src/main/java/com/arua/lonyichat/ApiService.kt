@@ -5,7 +5,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import android.webkit.MimeTypeMap
-import com.arua.lonyichat.ChurchMessage
+import com.arua.lonyichat.data.ChurchMessage
 import com.arua.lonyichat.LonyiChatApp
 import com.arua.lonyichat.Message
 import com.google.gson.Gson
