@@ -17,8 +17,9 @@ import kotlinx.coroutines.launch
 
 data class MessageUiState(
     val messages: List<Message> = emptyList(),
-    // ✨ ADDED: Connection status for the UI
     val connectionStatus: String = "Connecting...",
+    // ✨ ADDED: A map to store users who are currently typing (userId to username)
+    val typingUsers: Map<String, String> = emptyMap(),
     val isLoading: Boolean = false,
     val error: String? = null
 )
@@ -28,23 +29,16 @@ class MessageViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(MessageUiState())
     val uiState: StateFlow<MessageUiState> = _uiState.asStateFlow()
 
-    // ✨ MODIFICATION: Job to manage the WebSocket connection lifecycle
     private var socketJob: Job? = null
 
-    // This function is the main entry point to load a chat screen.
-    // It fetches initial messages and then starts listening for real-time updates.
     fun loadMessages(chatId: String) {
-        // Cancel any previous connection to avoid multiple listeners
         socketJob?.cancel()
 
         viewModelScope.launch {
             _uiState.value = MessageUiState(isLoading = true, connectionStatus = "Connecting...")
             try {
-                // 1. Fetch the initial list of messages via HTTP
                 val initialMessages = ApiService.getMessages(chatId)
                 _uiState.value = _uiState.value.copy(messages = initialMessages, isLoading = false)
-
-                // 2. Connect to the WebSocket and start listening for real-time events
                 listenForUpdates(chatId)
             } catch (e: Exception) {
                 _uiState.value = MessageUiState(error = "Failed to load messages: ${e.message}")
@@ -52,20 +46,15 @@ class MessageViewModel : ViewModel() {
         }
     }
 
-    // ✨ NEW: Private function to handle collecting events from the WebSocket Flow
     private fun listenForUpdates(chatId: String) {
-        // Launch a new coroutine to collect events from the WebSocket Flow
         socketJob = viewModelScope.launch {
             ApiService.chatSocketManager.connect(chatId)
                 .catch { e ->
-                    // Handle errors in the flow itself
                     _uiState.value = _uiState.value.copy(error = "WebSocket error: ${e.message}")
                 }
                 .collect { event ->
-                    // Use a 'when' statement to handle each type of WebSocket event
                     when (event) {
                         is WebSocketEvent.NewMessage -> {
-                            // Add the new message to the list if it's not already present
                             if (_uiState.value.messages.none { it.id == event.message.id }) {
                                 _uiState.value = _uiState.value.copy(
                                     messages = _uiState.value.messages + event.message
@@ -73,7 +62,6 @@ class MessageViewModel : ViewModel() {
                             }
                         }
                         is WebSocketEvent.MessageUpdated -> {
-                            // Find and replace the updated message in the list
                             _uiState.value = _uiState.value.copy(
                                 messages = _uiState.value.messages.map {
                                     if (it.id == event.message.id) event.message else it
@@ -81,24 +69,33 @@ class MessageViewModel : ViewModel() {
                             )
                         }
                         is WebSocketEvent.MessageDeleted -> {
-                            // Filter out the deleted message from the list
                             _uiState.value = _uiState.value.copy(
                                 messages = _uiState.value.messages.filterNot { it.id == event.payload.messageId }
                             )
+                        }
+                        // ✨ ADDED: Handle typing events
+                        is WebSocketEvent.UserTyping -> {
+                            val newTypingUsers = _uiState.value.typingUsers.toMutableMap()
+                            newTypingUsers[event.payload.userId] = event.payload.username
+                            _uiState.value = _uiState.value.copy(typingUsers = newTypingUsers)
+                        }
+                        is WebSocketEvent.UserStoppedTyping -> {
+                            val newTypingUsers = _uiState.value.typingUsers.toMutableMap()
+                            newTypingUsers.remove(event.payload.userId)
+                            _uiState.value = _uiState.value.copy(typingUsers = newTypingUsers)
                         }
                         is WebSocketEvent.ConnectionOpened -> {
                             _uiState.value = _uiState.value.copy(connectionStatus = "Connected")
                             Log.d("MessageViewModel", "WebSocket Connected.")
                         }
                         is WebSocketEvent.ConnectionClosed -> {
-                            _uiState.value = _uiState.value.copy(connectionStatus = "Disconnected")
+                            _uiState.value = _uiState.value.copy(connectionStatus = "Disconnected", typingUsers = emptyMap()) // Clear typing users on disconnect
                             Log.d("MessageViewModel", "WebSocket Disconnected.")
                         }
                         is WebSocketEvent.ConnectionFailed -> {
                             _uiState.value = _uiState.value.copy(connectionStatus = "Error", error = event.error)
                             Log.e("MessageViewModel", "WebSocket Error: ${event.error}")
                         }
-                        // Ignore church messages in this private chat ViewModel
                         is WebSocketEvent.NewChurchMessage,
                         is WebSocketEvent.ChurchMessageUpdated,
                         is WebSocketEvent.ChurchMessageDeleted -> {
@@ -112,8 +109,6 @@ class MessageViewModel : ViewModel() {
     fun sendMessage(chatId: String, text: String, repliedToMessageId: String? = null, repliedToMessageContent: String? = null) {
         viewModelScope.launch {
             try {
-                // The message is sent via HTTP. The server will broadcast it back via WebSocket,
-                // and our `listenForUpdates` collector will handle adding it to the UI.
                 ApiService.sendMessage(chatId, text, type = "text", repliedToMessageId = repliedToMessageId, repliedToMessageContent = repliedToMessageContent)
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(error = "Failed to send message: ${e.message}")
@@ -121,9 +116,22 @@ class MessageViewModel : ViewModel() {
         }
     }
 
+    // ✨ ADDED: Functions to notify the server about typing status
+    fun sendTyping(chatId: String) {
+        viewModelScope.launch {
+            ApiService.chatSocketManager.sendTyping(chatId)
+        }
+    }
+
+    fun sendStopTyping(chatId: String) {
+        viewModelScope.launch {
+            ApiService.chatSocketManager.sendStopTyping(chatId)
+        }
+    }
+
+
     fun sendMediaMessage(chatId: String, uri: Uri, type: String, context: Activity) {
         viewModelScope.launch {
-            // Keep isLoading false for sending, or add a specific 'isSending' state
             val uploadResult = ApiService.uploadChatMedia(uri, context)
             uploadResult.fold(
                 onSuccess = { url ->
@@ -135,7 +143,6 @@ class MessageViewModel : ViewModel() {
                         else -> "Attachment"
                     }
                     try {
-                        // Like sendMessage, the update will arrive via WebSocket
                         ApiService.sendMessage(chatId, messageText, type, url)
                     } catch (e: Exception) {
                         _uiState.value = _uiState.value.copy(error = "Failed to send media message: ${e.message}")
@@ -152,7 +159,6 @@ class MessageViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 ApiService.editMessage(messageId, newContent)
-                // The update will come through the 'message_updated' WebSocket event
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(error = "Failed to edit message: ${e.message}")
             }
@@ -163,7 +169,6 @@ class MessageViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 ApiService.deleteMessage(messageId)
-                // The update will come through the 'message_deleted' WebSocket event
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(error = "Failed to delete message: ${e.message}")
             }
@@ -174,7 +179,6 @@ class MessageViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 ApiService.reactToMessage(messageId, emoji)
-                // The update will come through the 'message_updated' WebSocket event
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(error = "Failed to react to message: ${e.message}")
             }
@@ -184,7 +188,6 @@ class MessageViewModel : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
-        // ✨ MODIFICATION: Clean up the coroutine job and disconnect the socket
         Log.d("MessageViewModel", "ViewModel cleared. Disconnecting socket.")
         socketJob?.cancel()
         ApiService.chatSocketManager.disconnect()

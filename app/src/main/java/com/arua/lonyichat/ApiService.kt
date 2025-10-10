@@ -44,7 +44,9 @@ data class FriendshipStatusResponse(val success: Boolean, val status: String)
 data class MessageInteractionResponse(val success: Boolean, val updatedMessage: Message)
 
 
-// ✨ NEW: Sealed class to represent all possible real-time events from the WebSocket
+// ✨ ADDED: Data class for typing event payloads
+data class TypingUserData(val userId: String, val username: String)
+
 sealed class WebSocketEvent {
     data class NewMessage(val message: Message) : WebSocketEvent()
     data class MessageUpdated(val message: Message) : WebSocketEvent()
@@ -52,17 +54,20 @@ sealed class WebSocketEvent {
     data class NewChurchMessage(val message: ChurchMessage) : WebSocketEvent()
     data class ChurchMessageUpdated(val message: ChurchMessage) : WebSocketEvent()
     data class ChurchMessageDeleted(val payload: DeletedMessageData) : WebSocketEvent()
+
+    // ✨ ADDED: Events for user typing status
+    data class UserTyping(val payload: TypingUserData) : WebSocketEvent()
+    data class UserStoppedTyping(val payload: TypingUserData) : WebSocketEvent()
+
     object ConnectionOpened : WebSocketEvent()
     data class ConnectionFailed(val error: String) : WebSocketEvent()
     object ConnectionClosed : WebSocketEvent()
 }
 
-// ✨ NEW: Data class for the payload of a deleted message event
 data class DeletedMessageData(val messageId: String)
 
 
 object ApiService {
-    // Keep a single OkHttpClient instance for both HTTP and WebSocket
     private val client = OkHttpClient()
     private val gson = Gson()
     const val BASE_URL = "http://104.225.141.13:3000"
@@ -73,7 +78,6 @@ object ApiService {
 
     private val prefs = LonyiChatApp.appContext.getSharedPreferences("auth", Context.MODE_PRIVATE)
 
-    // ✨ NEW: WebSocket Manager instance
     val chatSocketManager = ChatSocketManager(client, gson, BASE_URL)
 
     init {
@@ -105,7 +109,6 @@ object ApiService {
         authToken = null
         currentUserId = null
         prefs.edit().clear().apply()
-        // ✨ NEW: Disconnect WebSocket on logout
         chatSocketManager.disconnect()
     }
 
@@ -215,7 +218,7 @@ object ApiService {
     }
 
 
-    private fun getAuthToken(): String? = authToken
+    internal fun getAuthToken(): String? = authToken
     fun getCurrentUserId(): String? = currentUserId
 
     suspend fun getUserProfile(userId: String): Result<UserProfileResponse> {
@@ -1602,7 +1605,6 @@ object ApiService {
 }
 
 
-// ✨ NEW: Class dedicated to managing the WebSocket connection and events ✨
 class ChatSocketManager(
     private val client: OkHttpClient,
     private val gson: Gson,
@@ -1612,13 +1614,16 @@ class ChatSocketManager(
     private var webSocket: WebSocket? = null
 
     fun connect(chatId: String): Flow<WebSocketEvent> = callbackFlow {
-        // Create a new WebSocket listener for each connection flow
         val listener = object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 super.onOpen(webSocket, response)
                 Log.d("ChatSocketManager", "WebSocket connection opened.")
-                // Once connected, send a message to join the specific chat room
-                val joinMessage = gson.toJson(mapOf("type" to "join_chat", "chatId" to chatId))
+                // ✨ MODIFIED: Send token with the join message for authentication
+                val joinMessage = gson.toJson(mapOf(
+                    "type" to "join_chat",
+                    "chatId" to chatId,
+                    "token" to ApiService.getAuthToken() // Pass the auth token
+                ))
                 webSocket.send(joinMessage)
                 trySend(WebSocketEvent.ConnectionOpened)
             }
@@ -1631,6 +1636,7 @@ class ChatSocketManager(
                     val type = jsonObject.get("type").asString
                     val data = jsonObject.get("data")
 
+                    // ✨ MODIFIED: Handle new typing events
                     val event = when (type) {
                         "new_message" -> WebSocketEvent.NewMessage(gson.fromJson(data, Message::class.java))
                         "message_updated" -> WebSocketEvent.MessageUpdated(gson.fromJson(data, Message::class.java))
@@ -1638,6 +1644,8 @@ class ChatSocketManager(
                         "new_church_message" -> WebSocketEvent.NewChurchMessage(gson.fromJson(data, ChurchMessage::class.java))
                         "church_message_updated" -> WebSocketEvent.ChurchMessageUpdated(gson.fromJson(data, ChurchMessage::class.java))
                         "church_message_deleted" -> WebSocketEvent.ChurchMessageDeleted(gson.fromJson(data, DeletedMessageData::class.java))
+                        "user_typing" -> WebSocketEvent.UserTyping(gson.fromJson(data, TypingUserData::class.java))
+                        "user_stopped_typing" -> WebSocketEvent.UserStoppedTyping(gson.fromJson(data, TypingUserData::class.java))
                         else -> null
                     }
                     event?.let { trySend(it) }
@@ -1668,16 +1676,26 @@ class ChatSocketManager(
             }
         }
 
-        // Build the request and create the WebSocket
         val request = Request.Builder().url(wsUrl).build()
         webSocket = client.newWebSocket(request, listener)
 
-        // This will be called when the flow is cancelled
         awaitClose {
             Log.d("ChatSocketManager", "Flow is closing, disconnecting WebSocket.")
             disconnect()
         }
     }
+
+    // ✨ ADDED: Functions to send typing events
+    fun sendTyping(chatId: String) {
+        val message = gson.toJson(mapOf("type" to "start_typing", "chatId" to chatId))
+        webSocket?.send(message)
+    }
+
+    fun sendStopTyping(chatId: String) {
+        val message = gson.toJson(mapOf("type" to "stop_typing", "chatId" to chatId))
+        webSocket?.send(message)
+    }
+
 
     fun disconnect() {
         webSocket?.close(1000, "Client disconnected")
