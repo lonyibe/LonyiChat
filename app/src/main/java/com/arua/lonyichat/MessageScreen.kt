@@ -373,21 +373,39 @@ fun ReplyPreview(content: String, isSentByCurrentUser: Boolean) {
     }
 }
 
-// ✨ NEW: Composable to display reactions below a message
+// ✨ UPDATED: Composable now highlights the current user's reaction
 @Composable
 fun ReactionsDisplay(reactions: Map<String, List<String>>, modifier: Modifier = Modifier) {
+    val currentUserId = ApiService.getCurrentUserId()
+
     Row(
-        modifier = modifier
-            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
-            .padding(horizontal = 6.dp, vertical = 2.dp),
+        modifier = modifier.padding(top = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        reactions.forEach { (emoji, userIds) ->
-            if (userIds.isNotEmpty()) {
-                Text(
-                    text = "$emoji ${userIds.size}",
-                    fontSize = 12.sp
-                )
+        // Filter out reactions with no users before displaying
+        reactions.filterValues { it.isNotEmpty() }.forEach { (emoji, userIds) ->
+            val isReactedByMe = userIds.contains(currentUserId)
+
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                // Use the primary color if reacted by the current user
+                color = if (isReactedByMe) MaterialTheme.colorScheme.primary.copy(alpha = 0.8f) else MaterialTheme.colorScheme.surfaceVariant,
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        emoji,
+                        color = if (isReactedByMe) Color.White else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
+                    Text(
+                        text = userIds.size.toString(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isReactedByMe) Color.White else MaterialTheme.colorScheme.onSurface
+                    )
+                }
             }
         }
     }
